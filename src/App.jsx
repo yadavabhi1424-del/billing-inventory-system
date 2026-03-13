@@ -1,0 +1,216 @@
+// ============================================================
+//  App.jsx — Root Application
+//  StockSense Pro
+// ============================================================
+
+import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import './App.css';
+
+import LoginPage  from './pages/Login';
+import SignupPage from './pages/Signup';
+import MainLayout from './components/AppLayout';
+import Dashboard  from './modules/Dashboard/Dashboard';
+import Billing  from './modules/billing/Billing';
+import Inventory from './modules/Inventory/Inventory';
+import Reports   from './modules/Reports/Reports';
+import Suppliers from './modules/Suppliers/Suppliers';
+import * as authAPI from './services/api';
+
+// ── Role permissions (what each role can access) ────────────
+const PERMISSIONS = {
+  admin:   ['dashboard', 'billing', 'inventory', 'ai-predict', 'reports', 'manufacturers', 'users', 'settings'],
+  owner:   ['dashboard', 'billing', 'inventory', 'ai-predict', 'reports', 'manufacturers', 'settings'],
+  cashier: ['dashboard', 'billing'],
+};
+
+function canAccess(role, page) {
+  return PERMISSIONS[role]?.includes(page) ?? false;
+}
+
+// ── Simple auth hook ────────────────────────────────────────
+function useAuth() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Restore session
+    try {
+      const saved = localStorage.getItem('stocksense_user');
+      if (saved) setUser(JSON.parse(saved));
+    } catch {
+      localStorage.removeItem('stocksense_user');
+    } finally {
+      setTimeout(() => setLoading(false), 500);
+    }
+  }, []);
+
+  // receives user object directly (API already called in Login.jsx)
+  const login = (userData) => {
+    localStorage.setItem('stocksense_user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const logout = async () => {
+    await authAPI.logout();
+    localStorage.removeItem('stocksense_user');
+    setUser(null);
+  };
+
+  return { user, loading, login, logout };
+}
+
+// ── Loading screen ──────────────────────────────────────────
+function LoadingScreen() {
+  return (
+    <div className="app-loading">
+      <div className="app-loading__logo">
+        <div className="app-loading__logo-icon">📦</div>
+        <span className="app-loading__logo-name">StockSense Pro</span>
+      </div>
+      <div className="app-loading__spinner" />
+      <p className="app-loading__text">Loading...</p>
+    </div>
+  );
+}
+
+// ── Module placeholder (remove as you build real modules) ───
+function ModulePlaceholder({ page, user }) {
+  return (
+    <div className="app-placeholder">
+      <div className="app-placeholder__card">
+        <span className="app-placeholder__tag">Module</span>
+        <h2 className="app-placeholder__title">{page}</h2>
+        <p className="app-placeholder__text">
+          This module will be built next. Tell Claude which one!
+        </p>
+        <div className="app-placeholder__meta">
+          <span>Logged in as </span>
+          <strong>{user.name}</strong>
+          <span className="app-placeholder__role">{user.role}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Protected route (blocks unauthorized access) ────────────
+function ProtectedRoute({ page, user, children }) {
+  if (!canAccess(user.role, page)) {
+    return (
+      <div className="app-unauthorized">
+        <div className="app-unauthorized__card">
+          <div className="app-unauthorized__icon">🛡️</div>
+          <span className="app-unauthorized__code">403 — Access Denied</span>
+          <h2 className="app-unauthorized__title">You can't access this</h2>
+          <p className="app-unauthorized__message">
+            This page is restricted. Your <strong>{user.role}</strong> role doesn't have permission.
+          </p>
+          <button 
+            className="app-unauthorized__btn-primary"
+            onClick={() => window.location.href = '/dashboard'}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return children;
+}
+
+// ── Main app (authenticated users) ──────────────────────────
+function AuthenticatedApp({ user, logout }) {
+  return (
+    <MainLayout 
+      user={user} 
+      onLogout={logout}
+      allowedRoutes={PERMISSIONS[user.role] || []}
+    >
+      <Routes>
+        <Route path="/dashboard" element={
+          <ProtectedRoute page="dashboard" user={user}>
+            <Dashboard user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/billing" element={
+          <ProtectedRoute page="billing" user={user}>
+            <Billing user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/inventory" element={
+          <ProtectedRoute page="inventory" user={user}>
+            <Inventory user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/ai-predict" element={
+          <ProtectedRoute page="ai-predict" user={user}>
+            <ModulePlaceholder page="AI Predict" user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/reports" element={
+          <ProtectedRoute page="reports" user={user}>
+            <Reports user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/manufacturers" element={
+          <ProtectedRoute page="manufacturers" user={user}>
+            <Suppliers user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/users" element={
+          <ProtectedRoute page="users" user={user}>
+            <ModulePlaceholder page="User Management" user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="/settings" element={
+          <ProtectedRoute page="settings" user={user}>
+            <ModulePlaceholder page="Settings" user={user} />
+          </ProtectedRoute>
+        } />
+
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </MainLayout>
+  );
+}
+
+// ── Root ────────────────────────────────────────────────────
+export default function App() {
+  const { user, loading, login, logout } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+
+  return (
+    <BrowserRouter>
+      {!user ? (
+        <Routes>
+          <Route path="/signup" element={
+            <SignupPage 
+              onSignup={async (data) => {
+                await authAPI.signup(data);
+                window.location.href = '/';
+              }} 
+              onLoginRedirect={() => window.location.href = '/'} 
+            />
+          } />
+          <Route path="*" element={
+            <LoginPage 
+              onLogin={login} 
+              onSignupRedirect={() => window.location.href = '/signup'} 
+            />
+          } />
+        </Routes>
+      ) : (
+        <AuthenticatedApp user={user} logout={logout} />
+      )}
+    </BrowserRouter>
+  );
+}

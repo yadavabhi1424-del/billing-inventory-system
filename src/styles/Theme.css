@@ -1,0 +1,139 @@
+/* ============================================================
+   theme.css — Design Tokens (CSS Custom Properties)
+   StockSense Pro
+   Change values here to retheme the entire app instantly.
+   ============================================================ */
+
+:root {
+
+  /* ── Fonts ───────────────────────────────────────────── */
+  --font-display:  'Syne', 'Georgia', serif;
+  --font-body:     'DM Sans', 'Segoe UI', sans-serif;
+  --font-mono:     'JetBrains Mono', 'Fira Code', monospace;
+
+  /* ── Background Layers ───────────────────────────────── */
+  --color-bg-base:       #0b0f1a;   /* deepest background           */
+  --color-bg-elevated:   #0f172a;   /* page/layout background       */
+  --color-bg-surface:    #1e293b;   /* card / panel background      */
+  --color-bg-overlay:    #263145;   /* hover / selected states      */
+  --color-bg-input:      #111827;   /* form input background        */
+
+  /* ── Text ────────────────────────────────────────────── */
+  --color-text-primary:   #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted:     #64748b;
+  --color-text-disabled:  #475569;
+  --color-text-inverse:   #0b0f1a;
+
+  /* ── Accent / Brand ──────────────────────────────────── */
+  --color-accent-primary:  #6366f1;   /* indigo                    */
+  --color-accent-hover:    #818cf8;   /* lighter indigo on hover   */
+  --color-accent-muted:    #3730a3;   /* darker indigo             */
+  --color-accent-soft:     rgba(99, 102, 241, 0.12);
+  --color-accent-glow:     rgba(99, 102, 241, 0.35);
+
+  --color-violet:          #8b5cf6;
+  --color-violet-soft:     rgba(139, 92, 246, 0.12);
+
+  --color-cyan:            #06b6d4;
+  --color-cyan-soft:       rgba(6, 182, 212, 0.12);
+
+  /* ── Semantic ────────────────────────────────────────── */
+  --color-success:         #22c55e;
+  --color-success-soft:    rgba(34, 197, 94, 0.12);
+  --color-warning:         #f59e0b;
+  --color-warning-soft:    rgba(245, 158, 11, 0.12);
+  --color-danger:          #ef4444;
+  --color-danger-soft:     rgba(239, 68, 68, 0.12);
+  --color-info:            #38bdf8;
+  --color-info-soft:       rgba(56, 189, 248, 0.12);
+
+  /* ── Borders ─────────────────────────────────────────── */
+  --color-border:          rgba(148, 163, 184, 0.10);
+  --color-border-strong:   rgba(148, 163, 184, 0.20);
+  --color-border-accent:   rgba(99, 102, 241, 0.35);
+
+  /* ── Gradients ───────────────────────────────────────── */
+  --gradient-brand:        linear-gradient(135deg, #6366f1, #8b5cf6);
+  --gradient-brand-hover:  linear-gradient(135deg, #818cf8, #a78bfa);
+  --gradient-bg-hero:      linear-gradient(135deg, #0b0f1a 0%, #1a1040 50%, #0b0f1a 100%);
+  --gradient-glow-left:    radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.18) 0%, transparent 65%);
+
+  /* ── Shadows ─────────────────────────────────────────── */
+  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg:    0 10px 40px rgba(0, 0, 0, 0.5);
+  --shadow-xl:    0 25px 80px rgba(0, 0, 0, 0.6);
+  --shadow-glow:  0 0 40px rgba(99, 102, 241, 0.25);
+  --shadow-card:  0 4px 24px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(148, 163, 184, 0.06);
+
+  /* ── Border Radius ───────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
+  --radius-full: 9999px;
+
+  /* ── Spacing scale ───────────────────────────────────── */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-7:   28px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+
+  /* ── Transitions ─────────────────────────────────────── */
+  --transition-fast:   0.15s ease;
+  --transition-base:   0.25s ease;
+  --transition-slow:   0.4s ease;
+
+  /* ── Layout ──────────────────────────────────────────── */
+  --sidebar-width:      220px;
+  --header-height:      60px;
+  --content-max-width:  1280px;
+
+  /* ── Z-index layers ──────────────────────────────────── */
+  --z-base:     1;
+  --z-dropdown: 100;
+  --z-sticky:   200;
+  --z-overlay:  300;
+  --z-modal:    400;
+  --z-toast:    500;
+}
+
+/* ══════════════════════════════════════════════════════════
+   LIGHT THEME OVERRIDES
+   Applied when [data-theme="light"] is on root
+   ══════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  /* ── Backgrounds ──────────────────────────────────────── */
+  --color-bg-base:       #f8fafc;   /* lightest background */
+  --color-bg-elevated:   #ffffff;   /* page/layout background */
+  --color-bg-surface:    #ffffff;   /* card / panel background */
+  --color-bg-overlay:    #f1f5f9;   /* hover / selected states */
+  --color-bg-input:      #f8fafc;   /* form input background */
+
+  /* ── Text ─────────────────────────────────────────────── */
+  --color-text-primary:   #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted:     #64748b;
+  --color-text-disabled:  #94a3b8;
+  --color-text-inverse:   #ffffff;
+
+  /* ── Borders ──────────────────────────────────────────── */
+  --color-border:          rgba(15, 23, 42, 0.08);
+  --color-border-strong:   rgba(15, 23, 42, 0.12);
+  --color-border-accent:   rgba(99, 102, 241, 0.4);
+
+  /* ── Shadows (lighter in light mode) ──────────────────── */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg:    0 10px 30px rgba(0, 0, 0, 0.12);
+  --shadow-xl:    0 20px 50px rgba(0, 0, 0, 0.15);
+  --shadow-glow:  0 0 20px rgba(99, 102, 241, 0.15);
+  --shadow-card:  0 2px 8px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.04);
+}

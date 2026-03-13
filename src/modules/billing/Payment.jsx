@@ -1,0 +1,558 @@
+// ============================================================
+//  Payment.jsx — POS Module (Generate Bills)
+//  StockSense Pro
+// ============================================================
+
+import { useState, useEffect, useRef } from 'react';
+import Icon from '../../components/Icon';
+import {
+  PRODUCTS,
+  STORE_INFO,
+  getPopularProducts,
+  getStockStatus,
+  getGSTBreakdown,
+  generateInvoiceNo,
+} from './paymentData';
+import './Payment.css';
+
+// ── Helpers ─────────────────────────────────────────────────
+const fmt = (n) => '₹' + Number(n).toFixed(2);
+const today = () => new Date().toLocaleDateString('en-IN', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit'
+});
+
+// ══════════════════════════════════════════════════════════
+//  INVOICE MODAL
+// ══════════════════════════════════════════════════════════
+function InvoiceModal({ invoice, onClose }) {
+  const handlePrint = () => window.print();
+
+  return (
+    <div className="invoice-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="invoice-modal">
+        
+        {/* Actions */}
+        <div className="invoice-modal__actions">
+          <button className="invoice-action-btn" onClick={handlePrint}>
+            <Icon name="billing" size={15} /> Print Bill
+          </button>
+          <button className="invoice-action-btn" onClick={handlePrint}>
+            <Icon name="reports" size={15} /> Save PDF
+          </button>
+          <button className="invoice-action-btn invoice-action-btn--close" onClick={onClose}>
+            <Icon name="x" size={15} />
+          </button>
+        </div>
+
+        {/* Invoice */}
+        <div className="invoice">
+          <div className="invoice__header">
+            <div>
+              <div className="invoice__store-name">{STORE_INFO.name}</div>
+              <div className="invoice__store-details">
+                {STORE_INFO.address}<br />
+                Ph: {STORE_INFO.phone} · {STORE_INFO.email}<br />
+                GSTIN: {STORE_INFO.gstin}
+              </div>
+            </div>
+            <div className="invoice__meta">
+              <div className="invoice__number">TAX INVOICE</div>
+              <div className="invoice__number" style={{ fontSize: '0.9rem', marginTop: 4 }}>{invoice.no}</div>
+              <div className="invoice__date">{invoice.date}</div>
+            </div>
+          </div>
+
+          <div className="invoice__customer-section">
+            <div className="invoice__customer-label">Bill To</div>
+            <div className="invoice__customer-name">{invoice.customer.name}</div>
+            {invoice.customer.phone && (
+              <div className="invoice__customer-phone">{invoice.customer.phone}</div>
+            )}
+          </div>
+
+          <table className="invoice__table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th>GST%</th>
+                <th style={{ textAlign: 'right' }}>Qty</th>
+                <th style={{ textAlign: 'right' }}>Rate</th>
+                <th style={{ textAlign: 'right' }}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.items.map((item, i) => (
+                <tr key={item.id}>
+                  <td>{i + 1}</td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{item.name}</div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>{item.sku}</div>
+                  </td>
+                  <td>{item.gst}%</td>
+                  <td style={{ textAlign: 'right' }}>{item.qty}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmt(item.price)}</td>
+                  <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>{fmt(item.price * item.qty)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div className="invoice__totals">
+              <div className="invoice__totals-row">
+                <span className="invoice__totals-label">Subtotal</span>
+                <span className="invoice__totals-value">{fmt(invoice.subtotal)}</span>
+              </div>
+              {invoice.discount > 0 && (
+                <div className="invoice__totals-row">
+                  <span className="invoice__totals-label">Discount</span>
+                  <span className="invoice__totals-value" style={{ color: '#22c55e' }}>- {fmt(invoice.discount)}</span>
+                </div>
+              )}
+              <div className="invoice__totals-divider" />
+              <div className="invoice__totals-row">
+                <span className="invoice__totals-label">Taxable Amount</span>
+                <span className="invoice__totals-value">{fmt(invoice.taxable)}</span>
+              </div>
+              <div className="invoice__totals-row">
+                <span className="invoice__totals-label">CGST</span>
+                <span className="invoice__totals-value">{fmt(invoice.cgst)}</span>
+              </div>
+              <div className="invoice__totals-row">
+                <span className="invoice__totals-label">SGST</span>
+                <span className="invoice__totals-value">{fmt(invoice.sgst)}</span>
+              </div>
+              <div className="invoice__totals-divider" />
+              <div className="invoice__grand-total">
+                <span className="invoice__grand-total-label">TOTAL</span>
+                <span className="invoice__grand-total-value">{fmt(invoice.total)}</span>
+              </div>
+              <div className="invoice__totals-row" style={{ marginTop: 8 }}>
+                <span className="invoice__totals-label">Payment</span>
+                <span className="invoice__totals-value">{invoice.paymentMethod}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="invoice__footer">
+            Thank you for shopping with us! · Goods once sold will not be taken back.<br />
+            This is a computer generated invoice.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// Scan toast component
+function ScanToast({ product, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 2000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="scan-toast">
+      <Icon name="check" size={16} />
+      <span>Added: {product.name}</span>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+//  MAIN PAYMENT/POS COMPONENT
+// ══════════════════════════════════════════════════════════
+export default function Payment() {
+  const [invoiceNo]     = useState(generateInvoiceNo);
+  const [customerName, setCustomerName]   = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [search, setSearch] = useState('');
+  const [cart, setCart]     = useState([]);
+  const [discountType, setDiscountType] = useState('%');
+  const [discountVal, setDiscountVal]   = useState('');
+  const [payMethod, setPayMethod] = useState('cash');
+  const [invoice, setInvoice] = useState(null);
+  const [scanToast, setScanToast] = useState(null);
+
+  const searchInputRef = useRef(null);
+  const popularProducts = getPopularProducts();
+
+  // Auto-focus search for barcode scanner
+useEffect(() => {
+  const handleFocus = (e) => {
+    // Only auto-focus if clicked on products area, not on bill panel
+    const billPanel = document.querySelector('.bill-panel');
+    if (searchInputRef.current && !invoice && !billPanel?.contains(e.target)) {
+      searchInputRef.current.focus();
+    }
+  };
+  document.addEventListener('click', handleFocus);
+  return () => document.removeEventListener('click', handleFocus);
+}, [invoice]);
+
+// Keyboard shortcuts
+useEffect(() => {
+  const handleKeyDown = (e) => {
+    if (e.key === 'F2') {
+      e.preventDefault();
+      handleNewBill();
+    }
+    if (e.key === 'F12') {
+      e.preventDefault();
+      if (cart.length > 0 && customerName.trim()) {
+        handleGenerateBill();
+      }
+    }
+    if (e.key === 'Escape' && invoice) {
+      handleNewBill();
+    }
+  };
+  window.addEventListener('keydown', handleKeyDown);
+  return () => window.removeEventListener('keydown', handleKeyDown);
+}, [cart, customerName, invoice]);
+
+  // Search filter
+  const filtered = search.trim().length > 0
+    ? PRODUCTS.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku.toLowerCase().includes(search.toLowerCase())
+      )
+    : [];
+
+    // Detect Enter key for barcode scanner
+const handleSearchKeyDown = (e) => {
+  if (e.key === 'Enter' && search.trim()) {
+    e.preventDefault();
+    const product = PRODUCTS.find(p => 
+      p.sku.toLowerCase() === search.trim().toLowerCase()
+    );
+    if (product) {
+      addToCart(product, true);
+    } else if (filtered.length > 0) {
+      addToCart(filtered[0], true);
+    }
+  }
+};
+
+  // Cart operations
+  const addToCart = (product, showToast = false) => {
+  setCart(prev => {
+    const exists = prev.find(i => i.id === product.id);
+    if (exists) return prev.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i);
+    return [...prev, { ...product, qty: 1 }];
+  });
+  setSearch('');
+  
+  if (showToast) {
+    setScanToast(product);
+  }
+};
+
+  const updateQty = (id, delta) => {
+    setCart(prev => prev
+      .map(i => i.id === id ? { ...i, qty: Math.max(0, i.qty + delta) } : i)
+      .filter(i => i.qty > 0)
+    );
+  };
+
+  const removeItem = (id) => setCart(prev => prev.filter(i => i.id !== id));
+
+  const applyQuickDiscount = (percent) => {
+  setDiscountType('%');
+  setDiscountVal(String(percent));
+  };
+
+  // Calculations
+  const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const discountAmt = discountVal
+    ? discountType === '%'
+      ? (subtotal * parseFloat(discountVal)) / 100
+      : parseFloat(discountVal)
+    : 0;
+  const taxable = Math.max(subtotal - discountAmt, 0);
+
+  // GST calculation
+  const gstGroups = cart.reduce((acc, item) => {
+    const key = item.gst;
+    if (!acc[key]) acc[key] = 0;
+    acc[key] += item.price * item.qty;
+    return acc;
+  }, {});
+
+  let totalCGST = 0, totalSGST = 0;
+  Object.entries(gstGroups).forEach(([rate, amount]) => {
+    const taxableForGroup = amount * (taxable / subtotal || 0);
+    const { cgst, sgst } = getGSTBreakdown(taxableForGroup, Number(rate));
+    totalCGST += cgst;
+    totalSGST += sgst;
+  });
+
+  const grandTotal = taxable + totalCGST + totalSGST;
+
+  // Generate bill
+  const handleGenerateBill = () => {
+    if (!customerName.trim()) return alert('Please enter customer name');
+    if (cart.length === 0) return alert('Please add items to the bill');
+
+    const invoiceData = {
+      no: invoiceNo,
+      date: today(),
+      customer: { name: customerName, phone: customerPhone },
+      items: cart,
+      subtotal,
+      discount: discountAmt,
+      taxable,
+      cgst: totalCGST,
+      sgst: totalSGST,
+      total: grandTotal,
+      paymentMethod: payMethod.toUpperCase(),
+    };
+    
+    setInvoice(invoiceData);
+  };
+
+  // New bill
+  const handleNewBill = () => {
+    setCart([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setDiscountVal('');
+    setInvoice(null);
+    setPayMethod('cash');
+  };
+
+  return (
+    <div className="payment-pos">
+      
+      {/* Header */}
+      <div className="pos-header">
+        <h1>New Bill</h1>
+        <div className="pos-header__right">
+          <span className="pos-invoice-no">{invoiceNo}</span>
+          <div className="pos-shortcuts">
+          <span className="pos-shortcut">F2</span> New
+          <span className="pos-shortcut">F12</span> Generate
+          </div>
+          <button className="pos-new-btn" onClick={handleNewBill}>
+            <Icon name="billing" size={15} /> Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="pos-grid">
+
+        {/* ── LEFT: Products ─────────────────────────── */}
+        <div className="pos-products">
+          
+          {/* Search */}
+          <div className="pos-search">
+            <span className="pos-search__icon"><Icon name="search" size={16} /></span>
+            <input
+              ref={searchInputRef}
+              className="pos-search__input"
+              placeholder="Search products..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+            <span className="pos-search__barcode-icon" title="Barcode scanner ready">
+            <Icon name="box" size={16} />
+            </span>
+
+            {filtered.length > 0 && (
+              <div className="pos-search__results">
+                {filtered.map(p => (
+                  <div key={p.id} className="pos-search__result-item" onClick={() => addToCart(p)}>
+                    <div>
+                      <div className="pos-search__result-name">{p.name}</div>
+                      <div className="pos-search__result-sku">{p.sku}</div>
+                    </div>
+                    <div className="pos-search__result-price">{fmt(p.price)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Product cards */}
+          <div className="pos-products__grid">
+            {popularProducts.map(p => {
+              const status = getStockStatus(p.stock);
+              return (
+                <div key={p.id} className="product-card" onClick={() => addToCart(p)}>
+                  <span className={`product-card__badge product-card__badge--${status.color}`}>
+                    {status.label}
+                  </span>
+                  <div className="product-card__name">{p.name}</div>
+                  <div className="product-card__sku">{p.sku}</div>
+                  <div className="product-card__price">{fmt(p.price)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── RIGHT: Bill Panel ──────────────────────── */}
+        <div className="bill-panel">
+
+          <div className="bill-panel__header">
+            <span className="bill-panel__title">Bill Summary</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{invoiceNo}</span>
+          </div>
+
+          {/* Customer */}
+          <div className="bill-customer">
+            <div className="bill-customer__field">
+              <label className="bill-customer__label">Customer *</label>
+              <input
+                className="bill-customer__input"
+                placeholder="Walk-in / Name"
+                value={customerName}
+                onChange={e => setCustomerName(e.target.value)}
+              />
+            </div>
+            <div className="bill-customer__field">
+              <label className="bill-customer__label">Phone (optional)</label>
+              <input
+                className="bill-customer__input"
+                placeholder="98765 43210"
+                value={customerPhone}
+                onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                inputMode="numeric"
+              />
+            </div>
+          </div>
+
+          {/* Cart items */}
+          <div className="bill-items">
+            {cart.length === 0 ? (
+              <div className="bill-empty">Add products from left</div>
+            ) : (
+              cart.map(item => (
+                <div key={item.id} className="bill-item">
+                  <div className="bill-item__info">
+                    <div className="bill-item__name">{item.name}</div>
+                    <div className="bill-item__price">{fmt(item.price)} × {item.qty}</div>
+                  </div>
+                  <div className="bill-item__qty">
+                    <button className="bill-item__qty-btn" onClick={() => updateQty(item.id, -1)}>−</button>
+                    <span className="bill-item__qty-val">{item.qty}</span>
+                    <button className="bill-item__qty-btn" onClick={() => updateQty(item.id, +1)}>+</button>
+                  </div>
+                  <span className="bill-item__total">{fmt(item.price * item.qty)}</span>
+                  <button className="bill-item__remove" onClick={() => removeItem(item.id)}>
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Totals */}
+          <div className="bill-totals">
+            <div className="bill-totals__row">
+              <span className="bill-totals__label">Subtotal ({cart.length} items)</span>
+              <span className="bill-totals__value">{fmt(subtotal)}</span>
+            </div>
+
+            {/* Discount */}
+            <div className="bill-totals__row">
+              <span className="bill-totals__label">Discount</span>
+              <div className="bill-discount">
+                <div className="bill-discount__type">
+                  {['%', '₹'].map(t => (
+                    <button
+                      key={t}
+                      className={`bill-discount__type-btn ${discountType === t ? 'bill-discount__type-btn--active' : ''}`}
+                      onClick={() => setDiscountType(t)}
+                    >{t}</button>
+                  ))}
+                </div>
+                <input
+                  className="bill-discount__input"
+                  placeholder="0"
+                  value={discountVal}
+                  onChange={e => setDiscountVal(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Quick discount buttons */}
+            <div className="quick-discount-btns">
+              {[5, 10, 15, 20].map(pct => (
+              <button
+              key={pct}
+              className="quick-discount-btn"
+              onClick={() => applyQuickDiscount(pct)}
+              >
+                {pct}%
+              </button>
+              ))}
+            </div>
+
+            {discountAmt > 0 && (
+              <div className="bill-totals__row">
+                <span className="bill-totals__label">Discount Amount</span>
+                <span className="bill-totals__value" style={{ color: 'var(--color-success)' }}>- {fmt(discountAmt)}</span>
+              </div>
+            )}
+
+            <div className="bill-totals__row">
+              <span className="bill-totals__label">Taxable Amount</span>
+              <span className="bill-totals__value">{fmt(taxable)}</span>
+            </div>
+            <div className="bill-totals__row">
+              <span className="bill-totals__label">CGST</span>
+              <span className="bill-totals__value">{fmt(totalCGST)}</span>
+            </div>
+            <div className="bill-totals__row">
+              <span className="bill-totals__label">SGST</span>
+              <span className="bill-totals__value">{fmt(totalSGST)}</span>
+            </div>
+          </div>
+
+          {/* Grand total */}
+          <div className="bill-grand-total">
+            <span className="bill-grand-total__label">Total</span>
+            <span className="bill-grand-total__value">{fmt(grandTotal)}</span>
+          </div>
+
+          {/* Payment method */}
+          <div>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 'var(--space-2)' }}>
+              Payment Method
+            </div>
+            <div className="bill-payment">
+              {['Cash', 'Card', 'UPI'].map(m => (
+                <button
+                  key={m}
+                  className={`bill-payment__btn ${payMethod === m.toLowerCase() ? 'bill-payment__btn--active' : ''}`}
+                  onClick={() => setPayMethod(m.toLowerCase())}
+                >{m}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Generate button */}
+          <button
+            className="bill-generate-btn"
+            onClick={handleGenerateBill}
+            disabled={cart.length === 0}
+          >
+            <Icon name="check" size={16} />
+            Generate Bill - {fmt(grandTotal)}
+          </button>
+        </div>
+      </div>
+      {/* Scan toast notification */}
+      {scanToast && <ScanToast product={scanToast} onClose={() => setScanToast(null)} />}
+
+      {/* Invoice modal */}
+      {invoice && <InvoiceModal invoice={invoice} onClose={handleNewBill} />}
+    </div>
+  );
+}
