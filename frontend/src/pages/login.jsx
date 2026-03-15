@@ -11,12 +11,6 @@ import * as authAPI from '.././services/api';
 // ── Constants (easy to update) ─────────────────────────────
 const ROLES = ['admin', 'cashier', 'owner'];
 
-const DEMO_CREDENTIALS = {
-  admin:   { email: 'admin@stocksense.in',   password: 'admin123'   },
-  cashier: { email: 'cashier@stocksense.in', password: 'cashier123' },
-  owner:   { email: 'owner@stocksense.in',   password: 'owner123'   },
-};
-
 const FEATURES = [
   { dot: 'indigo', text: 'AI-powered stock prediction with Prophet' },
   { dot: 'violet', text: 'Real-time billing and inventory sync'     },
@@ -139,52 +133,43 @@ function LoginLeftPanel() {
 
 // ── Right Panel — Form ─────────────────────────────────────
 function LoginForm({ onLogin, onSignupRedirect }) {
-  // ── State ───────────────────────────────────────────────
-  const [role,        setRole]        = useState('admin');
-  const [email,       setEmail]       = useState(DEMO_CREDENTIALS.admin.email);
-  const [password,    setPassword]    = useState(DEMO_CREDENTIALS.admin.password);
-  const [showPass,    setShowPass]    = useState(false);
-  const [remember,    setRemember]    = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState('');
-
-  // ── Role switch — autofill demo credentials ─────────────
-  const handleRoleChange = (newRole) => {
-    setRole(newRole);
-    setEmail(DEMO_CREDENTIALS[newRole].email);
-    setPassword(DEMO_CREDENTIALS[newRole].password);
-    setError('');
-  };
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [remember, setRemember] = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
 
   // ── Submit ───────────────────────────────────────────────
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
 
-    // Basic validation
-    if (!email.trim()) {
-      setError('Please enter your email address.');
-      return;
-    }
-    if (!password) {
-      setError('Please enter your password.');
-      return;
-    }
+  if (!email.trim()) {
+    setError('Please enter your email address.');
+    return;
+  }
+  if (!password) {
+    setError('Please enter your password.');
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    try {
-      const result = await authAPI.login({ email, password, role });
-      
-      if (result.success) {
-        onLogin(result.user);
-      }
-    } catch (err) {
-      setError(err.message || 'Invalid credentials. Please try again.');
-    } finally {
-      setLoading(false);
+  try {
+    const result = await authAPI.login({ email, password });
+
+    if (result.success) {
+      // Token already saved in api.js interceptor
+      // Just pass user to parent
+      onLogin(result.data.user);
     }
-  };
+  } catch (err) {
+    setError(err.message || 'Invalid credentials. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="auth-form-panel">
@@ -199,24 +184,6 @@ function LoginForm({ onLogin, onSignupRedirect }) {
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
-
-          {/* Role selector */}
-          <div className="auth-role-selector">
-            <span className="auth-role-selector__label">Login as</span>
-            <div className="auth-role-tabs" role="group" aria-label="Select role">
-              {ROLES.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  className={`auth-role-tab ${role === r ? 'auth-role-tab--active' : ''}`}
-                  onClick={() => handleRoleChange(r)}
-                  aria-pressed={role === r}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {/* Error */}
           {error && (
@@ -307,16 +274,6 @@ function LoginForm({ onLogin, onSignupRedirect }) {
           </button>
 
         </form>
-
-        {/* Demo credentials hint */}
-        <div className="auth-demo-hint" aria-label="Demo credentials">
-          <span className="auth-demo-hint__label">Demo credentials</span>
-          <span className="auth-demo-hint__creds">
-            Role: <strong>{role}</strong>
-            &nbsp;·&nbsp;
-            Pass: <strong>{DEMO_CREDENTIALS[role].password}</strong>
-          </span>
-        </div>
 
         {/* Footer */}
         <p className="auth-form__footer">
