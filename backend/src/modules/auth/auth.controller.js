@@ -27,8 +27,8 @@ const signup = async (req, res, next) => {
     }
 
     // Validate role
-    const validRoles = ["ADMIN", "OWNER", "CASHIER"];
-    const userRole   = validRoles.includes(role) ? role : "CASHIER";
+    const validRoles = ["admin", "owner", "cashier"];
+    const userRole   = validRoles.includes(role) ? role : "cashier";
 
     // Check email already exists
     const [existing] = await pool.execute(
@@ -173,6 +173,7 @@ const login = async (req, res, next) => {
 
     // Remove sensitive fields
     const { password: _, refreshToken: __, verifyToken: ___, ...safeUser } = user;
+    safeUser.role = safeUser.role.toLowerCase();
 
     res.json({
       success: true,

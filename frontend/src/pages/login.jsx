@@ -141,7 +141,7 @@ function LoginForm({ onLogin, onSignupRedirect }) {
   const [error,    setError]    = useState('');
 
   // ── Submit ───────────────────────────────────────────────
- const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
   e.preventDefault();
   setError('');
 
@@ -160,9 +160,13 @@ function LoginForm({ onLogin, onSignupRedirect }) {
     const result = await authAPI.login({ email, password });
 
     if (result.success) {
-      // Token already saved in api.js interceptor
-      // Just pass user to parent
-      onLogin(result.data.user);
+      // user already saved in localStorage by api.js
+      // just pass normalized user to App.jsx
+      const user = {
+        ...result.data.user,
+        role: result.data.user.role.toLowerCase(),
+      };
+      onLogin(user);
     }
   } catch (err) {
     setError(err.message || 'Invalid credentials. Please try again.');

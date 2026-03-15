@@ -65,9 +65,9 @@ api.interceptors.response.use(
 export async function login(credentials) {
   const res = await api.post('/auth/login', credentials);
   if (res.success) {
-    localStorage.setItem('accessToken',  res.data.accessToken);
-    localStorage.setItem('refreshToken', res.data.refreshToken);
-    localStorage.setItem('user',         JSON.stringify(res.data.user));
+    localStorage.setItem('accessToken',    res.data.accessToken);
+    localStorage.setItem('refreshToken',   res.data.refreshToken);
+    localStorage.setItem('stocksense_user', JSON.stringify(res.data.user));
   }
   return res;
 }

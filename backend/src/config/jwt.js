@@ -25,7 +25,7 @@ const generateTokenPair = (user) => {
   const payload = {
     id:    user.user_id,
     email: user.email,
-    role:  user.role,
+    role:  user.role.toLowerCase(),
     name:  user.name,
   };
   return {

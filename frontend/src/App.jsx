@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
-import LoginPage  from './pages/Login';
+import LoginPage  from './pages/login';
 import SignupPage from './pages/Signup';
 import MainLayout from './components/AppLayout';
 import Dashboard  from './modules/Dashboard/Dashboard';
@@ -19,8 +19,8 @@ import * as authAPI from './services/api';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin:   ['dashboard', 'billing', 'inventory', 'ai-predict', 'reports', 'manufacturers', 'users', 'settings'],
-  owner:   ['dashboard', 'billing', 'inventory', 'ai-predict', 'reports', 'manufacturers', 'settings'],
+  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings'],
+  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings'],
   cashier: ['dashboard', 'billing'],
 };
 
@@ -30,30 +30,39 @@ function canAccess(role, page) {
 
 // ── Simple auth hook ────────────────────────────────────────
 function useAuth() {
-  const [user, setUser] = useState(null);
+  const [user,    setUser]    = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restore session
     try {
+      // Check token exists too
       const saved = localStorage.getItem('stocksense_user');
-      if (saved) setUser(JSON.parse(saved));
+      const token = localStorage.getItem('accessToken');
+      if (saved && token) {
+        setUser(JSON.parse(saved));
+      }
     } catch {
       localStorage.removeItem('stocksense_user');
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
     } finally {
       setTimeout(() => setLoading(false), 500);
     }
   }, []);
 
-  // receives user object directly (API already called in Login.jsx)
   const login = (userData) => {
-    localStorage.setItem('stocksense_user', JSON.stringify(userData));
+    // userData already saved by api.js
+    // just update state
     setUser(userData);
   };
 
   const logout = async () => {
-    await authAPI.logout();
+    try {
+      await authAPI.logout();
+    } catch {}
     localStorage.removeItem('stocksense_user');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     setUser(null);
   };
 

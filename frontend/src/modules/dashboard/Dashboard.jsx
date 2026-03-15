@@ -12,18 +12,11 @@
 //  7. Low Stock Alerts + Recent Transactions
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../components/Icon';
-import {
-  STATS_DATA,
-  CHART_DATA,
-  TOP_PRODUCTS,
-  AI_PREDICTIONS,
-  LOW_STOCK,
-  RECENT_TRANSACTIONS,
-  QUICK_ACTIONS,
-} from './dashboardData';
+import { getDashboard, getLowStockProducts } from '../../services/api';
+import {QUICK_ACTIONS} from './dashboardData';
 import './Dashboard.css';
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -440,13 +433,49 @@ function RecentTransactions() {
 //  MAIN DASHBOARD
 // ══════════════════════════════════════════════════════════
 export default function Dashboard({ user }) {
-  const [period, setPeriod] = useState('week');
+  const [period,   setPeriod]   = useState('week');
+  const [data,     setData]     = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
+
+  const fetchDashboard = async () => {
+    try {
+      setLoading(true);
+      const res = await getDashboard();
+      if (res.success) setData(res.data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <div className="app-loading__spinner" />
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ padding: '2rem', color: 'var(--color-danger)' }}>
+      ❌ {error}
+    </div>
+  );
+
+  const stats = data?.stats || {};
+  const recentTransactions = data?.recentTransactions || [];
+  const topProducts = data?.charts?.topProducts || [];
+  const last7Days = data?.charts?.last7Days || [];
 
   return (
     <div className="dashboard">
 
-      {/* ── Header + Date Filter ─────────────────────── */}
+      {/* ── Header ───────────────────────────────────── */}
       <div className="dashboard-header">
         <div className="dashboard-header__left">
           <h1>Dashboard</h1>
@@ -465,7 +494,7 @@ export default function Dashboard({ user }) {
         </div>
       </div>
 
-      {/* ── Quick Actions ────────────────────────────── */}
+      {/* ── Quick Actions ─────────────────────────────── */}
       <div className="quick-actions">
         {QUICK_ACTIONS.map((action) => (
           <button
@@ -479,19 +508,98 @@ export default function Dashboard({ user }) {
         ))}
       </div>
 
-      {/* ── Sales Overview Stat Cards ────────────────── */}
-      <StatCards period={period} />
+      {/* ── Stat Cards ────────────────────────────────── */}
+      <div className="dashboard-section">
+        <div className="dashboard-section__header">
+          <span className="dashboard-section__title">
+            <span className="dashboard-section__title-dot" />
+            Sales Overview
+          </span>
+        </div>
+        <div className="stats-grid">
+          {[
+            { label: "Today's Sales",     value: fmt(stats.todaySales || 0),       icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)'   },
+            { label: 'Transactions',      value: stats.todayTransactions || 0,      icon: 'billing',    accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
+            { label: 'Month Sales',       value: fmt(stats.monthSales || 0),        icon: 'payment',    accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
+            { label: 'Sales Growth',      value: (stats.salesGrowth || 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
+            { label: 'Total Products',    value: stats.totalProducts || 0,          icon: 'inventory',  accent: 'var(--color-cyan)',           accentSoft: 'var(--color-cyan-soft)'     },
+            { label: 'Low Stock Items',   value: stats.lowStockCount || 0,          icon: 'alert',      accent: 'var(--color-danger)',         accentSoft: 'var(--color-danger-soft)'   },
+            { label: 'Total Customers',   value: stats.totalCustomers || 0,         icon: 'customers',  accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
+            { label: 'Pending Approvals', value: stats.pendingApprovals || 0,       icon: 'users',      accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
+          ].map((card) => (
+            <div
+              key={card.label}
+              className="stat-card"
+              style={{ '--stat-accent': card.accent, '--stat-accent-soft': card.accentSoft }}
+            >
+              <div className="stat-card__header">
+                <span className="stat-card__label">{card.label}</span>
+                <div className="stat-card__icon">
+                  <Icon name={card.icon} size={16} />
+                </div>
+              </div>
+              <div className="stat-card__value">{card.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      {/* ── Today's Overview ─────────────────────────── */}
-      <TodayOverview />
+      {/* ── Revenue Chart (last 7 days) ───────────────── */}
+      <div className="dashboard-section">
+        <div className="dashboard-section__header">
+          <span className="dashboard-section__title">
+            <span className="dashboard-section__title-dot" style={{ background: 'var(--color-violet)' }} />
+            Last 7 Days Revenue
+          </span>
+        </div>
+        <div className="dashboard-two-col">
+          <div className="chart-container">
+            <div className="bar-chart">
+              {last7Days.map((item) => {
+                const maxVal = Math.max(...last7Days.map(d => d.sales || 0), 1);
+                return (
+                  <div key={item.date} className="bar-chart__bar-group">
+                    <div className="bar-chart__bars">
+                      <div
+                        className="bar-chart__bar bar-chart__bar--revenue"
+                        style={{ height: `${((item.sales || 0) / maxVal) * 100}%` }}
+                        title={`Sales: ${fmt(item.sales || 0)}`}
+                      />
+                    </div>
+                    <span className="bar-chart__label">
+                      {new Date(item.date).toLocaleDateString('en-IN', { weekday: 'short' })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-      {/* ── Revenue Chart + Top Products ─────────────── */}
-      <RevenueChart />
+          {/* Top Products */}
+          <div className="top-products">
+            <div className="dashboard-section__header" style={{ marginBottom: 'var(--space-3)' }}>
+              <span className="dashboard-section__title">
+                <span className="dashboard-section__title-dot" style={{ background: 'var(--color-cyan)' }} />
+                Top Products This Month
+              </span>
+            </div>
+            {topProducts.length === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>No sales data yet</p>
+            ) : topProducts.map((p, i) => (
+              <div key={p.productName} className="top-products__item">
+                <span className="top-products__rank">#{i + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <div className="top-products__name">{p.productName}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{p.totalQty} sold</div>
+                </div>
+                <span className="top-products__revenue">{fmt(p.totalRevenue)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-      {/* ── AI Stock Prediction ──────────────────────── */}
-      <AIStockPrediction />
-
-      {/* ── Low Stock + Recent Transactions ──────────── */}
+      {/* ── Low Stock + Recent Transactions ───────────── */}
       <div className="dashboard-section">
         <div className="dashboard-section__header">
           <span className="dashboard-section__title">
@@ -500,8 +608,58 @@ export default function Dashboard({ user }) {
           </span>
         </div>
         <div className="dashboard-two-col--equal dashboard-two-col">
-          <LowStockAlerts />
-          <RecentTransactions />
+
+          {/* Low Stock */}
+          <div className="low-stock">
+            <div className="dashboard-section__header" style={{ marginBottom: 'var(--space-4)' }}>
+              <span className="dashboard-section__title">
+                <span className="dashboard-section__title-dot" style={{ background: 'var(--color-danger)' }} />
+                Low Stock Alerts
+              </span>
+              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-danger)' }}>
+                {stats.lowStockCount || 0} items
+              </span>
+            </div>
+            {stats.lowStockCount === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>✅ All stocks are healthy</p>
+            ) : (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                {stats.lowStockCount} products need restocking
+              </p>
+            )}
+          </div>
+
+          {/* Recent Transactions */}
+          <div className="recent-tx">
+            <div className="dashboard-section__header" style={{ marginBottom: 'var(--space-4)' }}>
+              <span className="dashboard-section__title">
+                <span className="dashboard-section__title-dot" style={{ background: 'var(--color-accent-primary)' }} />
+                Recent Transactions
+              </span>
+            </div>
+            {recentTransactions.length === 0 ? (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>No transactions yet</p>
+            ) : recentTransactions.map((tx) => (
+              <div key={tx.transaction_id} className="recent-tx__item">
+                <div style={{ flex: 1 }}>
+                  <div className="recent-tx__customer">{tx.customerName || 'Walk-in Customer'}</div>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                    <span className="recent-tx__id">{tx.invoiceNumber}</span>
+                    <span className="recent-tx__time">
+                      · {new Date(tx.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+                <div className="recent-tx__right">
+                  <div className="recent-tx__amount">{fmt(tx.totalAmount)}</div>
+                  <span className={`recent-tx__payment recent-tx__payment--${tx.paymentMethod?.toLowerCase()}`}>
+                    {tx.paymentMethod}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
         </div>
       </div>
 
