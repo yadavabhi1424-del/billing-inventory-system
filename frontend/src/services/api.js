@@ -31,28 +31,32 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    // If token expired → try refresh
     if (
       error.response?.status === 401 &&
-      error.response?.data?.code === 'TOKEN_EXPIRED' &&
-      !original._retry
+      !original._retry &&
+      !original.url?.includes('/auth/')
     ) {
       original._retry = true;
       try {
         const refreshToken = localStorage.getItem('refreshToken');
-        const res = await axios.post(`${API_URL}/auth/refresh-token`, { refreshToken });
+        if (!refreshToken) throw new Error('No refresh token');
+
+        const res = await axios.post(
+          `${API_URL}/auth/refresh-token`,
+          { refreshToken }
+        );
+
         const { accessToken } = res.data.data;
         localStorage.setItem('accessToken', accessToken);
         original.headers.Authorization = `Bearer ${accessToken}`;
         return api(original);
       } catch {
-        // Refresh failed → logout
         localStorage.clear();
-        window.location.href = '/login';
+        window.location.href = '/';
+        return;
       }
     }
 
-    // Throw clean error message
     const message = error.response?.data?.message || error.message || 'Something went wrong';
     throw new Error(message);
   }

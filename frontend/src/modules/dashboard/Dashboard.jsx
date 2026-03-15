@@ -16,7 +16,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import { getDashboard, getLowStockProducts } from '../../services/api';
-import {QUICK_ACTIONS} from './dashboardData';
+import {QUICK_ACTIONS} from './DashboardData';
 import './Dashboard.css';
 
 // ── Helpers ─────────────────────────────────────────────────

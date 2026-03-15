@@ -1,44 +1,89 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
+import { getTransactions, getTransactionById } from '../../services/api';
 import './Transactions.css';
-
-// Mock transaction data (replace with API later)
-const MOCK_TRANSACTIONS = [
-  { id: 'INV-20260220-3421', customer: 'Sunita Devi', amount: 643, payment: 'UPI', items: 4, time: '2 min ago', date: '2026-02-20' },
-  { id: 'INV-20260220-3420', customer: 'Walk-in', amount: 248, payment: 'Cash', items: 2, time: '18 min ago', date: '2026-02-20' },
-  { id: 'INV-20260220-3419', customer: 'Rahul Sharma', amount: 1124, payment: 'Card', items: 6, time: '34 min ago', date: '2026-02-20' },
-  { id: 'INV-20260220-3418', customer: 'Walk-in', amount: 320, payment: 'Cash', items: 1, time: '51 min ago', date: '2026-02-20' },
-  { id: 'INV-20260220-3417', customer: 'Priya Gupta', amount: 568, payment: 'UPI', items: 3, time: '1 hr ago', date: '2026-02-20' },
-  { id: 'INV-20260219-3416', customer: 'Amit Kumar', amount: 892, payment: 'Card', items: 5, time: 'Yesterday', date: '2026-02-19' },
-  { id: 'INV-20260219-3415', customer: 'Walk-in', amount: 156, payment: 'Cash', items: 2, time: 'Yesterday', date: '2026-02-19' },
-];
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
+const timeAgo = (dateStr) => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)   return 'Just now';
+  if (mins < 60)  return `${mins} min ago`;
+  if (mins < 1440) return `${Math.floor(mins / 60)} hr ago`;
+  return new Date(dateStr).toLocaleDateString('en-IN');
+};
+
 export default function Transactions() {
-  const [search, setSearch] = useState('');
+  const [transactions, setTransactions] = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [search,       setSearch]       = useState('');
   const [filterPayment, setFilterPayment] = useState('all');
-  const [filterDate, setFilterDate] = useState('today');
+  const [filterDate,    setFilterDate]    = useState('today');
+  const [selected,      setSelected]      = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
-  // Filter transactions
-  const filtered = MOCK_TRANSACTIONS.filter(tx => {
-    const matchSearch = tx.id.toLowerCase().includes(search.toLowerCase()) ||
-                       tx.customer.toLowerCase().includes(search.toLowerCase());
-    const matchPayment = filterPayment === 'all' || tx.payment.toLowerCase() === filterPayment;
-    const matchDate = filterDate === 'all' || 
-                     (filterDate === 'today' && tx.date === '2026-02-20') ||
-                     (filterDate === 'yesterday' && tx.date === '2026-02-19');
-    return matchSearch && matchPayment && matchDate;
-  });
+  useEffect(() => {
+    fetchTransactions();
+  }, [filterDate, filterPayment]);
 
-  // Calculate totals
-  const totalAmount = filtered.reduce((sum, tx) => sum + tx.amount, 0);
-  const totalTransactions = filtered.length;
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const params = {};
+
+      if (filterPayment !== 'all') params.paymentMethod = filterPayment.toUpperCase();
+
+      if (filterDate === 'today') {
+        params.startDate = new Date().toISOString().split('T')[0];
+        params.endDate   = new Date().toISOString().split('T')[0];
+      } else if (filterDate === 'yesterday') {
+        const y = new Date();
+        y.setDate(y.getDate() - 1);
+        const yStr = y.toISOString().split('T')[0];
+        params.startDate = yStr;
+        params.endDate   = yStr;
+      } else if (filterDate === 'week') {
+        const w = new Date();
+        w.setDate(w.getDate() - 7);
+        params.startDate = w.toISOString().split('T')[0];
+      }
+
+      if (search) params.search = search;
+
+      const res = await getTransactions(params);
+      if (res.success) setTransactions(res.data);
+    } catch (err) {
+      console.error('Transactions fetch error:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = (e) => {
+    setSearch(e.target.value);
+    if (e.key === 'Enter') fetchTransactions();
+  };
+
+  const handleViewDetail = async (id) => {
+    try {
+      setDetailLoading(true);
+      const res = await getTransactionById(id);
+      if (res.success) setSelected(res.data);
+    } catch (err) {
+      console.error(err.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const totalAmount       = transactions.reduce((s, t) => s + parseFloat(t.totalAmount), 0);
+  const totalTransactions = transactions.length;
 
   return (
     <div className="transactions">
-      
-      {/* Header with stats */}
+
+      {/* Header stats */}
       <div className="transactions-header">
         <div className="transactions-stat-cards">
           <div className="transactions-stat-card">
@@ -54,7 +99,6 @@ export default function Transactions() {
 
       {/* Filters */}
       <div className="transactions-filters">
-        {/* Search */}
         <div className="transactions-search">
           <Icon name="search" size={16} />
           <input
@@ -62,27 +106,27 @@ export default function Transactions() {
             placeholder="Search by invoice or customer..."
             value={search}
             onChange={e => setSearch(e.target.value)}
+            onKeyDown={handleSearch}
           />
         </div>
 
-        {/* Date filter */}
         <div className="transactions-filter-group">
           <label className="transactions-filter-label">Period</label>
-          <select 
+          <select
             className="transactions-filter-select"
             value={filterDate}
             onChange={e => setFilterDate(e.target.value)}
           >
             <option value="today">Today</option>
             <option value="yesterday">Yesterday</option>
+            <option value="week">Last 7 Days</option>
             <option value="all">All Time</option>
           </select>
         </div>
 
-        {/* Payment filter */}
         <div className="transactions-filter-group">
           <label className="transactions-filter-label">Payment</label>
-          <select 
+          <select
             className="transactions-filter-select"
             value={filterPayment}
             onChange={e => setFilterPayment(e.target.value)}
@@ -97,63 +141,124 @@ export default function Transactions() {
 
       {/* Table */}
       <div className="transactions-table-wrapper">
-        <table className="transactions-table">
-          <thead>
-            <tr>
-              <th>Invoice No.</th>
-              <th>Customer</th>
-              <th>Items</th>
-              <th>Payment</th>
-              <th>Amount</th>
-              <th>Time</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+            <div className="app-loading__spinner" />
+          </div>
+        ) : (
+          <table className="transactions-table">
+            <thead>
               <tr>
-                <td colSpan="7" className="transactions-empty">
-                  <Icon name="search" size={32} />
-                  <p>No transactions found</p>
-                </td>
+                <th>Invoice No.</th>
+                <th>Customer</th>
+                <th>Items</th>
+                <th>Payment</th>
+                <th>Amount</th>
+                <th>Time</th>
+                <th>Actions</th>
               </tr>
-            ) : (
-              filtered.map(tx => (
-                <tr key={tx.id}>
+            </thead>
+            <tbody>
+              {transactions.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="transactions-empty">
+                    <Icon name="search" size={32} />
+                    <p>No transactions found</p>
+                  </td>
+                </tr>
+              ) : transactions.map(tx => (
+                <tr key={tx.transaction_id}>
                   <td>
-                    <span className="transactions-invoice-no">{tx.id}</span>
+                    <span className="transactions-invoice-no">{tx.invoiceNumber}</span>
                   </td>
                   <td>
-                    <span className="transactions-customer">{tx.customer}</span>
+                    <span className="transactions-customer">
+                      {tx.customerName || 'Walk-in'}
+                    </span>
                   </td>
-                  <td>{tx.items}</td>
+                  <td>{tx.items?.length || '—'}</td>
                   <td>
-                    <span className={`transactions-payment-badge transactions-payment-badge--${tx.payment.toLowerCase()}`}>
-                      {tx.payment}
+                    <span className={`transactions-payment-badge transactions-payment-badge--${tx.paymentMethod?.toLowerCase()}`}>
+                      {tx.paymentMethod}
                     </span>
                   </td>
                   <td>
-                    <span className="transactions-amount">{fmt(tx.amount)}</span>
+                    <span className="transactions-amount">{fmt(tx.totalAmount)}</span>
                   </td>
                   <td>
-                    <span className="transactions-time">{tx.time}</span>
+                    <span className="transactions-time">{timeAgo(tx.createdAt)}</span>
                   </td>
                   <td>
                     <div className="transactions-actions">
-                      <button className="transactions-action-btn" title="View Invoice">
+                      <button
+                        className="transactions-action-btn"
+                        title="View Invoice"
+                        onClick={() => handleViewDetail(tx.transaction_id)}
+                      >
                         <Icon name="billing" size={14} />
-                      </button>
-                      <button className="transactions-action-btn" title="Print">
-                        <Icon name="reports" size={14} />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {/* Detail Modal */}
+      {selected && (
+        <div className="invoice-modal-backdrop" onClick={() => setSelected(null)}>
+          <div className="invoice-modal" onClick={e => e.stopPropagation()}>
+            <div className="invoice-modal__actions">
+              <button className="invoice-action-btn" onClick={() => window.print()}>
+                <Icon name="billing" size={15} /> Print
+              </button>
+              <button
+                className="invoice-action-btn invoice-action-btn--close"
+                onClick={() => setSelected(null)}
+              >
+                <Icon name="x" size={15} />
+              </button>
+            </div>
+            <div className="invoice" style={{ padding: '1.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>{selected.invoiceNumber}</h3>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                {selected.customerName || 'Walk-in'} · {new Date(selected.createdAt).toLocaleString('en-IN')}
+              </p>
+              <table className="invoice__table" style={{ marginTop: '1rem' }}>
+                <thead>
+                  <tr>
+                    <th>#</th><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.items?.map((item, i) => (
+                    <tr key={item.item_id}>
+                      <td>{i + 1}</td>
+                      <td>{item.productName}</td>
+                      <td>{item.quantity}</td>
+                      <td>₹{item.sellingPrice}</td>
+                      <td>₹{item.totalAmount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ textAlign: 'right', marginTop: '1rem' }}>
+                <div>Subtotal: {fmt(selected.subtotal)}</div>
+                <div>Tax: {fmt(selected.taxAmount)}</div>
+                <div>Discount: {fmt(selected.discountAmount)}</div>
+                <div style={{ fontWeight: 700, fontSize: '1.1rem', marginTop: '0.5rem' }}>
+                  Total: {fmt(selected.totalAmount)}
+                </div>
+                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  {selected.paymentMethod} · {selected.paymentStatus}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
