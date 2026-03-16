@@ -1,166 +1,147 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
-
-// Mock data
-const SALES_DATA = {
-  today: { revenue: 12480, orders: 48, avgOrder: 260, profit: 3744 },
-  week: { revenue: 87350, orders: 312, avgOrder: 280, profit: 27752 },
-  month: { revenue: 342800, orders: 1248, avgOrder: 275, profit: 111310 },
-};
-
-const TOP_PRODUCTS = [
-  { name: 'Basmati Rice (5kg)', qty: 142, revenue: 45440 },
-  { name: 'Sunflower Oil (1L)', qty: 98, revenue: 17640 },
-  { name: 'Tata Salt (1kg)', qty: 210, revenue: 5880 },
-  { name: 'Amul Butter (500g)', qty: 87, revenue: 22620 },
-  { name: 'Wheat Flour (2kg)', qty: 156, revenue: 14820 },
-];
-
-const PAYMENT_BREAKDOWN = [
-  { method: 'Cash', amount: 48200, percentage: 42 },
-  { method: 'Card', amount: 32500, percentage: 28 },
-  { method: 'UPI', amount: 34650, percentage: 30 },
-];
+import { getSalesReport, getProfitLossReport } from '../../services/api';
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
 export default function SalesReport() {
-  const [period, setPeriod] = useState('month');
-  const data = SALES_DATA[period];
+  const [period,  setPeriod]  = useState('month');
+  const [data,    setData]    = useState(null);
+  const [pl,      setPL]      = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { fetchData(); }, [period]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
+      const params = period === 'today'
+        ? { startDate: today, endDate: today }
+        : period === 'week'
+        ? { startDate: new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0], endDate: today }
+        : { startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], endDate: today };
+
+      const [salesRes, plRes] = await Promise.all([
+        getSalesReport(params),
+        getProfitLossReport(params),
+      ]);
+      if (salesRes.success) setData(salesRes.data);
+      if (plRes.success)    setPL(plRes.data);
+    } catch (err) {
+      console.error('Sales report error:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const summary     = data?.summary     || {};
+  const topProducts = data?.topProducts || [];
+  const byPayment   = data?.byPaymentMethod || [];
+  const totalPay    = byPayment.reduce((s, p) => s + parseFloat(p.total || 0), 0);
 
   return (
     <div className="sales-report">
-      
-      {/* Header with Period Filter */}
+
       <div className="report-header">
         <div>
           <h2 className="report-heading">Sales Overview</h2>
           <p className="report-subheading">Revenue and performance metrics</p>
         </div>
-        
         <div className="report-period-filter">
           {['today', 'week', 'month'].map(p => (
-            <button
-              key={p}
+            <button key={p}
               className={`report-period-btn ${period === p ? 'report-period-btn--active' : ''}`}
-              onClick={() => setPeriod(p)}
-            >
+              onClick={() => setPeriod(p)}>
               {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : 'This Month'}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="report-stats-grid">
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-accent-soft)', color: 'var(--color-accent-primary)' }}>
-            <Icon name="reports" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Total Revenue</span>
-            <span className="report-stat-card__value">{fmt(data.revenue)}</span>
-          </div>
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+          <div className="app-loading__spinner" />
         </div>
-
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-success-soft)', color: 'var(--color-success)' }}>
-            <Icon name="billing" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Total Orders</span>
-            <span className="report-stat-card__value">{data.orders}</span>
-          </div>
-        </div>
-
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-violet-soft)', color: 'var(--color-violet)' }}>
-            <Icon name="billing" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Avg Order Value</span>
-            <span className="report-stat-card__value">{fmt(data.avgOrder)}</span>
-          </div>
-        </div>
-
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-cyan-soft)', color: 'var(--color-cyan)' }}>
-            <Icon name="reports" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Gross Profit</span>
-            <span className="report-stat-card__value">{fmt(data.profit)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Two Column Layout */}
-      <div className="report-grid">
-        
-        {/* Top Products */}
-        <div className="report-section">
-          <h3 className="report-section__title">Top Selling Products</h3>
-          <div className="report-table-wrapper">
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th style={{ textAlign: 'right' }}>Qty Sold</th>
-                  <th style={{ textAlign: 'right' }}>Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {TOP_PRODUCTS.map((product, i) => (
-                  <tr key={i}>
-                    <td>
-                      <div className="report-product-name">{product.name}</div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span className="report-qty">{product.qty}</span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span className="report-amount">{fmt(product.revenue)}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Payment Breakdown */}
-        <div className="report-section">
-          <h3 className="report-section__title">Payment Method Breakdown</h3>
-          <div className="payment-breakdown-list">
-            {PAYMENT_BREAKDOWN.map(payment => (
-              <div key={payment.method} className="payment-breakdown-item">
-                <div className="payment-breakdown-item__info">
-                  <span className="payment-breakdown-item__method">{payment.method}</span>
-                  <span className="payment-breakdown-item__amount">{fmt(payment.amount)}</span>
+      ) : (
+        <>
+          <div className="report-stats-grid">
+            {[
+              { label: 'Total Revenue',   value: fmt(summary.totalSales    || 0), icon: 'reports', bg: 'var(--color-accent-soft)',  color: 'var(--color-accent-primary)' },
+              { label: 'Total Orders',    value: summary.totalTransactions  || 0,  icon: 'billing', bg: 'var(--color-success-soft)', color: 'var(--color-success)'        },
+              { label: 'Avg Order Value', value: fmt(summary.avgOrderValue  || 0), icon: 'billing', bg: 'var(--color-violet-soft)',  color: 'var(--color-violet)'         },
+              { label: 'Gross Profit',    value: fmt(pl?.grossProfit        || 0), icon: 'reports', bg: 'var(--color-cyan-soft)',    color: 'var(--color-cyan)'           },
+            ].map(s => (
+              <div key={s.label} className="report-stat-card">
+                <div className="report-stat-card__icon" style={{ background: s.bg, color: s.color }}>
+                  <Icon name={s.icon} size={24} />
                 </div>
-                <div className="payment-breakdown-item__bar">
-                  <div 
-                    className="payment-breakdown-item__bar-fill"
-                    style={{ width: `${payment.percentage}%` }}
-                  />
+                <div className="report-stat-card__content">
+                  <span className="report-stat-card__label">{s.label}</span>
+                  <span className="report-stat-card__value">{s.value}</span>
                 </div>
-                <span className="payment-breakdown-item__percentage">{payment.percentage}%</span>
               </div>
             ))}
           </div>
-        </div>
-      </div>
 
-      {/* Export Button */}
+          <div className="report-grid">
+            {/* Top Products */}
+            <div className="report-section">
+              <h3 className="report-section__title">Top Selling Products</h3>
+              <div className="report-table-wrapper">
+                <table className="report-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th style={{ textAlign: 'right' }}>Qty Sold</th>
+                      <th style={{ textAlign: 'right' }}>Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topProducts.length === 0 ? (
+                      <tr><td colSpan="3" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No sales data yet</td></tr>
+                    ) : topProducts.map((p, i) => (
+                      <tr key={i}>
+                        <td><div className="report-product-name">{p.productName}</div></td>
+                        <td style={{ textAlign: 'right' }}><span className="report-qty">{p.totalQty}</span></td>
+                        <td style={{ textAlign: 'right' }}><span className="report-amount">{fmt(p.totalRevenue)}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Payment Breakdown */}
+            <div className="report-section">
+              <h3 className="report-section__title">Payment Method Breakdown</h3>
+              <div className="payment-breakdown-list">
+                {byPayment.length === 0 ? (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>No payment data yet</p>
+                ) : byPayment.map(p => {
+                  const pct = totalPay > 0 ? ((parseFloat(p.total) / totalPay) * 100).toFixed(1) : 0;
+                  return (
+                    <div key={p.paymentMethod} className="payment-breakdown-item">
+                      <div className="payment-breakdown-item__info">
+                        <span className="payment-breakdown-item__method">{p.paymentMethod}</span>
+                        <span className="payment-breakdown-item__amount">{fmt(p.total)}</span>
+                      </div>
+                      <div className="payment-breakdown-item__bar">
+                        <div className="payment-breakdown-item__bar-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="payment-breakdown-item__percentage">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="report-actions">
-        <button className="report-export-btn">
-          <Icon name="reports" size={16} />
-          Export to PDF
-        </button>
-        <button className="report-export-btn report-export-btn--secondary">
-          <Icon name="inventory" size={16} />
-          Export to Excel
-        </button>
+        <button className="report-export-btn"><Icon name="reports" size={16} /> Export to PDF</button>
+        <button className="report-export-btn report-export-btn--secondary"><Icon name="inventory" size={16} /> Export to Excel</button>
       </div>
     </div>
   );

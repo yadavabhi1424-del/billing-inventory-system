@@ -7,16 +7,15 @@ const generateInvoiceNumber = async (conn) => {
   const today  = new Date();
   const prefix = `INV-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
 
-  const [[{ last }]] = await conn.execute(
+  const [rows] = await conn.execute(
     "SELECT invoiceNumber as last FROM transactions WHERE invoiceNumber LIKE ? ORDER BY invoiceNumber DESC LIMIT 1",
     [`${prefix}%`]
   );
 
-  if (!last) return `${prefix}-0001`;
-  const lastNum = parseInt(last.split("-").pop());
+  if (!rows || rows.length === 0) return `${prefix}-0001`;
+  const lastNum = parseInt(rows[0].last.split("-").pop());
   return `${prefix}-${String(lastNum + 1).padStart(4, "0")}`;
 };
-
 // ─── CREATE TRANSACTION (POS Sale) ───────────────────
 const createTransaction = async (req, res, next) => {
   try {
@@ -267,18 +266,20 @@ const getAllTransactions = async (req, res, next) => {
     const where = conditions.join(" AND ");
 
     const [transactions] = await pool.execute(
-      `SELECT t.*,
-              c.name as customerName,
-              u.name as cashierName
-       FROM transactions t
-       LEFT JOIN customers c ON c.customer_id = t.customer_id
-       LEFT JOIN users     u ON u.user_id      = t.user_id
-       WHERE ${where}
-       ORDER BY t.createdAt DESC
-       LIMIT ${parseInt(limit)} OFFSET ${offset}`,
-      params
-    );
-
+  `SELECT t.*,
+          c.name as customerName,
+          u.name as cashierName,
+          COUNT(ti.item_id) as itemCount
+   FROM transactions t
+   LEFT JOIN customers c  ON c.customer_id    = t.customer_id
+   LEFT JOIN users     u  ON u.user_id        = t.user_id
+   LEFT JOIN transaction_items ti ON ti.transaction_id = t.transaction_id
+   WHERE ${where}
+   GROUP BY t.transaction_id
+   ORDER BY t.createdAt DESC
+   LIMIT ${parseInt(limit)} OFFSET ${offset}`,
+  params
+);
     const [[{ total }]] = await pool.execute(
       `SELECT COUNT(*) as total
        FROM transactions t

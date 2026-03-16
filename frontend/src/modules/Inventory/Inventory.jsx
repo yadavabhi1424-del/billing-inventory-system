@@ -278,37 +278,35 @@ export default function Inventory() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  const fetchAll = async () => {
-    try {
-      setLoading(true);
-      const [prodRes, catRes, supRes] = await Promise.all([
-        getProducts({ limit: 100 }),
-        getCategories(),
-        getSuppliers(),
-      ]);
-      if (prodRes.success) setProducts(prodRes.data);
-      if (catRes.success)  setCategories(catRes.data);
-      if (supRes.success)  setSuppliers(supRes.data);
-    } catch (err) {
-      console.error('Inventory fetch error:', err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+ const fetchAll = async () => {
+  try {
+    setLoading(false); // don't show spinner on refresh
+    const [prodRes, catRes, supRes] = await Promise.all([
+      getProducts({ limit: 100 }),
+      getCategories(),
+      getSuppliers(),
+    ]);
+    if (prodRes.success) setProducts(prodRes.data);
+    if (catRes.success)  setCategories(catRes.data);
+    if (supRes.success)  setSuppliers(supRes.data);
+  } catch (err) {
+    console.error('Inventory fetch error:', err.message);
+  }
+};
   const handleAdd = async (formData) => {
     await createProduct(formData);
     setShowAdd(false);
     fetchAll();
   };
 
-  const handleEdit = async (formData) => {
+ const handleEdit = async (formData) => {
   try {
     const res = await updateProduct(selected.product_id, formData);
-    console.log('Update response:', res);
-    setShowEdit(false);
-    setSelected(null);
-    fetchAll();
+    if (res.success) {
+      setShowEdit(false);
+      setSelected(null);
+      await fetchAll(); // wait for fresh data
+    }
   } catch (err) {
     console.error('Update error:', err.message);
     alert('Update failed: ' + err.message);

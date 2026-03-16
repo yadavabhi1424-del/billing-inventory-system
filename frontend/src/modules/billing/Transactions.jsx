@@ -173,10 +173,13 @@ export default function Transactions() {
                   </td>
                   <td>
                     <span className="transactions-customer">
-                      {tx.customerName || 'Walk-in'}
+                      {tx.customerName || 
+                      (tx.notes?.includes('Customer:') 
+                      ? tx.notes.split('Customer:')[1].split('|')[0].trim() 
+                      : 'Walk-in')}
                     </span>
                   </td>
-                  <td>{tx.items?.length || '—'}</td>
+                  <td>{tx.itemCount || '—'}</td>
                   <td>
                     <span className={`transactions-payment-badge transactions-payment-badge--${tx.paymentMethod?.toLowerCase()}`}>
                       {tx.paymentMethod}

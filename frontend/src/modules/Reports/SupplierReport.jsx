@@ -1,28 +1,27 @@
+import { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
-
-// Mock data
-const SUPPLIERS = [
-  { name: 'ABC Foods', products: 24, lastOrder: '2 days ago', totalPurchased: 125400, status: 'active' },
-  { name: 'Tata Consumer', products: 12, lastOrder: '1 week ago', totalPurchased: 89200, status: 'active' },
-  { name: 'Fortune Foods', products: 8, lastOrder: '3 days ago', totalPurchased: 56800, status: 'active' },
-  { name: 'Amul', products: 15, lastOrder: '5 days ago', totalPurchased: 98400, status: 'active' },
-  { name: 'MDH Spices', products: 18, lastOrder: '1 day ago', totalPurchased: 42600, status: 'active' },
-  { name: 'Haldiram', products: 10, lastOrder: '2 weeks ago', totalPurchased: 34200, status: 'inactive' },
-];
-
-const SUPPLIER_STATS = {
-  total: 28,
-  active: 24,
-  products: 110,
-  totalPurchased: 446600,
-};
+import { getSupplierReport } from '../../services/api';
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
 export default function SupplierReport() {
+  const [suppliers, setSuppliers] = useState([]);
+  const [loading,   setLoading]   = useState(true);
+
+  useEffect(() => {
+    getSupplierReport()
+      .then(res => { if (res.success) setSuppliers(res.data); })
+      .catch(err => console.error(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalPurchased = suppliers.reduce((s, sup) => s + parseFloat(sup.totalPurchased || 0), 0);
+  const activeCount    = suppliers.filter(s => s.isActive).length;
+  const totalProducts  = suppliers.reduce((s, sup) => s + parseInt(sup.productCount || 0), 0);
+
   return (
     <div className="supplier-report">
-      
+
       <div className="report-header">
         <div>
           <h2 className="report-heading">Supplier Overview</h2>
@@ -30,100 +29,72 @@ export default function SupplierReport() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="report-stats-grid">
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-accent-soft)', color: 'var(--color-accent-primary)' }}>
-            <Icon name="manufacturers" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Total Suppliers</span>
-            <span className="report-stat-card__value">{SUPPLIER_STATS.total}</span>
-          </div>
+      {loading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+          <div className="app-loading__spinner" />
         </div>
+      ) : (
+        <>
+          <div className="report-stats-grid">
+            {[
+              { label: 'Total Suppliers',    value: suppliers.length, icon: 'manufacturers', bg: 'var(--color-accent-soft)',  color: 'var(--color-accent-primary)' },
+              { label: 'Active Suppliers',   value: activeCount,      icon: 'check',         bg: 'var(--color-success-soft)', color: 'var(--color-success)'        },
+              { label: 'Products Supplied',  value: totalProducts,    icon: 'box',           bg: 'var(--color-violet-soft)',  color: 'var(--color-violet)'         },
+              { label: 'Total Purchased',    value: fmt(totalPurchased), icon: 'reports',    bg: 'var(--color-cyan-soft)',    color: 'var(--color-cyan)'           },
+            ].map(s => (
+              <div key={s.label} className="report-stat-card">
+                <div className="report-stat-card__icon" style={{ background: s.bg, color: s.color }}>
+                  <Icon name={s.icon} size={24} />
+                </div>
+                <div className="report-stat-card__content">
+                  <span className="report-stat-card__label">{s.label}</span>
+                  <span className="report-stat-card__value">{s.value}</span>
+                </div>
+              </div>
+            ))}
+          </div>
 
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-success-soft)', color: 'var(--color-success)' }}>
-            <Icon name="check" size={24} />
+          <div className="report-section">
+            <h3 className="report-section__title">Supplier List</h3>
+            <div className="report-table-wrapper">
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th>Supplier Name</th>
+                    <th>Phone</th>
+                    <th style={{ textAlign: 'right' }}>Products</th>
+                    <th style={{ textAlign: 'right' }}>Total Orders</th>
+                    <th style={{ textAlign: 'right' }}>Total Purchased</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suppliers.length === 0 ? (
+                    <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No suppliers yet</td></tr>
+                  ) : suppliers.map((s, i) => (
+                    <tr key={i}>
+                      <td><div className="report-supplier-name">{s.name}</div></td>
+                      <td><span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{s.phone || '—'}</span></td>
+                      <td style={{ textAlign: 'right' }}><span className="report-qty">{s.productCount}</span></td>
+                      <td style={{ textAlign: 'right' }}><span className="report-qty">{s.totalOrders}</span></td>
+                      <td style={{ textAlign: 'right' }}><span className="report-amount">{fmt(s.totalPurchased)}</span></td>
+                      <td>
+                        <span className={`report-status-badge report-status-badge--${s.isActive ? 'active' : 'inactive'}`}>
+                          {s.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Active Suppliers</span>
-            <span className="report-stat-card__value">{SUPPLIER_STATS.active}</span>
-          </div>
-        </div>
+        </>
+      )}
 
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-violet-soft)', color: 'var(--color-violet)' }}>
-            <Icon name="box" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Products Supplied</span>
-            <span className="report-stat-card__value">{SUPPLIER_STATS.products}</span>
-          </div>
-        </div>
-
-        <div className="report-stat-card">
-          <div className="report-stat-card__icon" style={{ background: 'var(--color-cyan-soft)', color: 'var(--color-cyan)' }}>
-            <Icon name="reports" size={24} />
-          </div>
-          <div className="report-stat-card__content">
-            <span className="report-stat-card__label">Total Purchased</span>
-            <span className="report-stat-card__value">{fmt(SUPPLIER_STATS.totalPurchased)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Suppliers Table */}
-      <div className="report-section">
-        <h3 className="report-section__title">Supplier List</h3>
-        <div className="report-table-wrapper">
-          <table className="report-table">
-            <thead>
-              <tr>
-                <th>Supplier Name</th>
-                <th style={{ textAlign: 'right' }}>Products</th>
-                <th style={{ textAlign: 'right' }}>Total Purchased</th>
-                <th>Last Order</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SUPPLIERS.map((supplier, i) => (
-                <tr key={i}>
-                  <td>
-                    <div className="report-supplier-name">{supplier.name}</div>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className="report-qty">{supplier.products}</span>
-                  </td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className="report-amount">{fmt(supplier.totalPurchased)}</span>
-                  </td>
-                  <td>
-                    <span className="report-time">{supplier.lastOrder}</span>
-                  </td>
-                  <td>
-                    <span className={`report-status-badge report-status-badge--${supplier.status}`}>
-                      {supplier.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Export Button */}
       <div className="report-actions">
-        <button className="report-export-btn">
-          <Icon name="reports" size={16} />
-          Export to PDF
-        </button>
-        <button className="report-export-btn report-export-btn--secondary">
-          <Icon name="inventory" size={16} />
-          Export to Excel
-        </button>
+        <button className="report-export-btn"><Icon name="reports" size={16} /> Export to PDF</button>
+        <button className="report-export-btn report-export-btn--secondary"><Icon name="inventory" size={16} /> Export to Excel</button>
       </div>
     </div>
   );

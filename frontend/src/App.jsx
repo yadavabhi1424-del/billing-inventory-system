@@ -19,8 +19,8 @@ import * as authAPI from './services/api';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings'],
-  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings'],
+  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict'],
+  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict'],
   cashier: ['dashboard', 'billing'],
 };
 
@@ -90,9 +90,6 @@ function ModulePlaceholder({ page, user }) {
       <div className="app-placeholder__card">
         <span className="app-placeholder__tag">Module</span>
         <h2 className="app-placeholder__title">{page}</h2>
-        <p className="app-placeholder__text">
-          This module will be built next. Tell Claude which one!
-        </p>
         <div className="app-placeholder__meta">
           <span>Logged in as </span>
           <strong>{user.name}</strong>
