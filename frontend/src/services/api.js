@@ -13,6 +13,12 @@ const api = axios.create({
   timeout: 10000,
 });
 
+// Set token on every app load
+const savedToken = localStorage.getItem('accessToken');
+if (savedToken) {
+  api.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+}
+
 // ── Request interceptor (attach token automatically) ─────────
 api.interceptors.request.use(
   (config) => {

@@ -15,6 +15,8 @@ import Billing  from './modules/billing/Billing';
 import Inventory from './modules/Inventory/Inventory';
 import Reports   from './modules/Reports/Reports';
 import Suppliers from './modules/Suppliers/Suppliers';
+import UserManagement from './modules/Users/UserManagement';
+import Settings from './modules/Settings/Settings';
 import * as authAPI from './services/api';
 
 // ── Role permissions (what each role can access) ────────────
@@ -172,16 +174,15 @@ function AuthenticatedApp({ user, logout }) {
 
         <Route path="/users" element={
           <ProtectedRoute page="users" user={user}>
-            <ModulePlaceholder page="User Management" user={user} />
+            <UserManagement user={user} />
           </ProtectedRoute>
         } />
 
         <Route path="/settings" element={
           <ProtectedRoute page="settings" user={user}>
-            <ModulePlaceholder page="Settings" user={user} />
+            <Settings user={user} />
           </ProtectedRoute>
         } />
-
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </MainLayout>
@@ -201,9 +202,9 @@ export default function App() {
           <Route path="/signup" element={
             <SignupPage 
               onSignup={async (data) => {
-                await authAPI.signup(data);
-                window.location.href = '/';
-              }} 
+                const res = await authAPI.signup(data);
+                return res;
+              }}
               onLoginRedirect={() => window.location.href = '/'} 
             />
           } />

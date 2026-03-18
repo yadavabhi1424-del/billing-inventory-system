@@ -286,7 +286,7 @@ const handleSubmit = async (e) => {
             href="#signup"
             onClick={(e) => { e.preventDefault(); onSignupRedirect?.(); }}
           >
-            Create one free
+            Create one
           </a>
           <br />
           <br />

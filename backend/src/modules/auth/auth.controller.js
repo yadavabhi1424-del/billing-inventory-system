@@ -144,9 +144,9 @@ const login = async (req, res, next) => {
     }
 
     // Check email verified
-    if (!user.emailVerified) {
-      return next(new AppError("Please verify your email first. Check your inbox.", 403));
-    }
+    //if (!user.emailVerified) {
+    //  return next(new AppError("Please verify your email first. Check your inbox.", 403));
+    //}
 
     // Check approval status
     if (user.status === "PENDING") {

@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import './Auth.css';
+import * as authAPI from '../services/api';
 
 // ── Constants (easy to update) ─────────────────────────────
 const ROLES = [
@@ -223,36 +224,32 @@ function SignupForm({ onSignup, onLoginRedirect }) {
   const { level: passStrength } = getPasswordStrength(password);
 
   // ── Submit ───────────────────────────────────────────────
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError('');
+
+  // Validation
+  if (!fullName.trim())   return setError('Please enter your full name.');
+  if (!email.trim())      return setError('Please enter a valid email address.');
+  if (!phone.trim())      return setError('Please enter your phone number.');
+  if (!shopName.trim())   return setError('Please enter your shop or store name.');
+  if (passStrength < 2)   return setError('Please use a stronger password (min 8 chars, 1 uppercase, 1 number).');
+  if (!passwordsMatch)    return setError('Passwords do not match.');
+  if (!agreed)            return setError('Please agree to the Terms of Service to continue.');
+
+  setLoading(true);
+
+  try {
+    const res = await onSignup({ fullName, email, phone, shopName, password, role });
+    // Show success message
     setError('');
-
-    // Validation
-    if (!fullName.trim())              return setError('Please enter your full name.');
-    if (!email.trim())                 return setError('Please enter a valid email address.');
-    if (!phone.trim())                 return setError('Please enter your phone number.');
-    if (!shopName.trim())              return setError('Please enter your shop or store name.');
-    if (passStrength < 2)              return setError('Please use a stronger password (min 8 chars, 1 uppercase, 1 number).');
-    if (!passwordsMatch)               return setError('Passwords do not match.');
-    if (!agreed)                       return setError('Please agree to the Terms of Service to continue.');
-
-    setLoading(true);
-
-    try {
-      // Simulate API call — replace with real registration service
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-
-      // TODO: Replace with real API → POST /api/auth/register
-      // const res = await authService.register({ fullName, email, phone, shopName, password, role });
-
-      onSignup?.({ fullName, email, phone, shopName, role });
-    } catch (err) {
-      setError('Registration failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+    alert('Account created! Please check your email to verify your account.');
+  } catch (err) {
+    setError(err.message || 'Registration failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <div className="auth-form-panel auth-form-panel--signup">
       <div className="auth-form-wrapper">

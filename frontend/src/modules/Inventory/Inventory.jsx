@@ -130,7 +130,7 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
               <div className="product-form__field product-form__field--full">
                 <label className="product-form__label">Product Name *</label>
                 <input type="text" className={`product-form__input ${errors.name ? 'product-form__input--error' : ''}`}
-                  placeholder="e.g., Basmati Rice (5kg)" value={form.name}
+                  placeholder="e.g., Rice" value={form.name}
                   onChange={e => set('name', e.target.value)} />
                 {errors.name && <span className="product-form__error">{errors.name}</span>}
               </div>

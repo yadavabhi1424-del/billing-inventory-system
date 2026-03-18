@@ -74,7 +74,7 @@ const getPendingUsers = async (req, res, next) => {
       `SELECT user_id, name, email, role, phone,
               emailVerified, status, createdAt
        FROM users
-       WHERE status = 'PENDING' AND emailVerified = TRUE
+       WHERE status = 'PENDING'
        ORDER BY createdAt ASC`
     );
 
@@ -193,9 +193,9 @@ const approveUser = async (req, res, next) => {
       return next(new AppError("User is already approved.", 400));
     }
 
-    if (!user.emailVerified) {
-      return next(new AppError("User has not verified their email yet.", 400));
-    }
+    //if (!user.emailVerified) {
+    //  return next(new AppError("User has not verified their email yet.", 400));
+    //}
 
     await pool.execute(
       `UPDATE users
