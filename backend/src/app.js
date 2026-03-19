@@ -1,87 +1,68 @@
-require("dotenv").config();
-const express      = require("express");
-const cors         = require("cors");
-const helmet       = require("helmet");
-const morgan       = require("morgan");
-const compression  = require("compression");
-const rateLimit    = require("express-rate-limit");
-const path         = require("path");
+import "dotenv/config";
+import express      from "express";
+import cors         from "cors";
+import helmet       from "helmet";
+import morgan       from "morgan";
+import compression  from "compression";
+import rateLimit    from "express-rate-limit";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-const { notFound, errorHandler } = require("./middleware/errorHandler");
+import { notFound, errorHandler } from "./middleware/errorHandler.js";
 
-// ─── Route imports ────────────────────────────────────
-const authRoutes          = require("./modules/auth/auth.routes");
-const userRoutes          = require("./modules/users/user.routes");
-const categoryRoutes      = require("./modules/categories/category.routes");
-const productRoutes       = require("./modules/products/product.routes");
-const supplierRoutes      = require("./modules/suppliers/supplier.routes");
-const customerRoutes      = require("./modules/customers/customer.routes");
-const billingRoutes       = require("./modules/billing/billing.routes");
-const stockRoutes         = require("./modules/stock/stock.routes");
-const purchaseOrderRoutes = require("./modules/purchaseOrders/purchaseOrder.routes");
-const reportRoutes        = require("./modules/reports/report.routes");
-const dashboardRoutes     = require("./modules/dashboard/dashboard.routes");
+import authRoutes          from "./modules/auth/auth.routes.js";
+import userRoutes          from "./modules/users/user.routes.js";
+import categoryRoutes      from "./modules/categories/category.routes.js";
+import productRoutes       from "./modules/products/product.routes.js";
+import supplierRoutes      from "./modules/suppliers/supplier.routes.js";
+import customerRoutes      from "./modules/customers/customer.routes.js";
+import billingRoutes       from "./modules/billing/billing.routes.js";
+import stockRoutes         from "./modules/stock/stock.routes.js";
+import purchaseOrderRoutes from "./modules/purchaseOrders/purchaseOrder.routes.js";
+import reportRoutes        from "./modules/reports/report.routes.js";
+import dashboardRoutes     from "./modules/dashboard/dashboard.routes.js";
+import aiRoutes            from "./modules/ai/ai.routes.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = dirname(__filename);
 
 const app = express();
 
-// ─── Security ─────────────────────────────────────────
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+
+app.use(cors({
+  origin:         [process.env.FRONTEND_URL || "http://localhost:5173"],
+  credentials:    true,
+  methods:        ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "Cache-Control", "Pragma"],
 }));
 
-// ─── CORS ─────────────────────────────────────────────
-app.use(
-  cors({
-    origin: [process.env.FRONTEND_URL || "http://localhost:5173"],
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Cache-Control",
-      "Pragma",
-    ],
-  })
-);
-
-// ─── Rate Limiting ────────────────────────────────────
 app.use("/api", rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max:      300,
-  message:  { success: false, message: "Too many requests. Try again later." },
+  windowMs: 15 * 60 * 1000, max: 300,
+  message: { success: false, message: "Too many requests. Try again later." },
 }));
 
 app.use("/api/auth/login", rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max:      20,
-  message:  { success: false, message: "Too many login attempts. Try again later." },
+  windowMs: 15 * 60 * 1000, max: 20,
+  message: { success: false, message: "Too many login attempts. Try again later." },
 }));
 
-// ─── Body Parsers ─────────────────────────────────────
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(compression());
 
-// ─── Logging ──────────────────────────────────────────
-if (process.env.NODE_ENV === "development") {
-  app.use(morgan("dev"));
-}
+if (process.env.NODE_ENV === "development") app.use(morgan("dev"));
 
-// ─── Static files (product images) ───────────────────
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/uploads", express.static(join(__dirname, "../uploads")));
 
-// ─── Health check ─────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({
-    success:     true,
-    message:     "StockSense Pro API is running!",
-    version:     "1.0.0",
-    timestamp:   new Date().toISOString(),
+    success: true, message: "StockSense Pro API is running!",
+    version: "1.0.0", timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
   });
 });
 
-// ─── API Routes ───────────────────────────────────────
 app.use("/api/auth",            authRoutes);
 app.use("/api/users",           userRoutes);
 app.use("/api/categories",      categoryRoutes);
@@ -93,9 +74,9 @@ app.use("/api/stock",           stockRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/reports",         reportRoutes);
 app.use("/api/dashboard",       dashboardRoutes);
+app.use("/api/ai",              aiRoutes);
 
-// ─── Error Handling ───────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
-module.exports = app;
+export default app;

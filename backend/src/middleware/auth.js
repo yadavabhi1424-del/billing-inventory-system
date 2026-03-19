@@ -1,8 +1,7 @@
-const { verifyAccessToken } = require("../config/jwt");
-const { pool }              = require("../config/database");
-const { AppError }          = require("./errorHandler");
+import { verifyAccessToken } from "../config/jwt.js";
+import { pool }              from "../config/database.js";
+import { AppError }          from "./errorHandler.js";
 
-// ─── Must be logged in ────────────────────────────────
 const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -19,19 +18,12 @@ const protect = async (req, res, next) => {
       [decoded.id]
     );
 
-    if (rows.length === 0) {
-      return next(new AppError("User not found.", 401));
-    }
+    if (rows.length === 0) return next(new AppError("User not found.", 401));
 
     const user = rows[0];
 
-    if (!user.isActive) {
-      return next(new AppError("Your account has been deactivated.", 403));
-    }
-
-    if (user.status !== "APPROVED") {
-      return next(new AppError("Your account is not approved yet.", 403));
-    }
+    if (!user.isActive) return next(new AppError("Your account has been deactivated.", 403));
+    if (user.status !== "APPROVED") return next(new AppError("Your account is not approved yet.", 403));
 
     req.user = user;
     next();
@@ -43,24 +35,19 @@ const protect = async (req, res, next) => {
   }
 };
 
-// ─── Role guard ───────────────────────────────────────
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
-      return next(
-        new AppError(
-          `Access denied. Required: ${roles.join(" or ")}. Your role: ${req.user.role}`,
-          403
-        )
-      );
+      return next(new AppError(
+        `Access denied. Required: ${roles.join(" or ")}. Your role: ${req.user.role}`, 403
+      ));
     }
     next();
   };
 };
 
-// ─── Shortcuts ────────────────────────────────────────
 const adminOnly    = authorize("ADMIN");
 const adminOrOwner = authorize("ADMIN", "OWNER");
 const allRoles     = authorize("ADMIN", "OWNER", "CASHIER");
 
-module.exports = { protect, authorize, adminOnly, adminOrOwner, allRoles };
+export { protect, authorize, adminOnly, adminOrOwner, allRoles };

@@ -13,6 +13,7 @@ import MainLayout from './components/AppLayout';
 import Dashboard  from './modules/Dashboard/Dashboard';
 import Billing  from './modules/billing/Billing';
 import Inventory from './modules/Inventory/Inventory';
+import AIPredictPage from './modules/AI/AI';
 import Reports   from './modules/Reports/Reports';
 import Suppliers from './modules/Suppliers/Suppliers';
 import UserManagement from './modules/Users/UserManagement';
@@ -156,7 +157,7 @@ function AuthenticatedApp({ user, logout }) {
 
         <Route path="/ai-predict" element={
           <ProtectedRoute page="ai-predict" user={user}>
-            <ModulePlaceholder page="AI Predict" user={user} />
+            <AIPredictPage user={user} />
           </ProtectedRoute>
         } />
 

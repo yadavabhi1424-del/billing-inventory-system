@@ -2,6 +2,7 @@
   "name": "billing-inventory-backend",
   "version": "1.0.0",
   "description": "StockSense Pro Backend API",
+  "type": "module",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",

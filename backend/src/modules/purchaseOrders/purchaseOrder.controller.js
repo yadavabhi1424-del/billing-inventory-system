@@ -1,8 +1,7 @@
-const { v4: uuidv4 } = require("uuid");
-const { pool }       = require("../../config/database");
-const { AppError }   = require("../../middleware/errorHandler");
+import { v4 as uuidv4 } from "uuid";
+import { pool }          from "../../config/database.js";
+import { AppError }      from "../../middleware/errorHandler.js";
 
-// ─── Generate PO Number ───────────────────────────────
 const generatePONumber = async (conn) => {
   const today  = new Date();
   const prefix = `PO-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -17,7 +16,6 @@ const generatePONumber = async (conn) => {
   return `${prefix}-${String(num + 1).padStart(4, "0")}`;
 };
 
-// ─── GET ALL ──────────────────────────────────────────
 const getAllOrders = async (req, res, next) => {
   try {
     const { page = 1, limit = 20, status, supplierId, startDate, endDate } = req.query;
@@ -25,62 +23,47 @@ const getAllOrders = async (req, res, next) => {
     const conditions = ["1=1"];
     const params     = [];
 
-    if (status) { conditions.push("po.status = ?"); params.push(status); }
-    if (supplierId) { conditions.push("po.supplier_id = ?"); params.push(supplierId); }
-    if (startDate) { conditions.push("DATE(po.createdAt) >= ?"); params.push(startDate); }
-    if (endDate)   { conditions.push("DATE(po.createdAt) <= ?"); params.push(endDate); }
+    if (status)     { conditions.push("po.status = ?");              params.push(status); }
+    if (supplierId) { conditions.push("po.supplier_id = ?");         params.push(supplierId); }
+    if (startDate)  { conditions.push("DATE(po.createdAt) >= ?");    params.push(startDate); }
+    if (endDate)    { conditions.push("DATE(po.createdAt) <= ?");    params.push(endDate); }
 
     const where = conditions.join(" AND ");
 
     const [orders] = await pool.execute(
-      `SELECT po.*,
-              s.name as supplierName,
-              s.phone as supplierPhone,
-              u.name as createdBy,
-              COUNT(poi.po_item_id) as itemCount
+      `SELECT po.*, s.name as supplierName, s.phone as supplierPhone,
+              u.name as createdBy, COUNT(poi.po_item_id) as itemCount
        FROM purchase_orders po
-       LEFT JOIN suppliers          s   ON s.supplier_id  = po.supplier_id
-       LEFT JOIN users              u   ON u.user_id      = po.user_id
-       LEFT JOIN purchase_order_items poi ON poi.po_id   = po.po_id
-       WHERE ${where}
-       GROUP BY po.po_id
-       ORDER BY po.createdAt DESC
+       LEFT JOIN suppliers            s   ON s.supplier_id = po.supplier_id
+       LEFT JOIN users                u   ON u.user_id     = po.user_id
+       LEFT JOIN purchase_order_items poi ON poi.po_id     = po.po_id
+       WHERE ${where} GROUP BY po.po_id ORDER BY po.createdAt DESC
        LIMIT ${parseInt(limit)} OFFSET ${offset}`,
       params
     );
 
     const [[{ total }]] = await pool.execute(
-      `SELECT COUNT(*) as total FROM purchase_orders po WHERE ${where}`,
-      params
+      `SELECT COUNT(*) as total FROM purchase_orders po WHERE ${where}`, params
     );
 
     res.json({
-      success: true,
-      data: orders,
-      pagination: {
-        page: parseInt(page), limit: parseInt(limit),
-        total, pages: Math.ceil(total / parseInt(limit)),
-      },
+      success: true, data: orders,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) },
     });
   } catch (error) { next(error); }
 };
 
-// ─── GET BY ID ────────────────────────────────────────
 const getOrderById = async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT po.*, s.name as supplierName,
-              s.phone as supplierPhone, u.name as createdBy
+      `SELECT po.*, s.name as supplierName, s.phone as supplierPhone, u.name as createdBy
        FROM purchase_orders po
        LEFT JOIN suppliers s ON s.supplier_id = po.supplier_id
        LEFT JOIN users     u ON u.user_id     = po.user_id
        WHERE po.po_id = ?`,
       [req.params.id]
     );
-
-    if (rows.length === 0) {
-      return next(new AppError("Purchase order not found.", 404));
-    }
+    if (rows.length === 0) return next(new AppError("Purchase order not found.", 404));
 
     const [items] = await pool.execute(
       `SELECT poi.*, p.sku, p.unit, p.stock as currentStock
@@ -94,14 +77,11 @@ const getOrderById = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ─── CREATE ───────────────────────────────────────────
 const createOrder = async (req, res, next) => {
   try {
     const { supplierId, items, expectedDate, notes } = req.body;
-
-    if (!supplierId || !items?.length) {
+    if (!supplierId || !items?.length)
       return next(new AppError("Supplier and items are required.", 400));
-    }
 
     const conn = await pool.getConnection();
     try {
@@ -109,9 +89,8 @@ const createOrder = async (req, res, next) => {
 
       const poNumber = await generatePONumber(conn);
       const poId     = uuidv4();
-
-      let subtotal = 0;
-      let totalTax = 0;
+      let subtotal   = 0;
+      let totalTax   = 0;
 
       const enrichedItems = items.map((item) => {
         const itemTotal = item.costPrice * item.quantity;
@@ -123,36 +102,25 @@ const createOrder = async (req, res, next) => {
 
       await conn.execute(
         `INSERT INTO purchase_orders
-          (po_id, poNumber, supplier_id, user_id,
-           subtotal, taxAmount, totalAmount,
-           expectedDate, notes)
+          (po_id, poNumber, supplier_id, user_id, subtotal, taxAmount, totalAmount, expectedDate, notes)
          VALUES (?,?,?,?,?,?,?,?,?)`,
-        [
-          poId, poNumber, supplierId, req.user.user_id,
-          subtotal, totalTax, subtotal + totalTax,
-          expectedDate || null, notes || null,
-        ]
+        [poId, poNumber, supplierId, req.user.user_id,
+         subtotal, totalTax, subtotal + totalTax, expectedDate || null, notes || null]
       );
 
       for (const item of enrichedItems) {
         await conn.execute(
           `INSERT INTO purchase_order_items
-            (po_item_id, po_id, product_id, productName,
-             quantity, costPrice, taxRate, taxAmount, totalAmount)
+            (po_item_id, po_id, product_id, productName, quantity, costPrice, taxRate, taxAmount, totalAmount)
            VALUES (?,?,?,?,?,?,?,?,?)`,
-          [
-            uuidv4(), poId, item.productId, item.productName,
-            item.quantity, item.costPrice,
-            item.taxRate || 0, item.taxAmount, item.totalAmount,
-          ]
+          [uuidv4(), poId, item.productId, item.productName,
+           item.quantity, item.costPrice, item.taxRate || 0, item.taxAmount, item.totalAmount]
         );
       }
 
       await conn.commit();
-
       res.status(201).json({
-        success: true,
-        message: "Purchase order created.",
+        success: true, message: "Purchase order created.",
         data: { po_id: poId, poNumber, totalAmount: subtotal + totalTax },
       });
     } catch (err) {
@@ -164,17 +132,14 @@ const createOrder = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ─── RECEIVE ORDER (updates stock) ───────────────────
 const receiveOrder = async (req, res, next) => {
   try {
     const { receivedItems } = req.body;
 
     const [[po]] = await pool.execute(
-      "SELECT * FROM purchase_orders WHERE po_id = ?",
-      [req.params.id]
+      "SELECT * FROM purchase_orders WHERE po_id = ?", [req.params.id]
     );
-
-    if (!po) return next(new AppError("Purchase order not found.", 404));
+    if (!po)                    return next(new AppError("Purchase order not found.", 404));
     if (po.status === "RECEIVED")  return next(new AppError("Order already received.", 400));
     if (po.status === "CANCELLED") return next(new AppError("Cannot receive cancelled order.", 400));
 
@@ -183,8 +148,7 @@ const receiveOrder = async (req, res, next) => {
       await conn.beginTransaction();
 
       const [poItems] = await conn.execute(
-        "SELECT * FROM purchase_order_items WHERE po_id = ?",
-        [req.params.id]
+        "SELECT * FROM purchase_order_items WHERE po_id = ?", [req.params.id]
       );
 
       const toReceive = receivedItems ||
@@ -207,41 +171,26 @@ const receiveOrder = async (req, res, next) => {
         );
 
         const [[product]] = await conn.execute(
-          "SELECT stock FROM products WHERE product_id = ?",
-          [recv.productId]
+          "SELECT stock FROM products WHERE product_id = ?", [recv.productId]
         );
 
         const newStock = product.stock + recv.receivedQty;
-
-        await conn.execute(
-          "UPDATE products SET stock = ? WHERE product_id = ?",
-          [newStock, recv.productId]
-        );
-
+        await conn.execute("UPDATE products SET stock = ? WHERE product_id = ?", [newStock, recv.productId]);
         await conn.execute(
           `INSERT INTO stock_movements
-            (movement_id, product_id, user_id, type,
-             quantity, reason, reference,
-             balanceBefore, balanceAfter)
+            (movement_id, product_id, user_id, type, quantity, reason, reference, balanceBefore, balanceAfter)
            VALUES (?,?,?,'PURCHASE',?,?,?,?,?)`,
-          [
-            uuidv4(), recv.productId, req.user.user_id,
-            recv.receivedQty, "Purchase order received",
-            po.poNumber, product.stock, newStock,
-          ]
+          [uuidv4(), recv.productId, req.user.user_id, recv.receivedQty,
+           "Purchase order received", po.poNumber, product.stock, newStock]
         );
       }
 
       await conn.execute(
-        `UPDATE purchase_orders
-         SET status       = ?,
-             receivedDate = NOW()
-         WHERE po_id = ?`,
+        `UPDATE purchase_orders SET status = ?, receivedDate = NOW() WHERE po_id = ?`,
         [allReceived ? "RECEIVED" : "PARTIAL", req.params.id]
       );
 
       await conn.commit();
-
       res.json({ success: true, message: "Stock received and updated." });
     } catch (err) {
       await conn.rollback();
@@ -252,20 +201,18 @@ const receiveOrder = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ─── UPDATE STATUS ────────────────────────────────────
 const updateStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
     const valid = ["PENDING", "ORDERED", "CANCELLED"];
-    if (!valid.includes(status)) {
+    if (!valid.includes(status))
       return next(new AppError(`Use: ${valid.join(", ")}`, 400));
-    }
+
     await pool.execute(
-      "UPDATE purchase_orders SET status = ? WHERE po_id = ?",
-      [status, req.params.id]
+      "UPDATE purchase_orders SET status = ? WHERE po_id = ?", [status, req.params.id]
     );
     res.json({ success: true, message: "Status updated." });
   } catch (error) { next(error); }
 };
 
-module.exports = { getAllOrders, getOrderById, createOrder, receiveOrder, updateStatus };
+export { getAllOrders, getOrderById, createOrder, receiveOrder, updateStatus };

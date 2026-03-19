@@ -343,5 +343,29 @@ export async function deleteUser(id) {
   return await api.delete(`/users/${id}`);
 }
 
+// ============================================================
+//  AI PREDICT
+// ============================================================
+
+export async function getAIRecommendations() {
+  return await api.get('/ai/recommendations');
+}
+
+export async function getAIPredictAll() {
+  return await api.get('/ai/predict-all');
+}
+
+export async function getAIPrediction(productId) {
+  return await api.get(`/ai/predict/${productId}`);
+}
+
+export async function trainAIModels() {
+  return await api.post('/ai/train');
+}
+
+export async function getAIHealth() {
+  return await api.get('/ai/health');
+}
+
 // Export instance for custom calls
 export { api, API_URL };

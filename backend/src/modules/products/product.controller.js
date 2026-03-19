@@ -1,177 +1,100 @@
-const { v4: uuidv4 } = require("uuid");
-const { pool }       = require("../../config/database");
-const { AppError }   = require("../../middleware/errorHandler");
+import { v4 as uuidv4 } from "uuid";
+import { pool }          from "../../config/database.js";
+import { AppError }      from "../../middleware/errorHandler.js";
 
-// ─── GET ALL PRODUCTS ─────────────────────────────────
 const getAllProducts = async (req, res, next) => {
   try {
-    const {
-      page       = 1,
-      limit      = 20,
-      search,
-      categoryId,
-      supplierId,
-      lowStock,
-      isActive   = "true",
-    } = req.query;
+    const { page = 1, limit = 20, search, categoryId,
+            supplierId, lowStock, isActive = "true" } = req.query;
 
     const offset     = (parseInt(page) - 1) * parseInt(limit);
     const conditions = ["1=1"];
     const params     = [];
 
-    if (isActive !== "all") {
-      conditions.push("p.isActive = ?");
-      params.push(isActive === "true" ? 1 : 0);
-    }
-
-    if (categoryId) {
-      conditions.push("p.category_id = ?");
-      params.push(categoryId);
-    }
-
-    if (supplierId) {
-      conditions.push("p.supplier_id = ?");
-      params.push(supplierId);
-    }
-
-    if (lowStock === "true") {
-      conditions.push("p.stock <= p.minStockLevel");
-    }
-
-    if (search) {
-      conditions.push("(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)");
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
-    }
+    if (isActive !== "all") { conditions.push("p.isActive = ?"); params.push(isActive === "true" ? 1 : 0); }
+    if (categoryId)         { conditions.push("p.category_id = ?"); params.push(categoryId); }
+    if (supplierId)         { conditions.push("p.supplier_id = ?"); params.push(supplierId); }
+    if (lowStock === "true"){ conditions.push("p.stock <= p.minStockLevel"); }
+    if (search)             { conditions.push("(p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)"); params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
     const where = conditions.join(" AND ");
 
     const [products] = await pool.execute(
-      `SELECT p.*,
-              c.name  as categoryName,
-              c.color as categoryColor,
-              s.name  as supplierName,
-              (p.stock <= p.minStockLevel) as isLowStock
+      `SELECT p.*, c.name as categoryName, c.color as categoryColor,
+              s.name as supplierName, (p.stock <= p.minStockLevel) as isLowStock
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
        LEFT JOIN suppliers  s ON s.supplier_id  = p.supplier_id
-       WHERE ${where}
-       ORDER BY p.name ASC
+       WHERE ${where} ORDER BY p.name ASC
        LIMIT ${parseInt(limit)} OFFSET ${offset}`,
       params
     );
 
     const [[{ total }]] = await pool.execute(
-      `SELECT COUNT(*) as total
-       FROM products p
-       WHERE ${where}`,
-      params
+      `SELECT COUNT(*) as total FROM products p WHERE ${where}`, params
     );
 
     res.json({
-      success: true,
-      data: products,
-      pagination: {
-        page:  parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit)),
-      },
+      success: true, data: products,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / parseInt(limit)) },
     });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-// ─── GET BY ID ────────────────────────────────────────
 const getProductById = async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT p.*,
-              c.name  as categoryName,
-              s.name  as supplierName,
-              s.phone as supplierPhone
+      `SELECT p.*, c.name as categoryName, s.name as supplierName, s.phone as supplierPhone
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
        LEFT JOIN suppliers  s ON s.supplier_id  = p.supplier_id
        WHERE p.product_id = ?`,
       [req.params.id]
     );
-
-    if (rows.length === 0) {
-      return next(new AppError("Product not found.", 404));
-    }
-
+    if (rows.length === 0) return next(new AppError("Product not found.", 404));
     res.json({ success: true, data: rows[0] });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-// ─── GET BY SKU OR BARCODE (for POS scanner) ──────────
 const getProductBySku = async (req, res, next) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT p.*,
-              c.name as categoryName
+      `SELECT p.*, c.name as categoryName
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
-       WHERE (p.sku = ? OR p.barcode = ?)
-         AND p.isActive = TRUE`,
+       WHERE (p.sku = ? OR p.barcode = ?) AND p.isActive = TRUE`,
       [req.params.sku, req.params.sku]
     );
-
-    if (rows.length === 0) {
-      return next(new AppError("Product not found.", 404));
-    }
-
+    if (rows.length === 0) return next(new AppError("Product not found.", 404));
     res.json({ success: true, data: rows[0] });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-// ─── GET LOW STOCK ────────────────────────────────────
 const getLowStockProducts = async (req, res, next) => {
   try {
     const [products] = await pool.execute(
-      `SELECT p.*,
-              c.name as categoryName,
-              s.name as supplierName,
-              s.phone as supplierPhone
+      `SELECT p.*, c.name as categoryName, s.name as supplierName, s.phone as supplierPhone
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
        LEFT JOIN suppliers  s ON s.supplier_id  = p.supplier_id
-       WHERE p.stock <= p.minStockLevel
-         AND p.isActive = TRUE
+       WHERE p.stock <= p.minStockLevel AND p.isActive = TRUE
        ORDER BY (p.stock - p.minStockLevel) ASC`
     );
-
     res.json({ success: true, data: products, count: products.length });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-// ─── CREATE PRODUCT ───────────────────────────────────
 const createProduct = async (req, res, next) => {
   try {
-    const {
-      name, sku, barcode, description,
-      categoryId, supplierId, unit,
-      costPrice, sellingPrice, mrp,
-      taxRate, taxType, stock,
-      minStockLevel, maxStockLevel,
-      location, expiryDate,
-    } = req.body;
+    const { name, sku, barcode, description, categoryId, supplierId, unit,
+            costPrice, sellingPrice, mrp, taxRate, taxType, stock,
+            minStockLevel, maxStockLevel, location, expiryDate } = req.body;
 
-    if (!name || !sku || !categoryId || sellingPrice === undefined) {
-      return next(
-        new AppError("Name, SKU, category and selling price are required.", 400)
-      );
-    }
+    if (!name || !sku || !categoryId || sellingPrice === undefined)
+      return next(new AppError("Name, SKU, category and selling price are required.", 400));
 
-    const productId   = uuidv4();
-    const image       = req.file ? req.file.filename : null;
+    const productId    = uuidv4();
+    const image        = req.file ? req.file.filename : null;
     const initialStock = parseInt(stock) || 0;
 
     const conn = await pool.getConnection();
@@ -180,34 +103,26 @@ const createProduct = async (req, res, next) => {
 
       await conn.execute(
         `INSERT INTO products
-          (product_id, name, sku, barcode, description,
-           category_id, supplier_id, unit, costPrice,
-           sellingPrice, mrp, taxRate, taxType, stock,
-           minStockLevel, maxStockLevel, location, image,
-           expiryDate)
+          (product_id, name, sku, barcode, description, category_id, supplier_id,
+           unit, costPrice, sellingPrice, mrp, taxRate, taxType, stock,
+           minStockLevel, maxStockLevel, location, image, expiryDate)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [
-          productId, name, sku, barcode || null, description || null,
-          categoryId, supplierId || null, unit || "pcs",
-          parseFloat(costPrice) || 0, parseFloat(sellingPrice),
-          mrp ? parseFloat(mrp) : null,
-          parseFloat(taxRate) || 0, taxType || "GST",
-          initialStock, parseInt(minStockLevel) || 10,
-          maxStockLevel ? parseInt(maxStockLevel) : null,
-          location || null, image,
-          expiryDate || null,
-        ]
+        [productId, name, sku, barcode || null, description || null,
+         categoryId, supplierId || null, unit || "pcs",
+         parseFloat(costPrice) || 0, parseFloat(sellingPrice),
+         mrp ? parseFloat(mrp) : null,
+         parseFloat(taxRate) || 0, taxType || "GST",
+         initialStock, parseInt(minStockLevel) || 10,
+         maxStockLevel ? parseInt(maxStockLevel) : null,
+         location || null, image, expiryDate || null]
       );
 
-      // Log initial stock movement
       if (initialStock > 0) {
         await conn.execute(
           `INSERT INTO stock_movements
-            (movement_id, product_id, user_id, type,
-             quantity, reason, balanceBefore, balanceAfter)
+            (movement_id, product_id, user_id, type, quantity, reason, balanceBefore, balanceAfter)
            VALUES (?, ?, ?, 'ADJUSTMENT', ?, 'Initial stock', 0, ?)`,
-          [uuidv4(), productId, req.user.user_id,
-           initialStock, initialStock]
+          [uuidv4(), productId, req.user.user_id, initialStock, initialStock]
         );
       }
 
@@ -220,33 +135,22 @@ const createProduct = async (req, res, next) => {
     }
 
     res.status(201).json({
-      success: true,
-      message: "Product created successfully.",
+      success: true, message: "Product created successfully.",
       data: { product_id: productId, name, sku },
     });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-// ─── UPDATE PRODUCT ───────────────────────────────────
 const updateProduct = async (req, res, next) => {
   try {
-    const {
-      name, barcode, description, categoryId,
-      supplierId, unit, costPrice, sellingPrice,
-      mrp, taxRate, taxType, minStockLevel,
-      maxStockLevel, location, isActive, expiryDate,
-    } = req.body;
+    const { name, barcode, description, categoryId, supplierId, unit,
+            costPrice, sellingPrice, mrp, taxRate, taxType,
+            minStockLevel, maxStockLevel, location, isActive, expiryDate } = req.body;
 
     const [existing] = await pool.execute(
-      "SELECT product_id FROM products WHERE product_id = ?",
-      [req.params.id]
+      "SELECT product_id FROM products WHERE product_id = ?", [req.params.id]
     );
-
-    if (existing.length === 0) {
-      return next(new AppError("Product not found.", 404));
-    }
+    if (existing.length === 0) return next(new AppError("Product not found.", 404));
 
     const image = req.file ? req.file.filename : null;
 
@@ -270,50 +174,30 @@ const updateProduct = async (req, res, next) => {
         expiryDate    = COALESCE(?, expiryDate),
         image         = COALESCE(?, image)
        WHERE product_id = ?`,
-      [
-        name || null, barcode || null, description || null,
-        categoryId || null, supplierId || null, unit || null,
-        costPrice ? parseFloat(costPrice) : null,
-        sellingPrice ? parseFloat(sellingPrice) : null,
-        mrp ? parseFloat(mrp) : null,
-        taxRate ? parseFloat(taxRate) : null,
-        taxType || null,
-        minStockLevel ? parseInt(minStockLevel) : null,
-        maxStockLevel ? parseInt(maxStockLevel) : null,
-        location || null,
-        isActive !== undefined ? isActive : null,
-        expiryDate || null,
-        image,
-        req.params.id,
-      ]
+      [name || null, barcode || null, description || null,
+       categoryId || null, supplierId || null, unit || null,
+       costPrice ? parseFloat(costPrice) : null,
+       sellingPrice ? parseFloat(sellingPrice) : null,
+       mrp ? parseFloat(mrp) : null,
+       taxRate ? parseFloat(taxRate) : null, taxType || null,
+       minStockLevel ? parseInt(minStockLevel) : null,
+       maxStockLevel ? parseInt(maxStockLevel) : null,
+       location || null, isActive !== undefined ? isActive : null,
+       expiryDate || null, image, req.params.id]
     );
 
     res.json({ success: true, message: "Product updated successfully." });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-// ─── DELETE PRODUCT (soft) ────────────────────────────
 const deleteProduct = async (req, res, next) => {
   try {
     await pool.execute(
-      "UPDATE products SET isActive = FALSE WHERE product_id = ?",
-      [req.params.id]
+      "UPDATE products SET isActive = FALSE WHERE product_id = ?", [req.params.id]
     );
-
     res.json({ success: true, message: "Product deactivated." });
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
-module.exports = {
-  getAllProducts,
-  getProductById,
-  getProductBySku,
-  getLowStockProducts,
-  createProduct,
-  updateProduct,
-  deleteProduct,
-};
+export { getAllProducts, getProductById, getProductBySku,
+         getLowStockProducts, createProduct, updateProduct, deleteProduct };

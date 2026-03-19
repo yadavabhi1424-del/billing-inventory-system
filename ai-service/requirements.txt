@@ -1,0 +1,8 @@
+flask
+flask-cors
+prophet
+pandas
+numpy
+mysql-connector-python
+scikit-learn
+python-dotenv

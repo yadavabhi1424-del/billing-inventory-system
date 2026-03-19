@@ -1,19 +1,15 @@
-require("dotenv").config();
-const app                  = require("./app");
-const { connectDB }        = require("./config/database");
-const { verifyEmailConnection } = require("./config/email");
+import "dotenv/config";
+import app                       from "./app.js";
+import { connectDB }             from "./config/database.js";
+import { verifyEmailConnection } from "./config/email.js";
 
 const PORT = process.env.PORT || 5000;
 
 async function startServer() {
   try {
-    // Connect to MySQL
     await connectDB();
-
-    // Connect to Email (optional — won't crash if not set up)
     await verifyEmailConnection();
 
-    // Start server
     app.listen(PORT, () => {
       console.log("\n🚀 ──────────────────────────────────────────");
       console.log("   StockSense Pro Backend is running!");
@@ -31,7 +27,6 @@ async function startServer() {
 
 startServer();
 
-// Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("Server shutting down...");
   process.exit(0);

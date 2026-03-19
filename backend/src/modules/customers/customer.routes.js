@@ -1,12 +1,9 @@
-const router = require("express").Router();
-const {
-  getAllCustomers,
-  getCustomerById,
-  createCustomer,
-  updateCustomer,
-  deleteCustomer,
-} = require("./customer.controller");
-const { protect } = require("../../middleware/auth");
+import { Router } from "express";
+import { getAllCustomers, getCustomerById,
+         createCustomer, updateCustomer, deleteCustomer } from "./customer.controller.js";
+import { protect } from "../../middleware/auth.js";
+
+const router = Router();
 
 router.use(protect);
 router.get("/",       getAllCustomers);
@@ -15,4 +12,4 @@ router.post("/",      createCustomer);
 router.put("/:id",    updateCustomer);
 router.delete("/:id", deleteCustomer);
 
-module.exports = router;
+export default router;

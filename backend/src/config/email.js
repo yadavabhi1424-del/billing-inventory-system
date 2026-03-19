@@ -1,4 +1,4 @@
-const nodemailer = require("nodemailer");
+import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -8,7 +8,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ─── Verify email connection ──────────────────────────
 const verifyEmailConnection = async () => {
   try {
     await transporter.verify();
@@ -19,10 +18,8 @@ const verifyEmailConnection = async () => {
   }
 };
 
-// ─── Send verification email ──────────────────────────
 const sendVerificationEmail = async (toEmail, name, token) => {
   const verifyUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
-
   await transporter.sendMail({
     from:    process.env.EMAIL_FROM,
     to:      toEmail,
@@ -43,7 +40,6 @@ const sendVerificationEmail = async (toEmail, name, token) => {
   });
 };
 
-// ─── Send approval notification ───────────────────────
 const sendApprovalEmail = async (toEmail, name, role) => {
   await transporter.sendMail({
     from:    process.env.EMAIL_FROM,
@@ -64,7 +60,6 @@ const sendApprovalEmail = async (toEmail, name, role) => {
   });
 };
 
-// ─── Send rejection notification ──────────────────────
 const sendRejectionEmail = async (toEmail, name) => {
   await transporter.sendMail({
     from:    process.env.EMAIL_FROM,
@@ -81,7 +76,7 @@ const sendRejectionEmail = async (toEmail, name) => {
   });
 };
 
-module.exports = {
+export {
   verifyEmailConnection,
   sendVerificationEmail,
   sendApprovalEmail,
