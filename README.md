@@ -30,7 +30,7 @@ Backend:
 
 Database:
 
-* MongoDB / MySQL
+* MySQL
 
 ---
 
