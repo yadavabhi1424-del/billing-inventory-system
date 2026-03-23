@@ -142,16 +142,33 @@ const createProduct = async (req, res, next) => {
 
 const updateProduct = async (req, res, next) => {
   try {
-    const { name, barcode, description, categoryId, supplierId, unit,
-            costPrice, sellingPrice, mrp, taxRate, taxType,
-            minStockLevel, maxStockLevel, location, isActive, expiryDate } = req.body;
+    const {
+      name, barcode, description, categoryId,
+      supplierId, unit, costPrice, sellingPrice,
+      mrp, taxRate, taxType, minStockLevel,
+      maxStockLevel, location, isActive,
+      expiryDate, stock,
+    } = req.body;
 
     const [existing] = await req.db.execute(
-      "SELECT product_id FROM products WHERE product_id = ?", [req.params.id]
+      "SELECT product_id, stock FROM products WHERE product_id = ?",
+      [req.params.id]
     );
-    if (existing.length === 0) return next(new AppError("Product not found.", 404));
 
-    const image = req.file ? req.file.filename : null;
+    if (existing.length === 0) {
+      return next(new AppError("Product not found.", 404));
+    }
+
+    // Stock can only increase — prevent decrease
+    const currentStock = existing[0].stock;
+    const newStock     = stock !== undefined ? parseInt(stock) : currentStock;
+
+    if (newStock < currentStock) {
+      return next(new AppError(
+        `Stock cannot be decreased from ${currentStock} to ${newStock}. Use stock adjustment instead.`,
+        400
+      ));
+    }
 
     await req.db.execute(
       `UPDATE products SET
@@ -171,22 +188,45 @@ const updateProduct = async (req, res, next) => {
         location      = COALESCE(?, location),
         isActive      = COALESCE(?, isActive),
         expiryDate    = COALESCE(?, expiryDate),
-        image         = COALESCE(?, image)
+        stock         = ?
        WHERE product_id = ?`,
-      [name || null, barcode || null, description || null,
-       categoryId || null, supplierId || null, unit || null,
-       costPrice ? parseFloat(costPrice) : null,
-       sellingPrice ? parseFloat(sellingPrice) : null,
-       mrp ? parseFloat(mrp) : null,
-       taxRate ? parseFloat(taxRate) : null, taxType || null,
-       minStockLevel ? parseInt(minStockLevel) : null,
-       maxStockLevel ? parseInt(maxStockLevel) : null,
-       location || null, isActive !== undefined ? isActive : null,
-       expiryDate || null, image, req.params.id]
+      [
+        name || null, barcode || null, description || null,
+        categoryId || null, supplierId || null, unit || null,
+        costPrice     ? parseFloat(costPrice)     : null,
+        sellingPrice  ? parseFloat(sellingPrice)  : null,
+        mrp           ? parseFloat(mrp)           : null,
+        taxRate       !== undefined ? parseFloat(taxRate) : null,
+        taxType       || null,
+        minStockLevel ? parseInt(minStockLevel)   : null,
+        maxStockLevel ? parseInt(maxStockLevel)   : null,
+        location      || null,
+        isActive      !== undefined ? isActive    : null,
+        expiryDate    || null,
+        newStock,
+        req.params.id,
+      ]
     );
 
+    // Log stock movement if stock changed
+    if (newStock > currentStock) {
+      const { v4: uuidv4 } = await import('uuid');
+      await req.db.execute(
+        `INSERT INTO stock_movements
+          (movement_id, product_id, user_id, type,
+           quantity, reason, balanceBefore, balanceAfter)
+         VALUES (?, ?, ?, 'ADJUSTMENT', ?, 'Manual stock update via edit', ?, ?)`,
+        [
+          uuidv4(), req.params.id, req.user.user_id,
+          newStock - currentStock, currentStock, newStock,
+        ]
+      );
+    }
+
     res.json({ success: true, message: "Product updated successfully." });
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 };
 
 const deleteProduct = async (req, res, next) => {

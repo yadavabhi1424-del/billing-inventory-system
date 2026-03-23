@@ -4,7 +4,7 @@ import { protect } from '../../middleware/auth.js';
 
 const router = express.Router();
 
-router.get('/health',          protect, getHealth);
+router.get('/health',                   getHealth);
 router.post('/train',          protect, trainModels);
 router.get('/recommendations', protect, getRecommendations);
 router.get('/predict-all',     protect, getPredictAll);

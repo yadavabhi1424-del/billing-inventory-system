@@ -205,16 +205,35 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
                   ))}
                 </select>
               </div>
-
-              {/* Stock */}
-              <div className="product-form__field">
-                <label className="product-form__label">Current Stock *</label>
-                <input type="number" step="1"
-                  className={`product-form__input ${errors.stock ? 'product-form__input--error' : ''}`}
-                  placeholder="48" value={form.stock}
-                  onChange={e => set('stock', e.target.value)} />
-                {errors.stock && <span className="product-form__error">{errors.stock}</span>}
-              </div>
+{/* Stock */}
+<div className="product-form__field">
+  <label className="product-form__label">
+    Current Stock *
+    {isEdit && (
+      <span style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginLeft: '0.5rem', fontWeight: 400 }}>
+        ⚠️ Can only increase stock here. Use Stock Adjustment for corrections.
+      </span>
+    )}
+  </label>
+  <input type="number" step="1"
+    className={`product-form__input ${errors.stock ? 'product-form__input--error' : ''}`}
+    placeholder="48" value={form.stock}
+    min={isEdit ? product?.stock : 0}  // ← can't go below current stock
+    onChange={e => {
+      const val = parseInt(e.target.value);
+      if (isEdit && val < (product?.stock || 0)) {
+        setErrors(prev => ({ ...prev, stock: `Stock cannot be decreased. Current: ${product?.stock}` }));
+        return;
+      }
+      set('stock', e.target.value);
+    }} />
+  {errors.stock && <span className="product-form__error">{errors.stock}</span>}
+  {isEdit && (
+    <span className="product-form__hint">
+      Current: {product?.stock} {product?.unit}. You can only add more stock here.
+    </span>
+  )}
+</div>
 
               {/* Unit */}
               <div className="product-form__field">
@@ -301,11 +320,26 @@ export default function Inventory() {
 
  const handleEdit = async (formData) => {
   try {
-    const res = await updateProduct(selected.product_id, formData);
+    // Send plain JSON — no FormData for edit
+    const payload = {
+      name:          formData.get('name'),
+      sellingPrice:  formData.get('sellingPrice'),
+      costPrice:     formData.get('costPrice'),
+      stock:         formData.get('stock'),
+      unit:          formData.get('unit'),
+      taxRate:       formData.get('taxRate'),
+      minStockLevel: formData.get('minStockLevel'),
+      categoryId:    formData.get('categoryId'),
+      supplierId:    formData.get('supplierId'),
+      barcode:       formData.get('barcode'),
+      expiryDate:    formData.get('expiryDate'),
+    };
+
+    const res = await updateProduct(selected.product_id, payload);
     if (res.success) {
       setShowEdit(false);
       setSelected(null);
-      await fetchAll(); // wait for fresh data
+      fetchAll();
     }
   } catch (err) {
     console.error('Update error:', err.message);
