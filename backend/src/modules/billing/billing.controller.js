@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { pool }          from "../../config/database.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const generateInvoiceNumber = async (conn) => {
@@ -24,7 +23,7 @@ const createTransaction = async (req, res, next) => {
     if (!items || items.length === 0)
       return next(new AppError("At least one item is required.", 400));
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 
@@ -62,8 +61,8 @@ const createTransaction = async (req, res, next) => {
       }
 
       let discountAmount = 0;
-      if (discountType === "PERCENT")     discountAmount = (subtotal * parseFloat(discountValue)) / 100;
-      else if (discountType === "FIXED")  discountAmount = parseFloat(discountValue);
+      if (discountType === "PERCENT")    discountAmount = (subtotal * parseFloat(discountValue)) / 100;
+      else if (discountType === "FIXED") discountAmount = parseFloat(discountValue);
 
       const preRound    = subtotal - discountAmount + totalTax;
       const roundOff    = Math.round(preRound) - preRound;
@@ -154,16 +153,16 @@ const getAllTransactions = async (req, res, next) => {
     const conditions = ["1=1"];
     const params     = [];
 
-    if (status)        { conditions.push("t.status = ?");        params.push(status); }
-    if (paymentMethod) { conditions.push("t.paymentMethod = ?"); params.push(paymentMethod); }
-    if (customerId)    { conditions.push("t.customer_id = ?");   params.push(customerId); }
+    if (status)        { conditions.push("t.status = ?");          params.push(status); }
+    if (paymentMethod) { conditions.push("t.paymentMethod = ?");   params.push(paymentMethod); }
+    if (customerId)    { conditions.push("t.customer_id = ?");     params.push(customerId); }
     if (search)        { conditions.push("(t.invoiceNumber LIKE ? OR c.name LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
     if (startDate)     { conditions.push("DATE(t.createdAt) >= ?"); params.push(startDate); }
     if (endDate)       { conditions.push("DATE(t.createdAt) <= ?"); params.push(endDate); }
 
     const where = conditions.join(" AND ");
 
-    const [transactions] = await pool.execute(
+    const [transactions] = await req.db.execute(
       `SELECT t.*, c.name as customerName, u.name as cashierName,
               COUNT(ti.item_id) as itemCount
        FROM transactions t
@@ -175,7 +174,7 @@ const getAllTransactions = async (req, res, next) => {
       params
     );
 
-    const [[{ total }]] = await pool.execute(
+    const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM transactions t
        LEFT JOIN customers c ON c.customer_id = t.customer_id WHERE ${where}`,
       params
@@ -190,7 +189,7 @@ const getAllTransactions = async (req, res, next) => {
 
 const getTransactionById = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       `SELECT t.*, c.name as customerName, c.phone as customerPhone, u.name as cashierName
        FROM transactions t
        LEFT JOIN customers c ON c.customer_id = t.customer_id
@@ -200,8 +199,8 @@ const getTransactionById = async (req, res, next) => {
     );
     if (rows.length === 0) return next(new AppError("Transaction not found.", 404));
 
-    const [items]    = await pool.execute("SELECT * FROM transaction_items WHERE transaction_id = ?", [req.params.id]);
-    const [payments] = await pool.execute("SELECT * FROM payments WHERE transaction_id = ?", [req.params.id]);
+    const [items]    = await req.db.execute("SELECT * FROM transaction_items WHERE transaction_id = ?", [req.params.id]);
+    const [payments] = await req.db.execute("SELECT * FROM payments WHERE transaction_id = ?", [req.params.id]);
 
     res.json({ success: true, data: { ...rows[0], items, payments } });
   } catch (error) { next(error); }
@@ -209,7 +208,7 @@ const getTransactionById = async (req, res, next) => {
 
 const getByInvoiceNumber = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       `SELECT t.*, c.name as customerName, c.phone as customerPhone, u.name as cashierName
        FROM transactions t
        LEFT JOIN customers c ON c.customer_id = t.customer_id
@@ -219,8 +218,8 @@ const getByInvoiceNumber = async (req, res, next) => {
     );
     if (rows.length === 0) return next(new AppError("Invoice not found.", 404));
 
-    const [items]    = await pool.execute("SELECT * FROM transaction_items WHERE transaction_id = ?", [rows[0].transaction_id]);
-    const [payments] = await pool.execute("SELECT * FROM payments WHERE transaction_id = ?", [rows[0].transaction_id]);
+    const [items]    = await req.db.execute("SELECT * FROM transaction_items WHERE transaction_id = ?", [rows[0].transaction_id]);
+    const [payments] = await req.db.execute("SELECT * FROM payments WHERE transaction_id = ?", [rows[0].transaction_id]);
 
     res.json({ success: true, data: { ...rows[0], items, payments } });
   } catch (error) { next(error); }
@@ -229,7 +228,7 @@ const getByInvoiceNumber = async (req, res, next) => {
 const returnTransaction = async (req, res, next) => {
   try {
     const { returnReason } = req.body;
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       "SELECT * FROM transactions WHERE transaction_id = ?", [req.params.id]
     );
     if (rows.length === 0) return next(new AppError("Transaction not found.", 404));
@@ -238,7 +237,7 @@ const returnTransaction = async (req, res, next) => {
     if (transaction.status === "RETURNED")  return next(new AppError("Transaction already returned.", 400));
     if (transaction.status === "CANCELLED") return next(new AppError("Cannot return a cancelled transaction.", 400));
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 
@@ -287,7 +286,7 @@ const returnTransaction = async (req, res, next) => {
 
 const getTodaySummary = async (req, res, next) => {
   try {
-    const [[summary]] = await pool.execute(
+    const [[summary]] = await req.db.execute(
       `SELECT COUNT(*) as totalTransactions,
               COALESCE(SUM(totalAmount), 0) as totalSales,
               COALESCE(SUM(taxAmount), 0) as totalTax,

@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { pool }          from "../../config/database.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const getAllProducts = async (req, res, next) => {
@@ -19,7 +18,7 @@ const getAllProducts = async (req, res, next) => {
 
     const where = conditions.join(" AND ");
 
-    const [products] = await pool.execute(
+    const [products] = await req.db.execute(
       `SELECT p.*, c.name as categoryName, c.color as categoryColor,
               s.name as supplierName, (p.stock <= p.minStockLevel) as isLowStock
        FROM products p
@@ -30,7 +29,7 @@ const getAllProducts = async (req, res, next) => {
       params
     );
 
-    const [[{ total }]] = await pool.execute(
+    const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM products p WHERE ${where}`, params
     );
 
@@ -43,7 +42,7 @@ const getAllProducts = async (req, res, next) => {
 
 const getProductById = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       `SELECT p.*, c.name as categoryName, s.name as supplierName, s.phone as supplierPhone
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
@@ -58,7 +57,7 @@ const getProductById = async (req, res, next) => {
 
 const getProductBySku = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       `SELECT p.*, c.name as categoryName
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
@@ -72,7 +71,7 @@ const getProductBySku = async (req, res, next) => {
 
 const getLowStockProducts = async (req, res, next) => {
   try {
-    const [products] = await pool.execute(
+    const [products] = await req.db.execute(
       `SELECT p.*, c.name as categoryName, s.name as supplierName, s.phone as supplierPhone
        FROM products p
        LEFT JOIN categories c ON c.category_id = p.category_id
@@ -97,7 +96,7 @@ const createProduct = async (req, res, next) => {
     const image        = req.file ? req.file.filename : null;
     const initialStock = parseInt(stock) || 0;
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 
@@ -147,14 +146,14 @@ const updateProduct = async (req, res, next) => {
             costPrice, sellingPrice, mrp, taxRate, taxType,
             minStockLevel, maxStockLevel, location, isActive, expiryDate } = req.body;
 
-    const [existing] = await pool.execute(
+    const [existing] = await req.db.execute(
       "SELECT product_id FROM products WHERE product_id = ?", [req.params.id]
     );
     if (existing.length === 0) return next(new AppError("Product not found.", 404));
 
     const image = req.file ? req.file.filename : null;
 
-    await pool.execute(
+    await req.db.execute(
       `UPDATE products SET
         name          = COALESCE(?, name),
         barcode       = COALESCE(?, barcode),
@@ -192,7 +191,7 @@ const updateProduct = async (req, res, next) => {
 
 const deleteProduct = async (req, res, next) => {
   try {
-    await pool.execute(
+    await req.db.execute(
       "UPDATE products SET isActive = FALSE WHERE product_id = ?", [req.params.id]
     );
     res.json({ success: true, message: "Product deactivated." });

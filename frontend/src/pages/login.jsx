@@ -1,15 +1,6 @@
-// ============================================================
-//  Login.jsx — Login Page
-//  StockSense Pro
-//  Split layout: left brand panel + right form panel
-// ============================================================
-
 import { useState } from 'react';
 import './Auth.css';
 import * as authAPI from '.././services/api';
-
-// ── Constants (easy to update) ─────────────────────────────
-const ROLES = ['admin', 'cashier', 'owner'];
 
 const FEATURES = [
   { dot: 'indigo', text: 'AI-powered stock prediction with Prophet' },
@@ -18,12 +9,11 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { value: '10K+', label: 'Transactions daily' },
+  { value: '10K+',  label: 'Transactions daily' },
   { value: '99.9%', label: 'Uptime SLA'         },
   { value: '< 2s',  label: 'Bill generation'    },
 ];
 
-// ── SVG Icons (inline, lightweight) ───────────────────────
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -75,29 +65,21 @@ const BoxIcon = () => (
   </svg>
 );
 
-// ── Left Panel ─────────────────────────────────────────────
 function LoginLeftPanel() {
   return (
     <div className="auth-brand">
-      {/* Background effects */}
-      <div className="auth-brand__grid" aria-hidden="true" />
       <div className="auth-brand__glow-1" aria-hidden="true" />
       <div className="auth-brand__glow-2" aria-hidden="true" />
 
-      {/* Brand + Headline */}
       <div className="auth-brand__brand">
-        {/* Logo */}
         <div className="auth-brand__logo">
-          <div className="auth-brand__logo-icon">
-            <BoxIcon />
-          </div>
+          <div className="auth-brand__logo-icon"><BoxIcon /></div>
           <div>
             <span className="auth-brand__logo-name">StockSense</span>
             <span className="auth-brand__logo-version">Pro · v2.0</span>
           </div>
         </div>
 
-        {/* Headline */}
         <h1 className="auth-brand__headline">
           Smart Billing &<br />
           <span>Inventory Intelligence</span>
@@ -107,7 +89,6 @@ function LoginLeftPanel() {
           and predict demand before it happens.
         </p>
 
-        {/* Feature pills */}
         <div className="auth-brand__features">
           {FEATURES.map((f, i) => (
             <div className="auth-feature-pill" key={i}>
@@ -118,7 +99,6 @@ function LoginLeftPanel() {
         </div>
       </div>
 
-      {/* Bottom stats */}
       <div className="auth-brand__stats">
         {STATS.map((s, i) => (
           <div className="auth-stat" key={i}>
@@ -131,7 +111,6 @@ function LoginLeftPanel() {
   );
 }
 
-// ── Right Panel — Form ─────────────────────────────────────
 function LoginForm({ onLogin, onSignupRedirect }) {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
@@ -140,56 +119,34 @@ function LoginForm({ onLogin, onSignupRedirect }) {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState('');
 
-  // ── Submit ───────────────────────────────────────────────
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-
-  if (!email.trim()) {
-    setError('Please enter your email address.');
-    return;
-  }
-  if (!password) {
-    setError('Please enter your password.');
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const result = await authAPI.login({ email, password });
-
-    if (result.success) {
-      // user already saved in localStorage by api.js
-      // just pass normalized user to App.jsx
-      const user = {
-        ...result.data.user,
-        role: result.data.user.role.toLowerCase(),
-      };
-      onLogin(user);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim())  return setError('Please enter your email address.');
+    if (!password)      return setError('Please enter your password.');
+    setLoading(true);
+    try {
+      const result = await authAPI.login({ email, password });
+      if (result.success) {
+        onLogin({ ...result.data.user, role: result.data.user.role.toLowerCase() });
+      }
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. Please try again.');
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    setError(err.message || 'Invalid credentials. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <div className="auth-form-panel">
-      <div className="auth-form-wrapper">
+      <div className="auth-form-wrapper auth-form-card">
 
-        {/* Header */}
         <div className="auth-form__header">
           <h2 className="auth-form__title">Welcome back</h2>
-          <p className="auth-form__subtitle">
-            Sign in to your StockSense account
-          </p>
+          <p className="auth-form__subtitle">Sign in to your StockSense account</p>
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
-
-          {/* Error */}
           {error && (
             <div className="auth-error" role="alert">
               <AlertIcon />
@@ -197,111 +154,63 @@ const handleSubmit = async (e) => {
             </div>
           )}
 
-          {/* Email field */}
           <div className="auth-field">
-            <label className="auth-field__label" htmlFor="login-email">
-              Email address
-            </label>
+            <label className="auth-field__label" htmlFor="login-email">Email address</label>
             <div className="auth-field__input-wrap">
-              <input
-                id="login-email"
-                type="email"
-                className="auth-field__input"
-                placeholder="you@example.com"
-                value={email}
+              <input id="login-email" type="email" className="auth-field__input"
+                placeholder="you@example.com" value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                disabled={loading}
-                required
-              />
-              <span className="auth-field__icon">
-                <MailIcon />
-              </span>
+                autoComplete="email" disabled={loading} required />
+              <span className="auth-field__icon"><MailIcon /></span>
             </div>
           </div>
 
-          {/* Password field */}
           <div className="auth-field">
-            <label className="auth-field__label" htmlFor="login-password">
-              Password
-            </label>
+            <label className="auth-field__label" htmlFor="login-password">Password</label>
             <div className="auth-field__input-wrap">
-              <input
-                id="login-password"
-                type={showPass ? 'text' : 'password'}
+              <input id="login-password" type={showPass ? 'text' : 'password'}
                 className="auth-field__input auth-field__input--password"
-                placeholder="Enter your password"
-                value={password}
+                placeholder="Enter your password" value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                disabled={loading}
-                required
-              />
-              <span className="auth-field__icon">
-                <LockIcon />
-              </span>
-              <button
-                type="button"
-                className="auth-field__toggle"
-                onClick={() => setShowPass((v) => !v)}
-                aria-label={showPass ? 'Hide password' : 'Show password'}
-              >
+                autoComplete="current-password" disabled={loading} required />
+              <span className="auth-field__icon"><LockIcon /></span>
+              <button type="button" className="auth-field__toggle"
+                onClick={() => setShowPass(v => !v)}>
                 {showPass ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
           </div>
 
-          {/* Options row */}
           <div className="auth-options">
             <label className="auth-remember">
-              <input
-                type="checkbox"
-                className="auth-remember__checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-              />
+              <input type="checkbox" className="auth-remember__checkbox"
+                checked={remember} onChange={(e) => setRemember(e.target.checked)} />
               <span className="auth-remember__text">Remember me</span>
             </label>
-            <button type="button" className="auth-forgot">
-              Forgot password?
-            </button>
+            <button type="button" className="auth-forgot">Forgot password?</button>
           </div>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            className="auth-submit"
-            disabled={loading}
-          >
+          <button type="submit" className="auth-submit" disabled={loading}>
             {loading && <span className="auth-submit__spinner" aria-hidden="true" />}
             {loading ? 'Signing in…' : 'Sign In →'}
           </button>
-
         </form>
 
-        {/* Footer */}
         <p className="auth-form__footer">
           Don&apos;t have an account?{' '}
-          <a
-            href="#signup"
-            onClick={(e) => { e.preventDefault(); onSignupRedirect?.(); }}
-          >
+          <a href="#signup" onClick={(e) => { e.preventDefault(); onSignupRedirect?.(); }}>
             Create one
           </a>
-          <br />
-          <br />
+          <br /><br />
           By signing in you agree to our{' '}
-          <a href="#terms">Terms of Service</a>
-          {' '}and{' '}
+          <a href="#terms">Terms of Service</a> and{' '}
           <a href="#privacy">Privacy Policy</a>.
         </p>
-
       </div>
     </div>
   );
 }
 
-// ── Page Export ────────────────────────────────────────────
 export default function LoginPage({ onLogin, onSignupRedirect }) {
   return (
     <div className="auth-page">

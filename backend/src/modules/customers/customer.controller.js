@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { pool }          from "../../config/database.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const getAllCustomers = async (req, res, next) => {
@@ -14,14 +13,14 @@ const getAllCustomers = async (req, res, next) => {
 
     const where = conditions.join(" AND ");
 
-    const [customers] = await pool.execute(
+    const [customers] = await req.db.execute(
       `SELECT *, (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalTransactions
        FROM customers c WHERE ${where} ORDER BY name ASC
        LIMIT ${parseInt(limit)} OFFSET ${offset}`,
       params
     );
 
-    const [[{ total }]] = await pool.execute(
+    const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM customers c WHERE ${where}`, params
     );
 
@@ -34,12 +33,12 @@ const getAllCustomers = async (req, res, next) => {
 
 const getCustomerById = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       "SELECT * FROM customers WHERE customer_id = ?", [req.params.id]
     );
     if (rows.length === 0) return next(new AppError("Customer not found.", 404));
 
-    const [transactions] = await pool.execute(
+    const [transactions] = await req.db.execute(
       `SELECT transaction_id, invoiceNumber, totalAmount, paymentMethod, status, createdAt
        FROM transactions WHERE customer_id = ? ORDER BY createdAt DESC LIMIT 10`,
       [req.params.id]
@@ -55,7 +54,7 @@ const createCustomer = async (req, res, next) => {
     if (!name) return next(new AppError("Customer name is required.", 400));
 
     const customerId = uuidv4();
-    await pool.execute(
+    await req.db.execute(
       `INSERT INTO customers (customer_id, name, email, phone, address, city, gstin, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [customerId, name, email || null, phone || null,
@@ -73,12 +72,12 @@ const updateCustomer = async (req, res, next) => {
   try {
     const { name, email, phone, address, city, gstin, notes, isActive } = req.body;
 
-    const [existing] = await pool.execute(
+    const [existing] = await req.db.execute(
       "SELECT customer_id FROM customers WHERE customer_id = ?", [req.params.id]
     );
     if (existing.length === 0) return next(new AppError("Customer not found.", 404));
 
-    await pool.execute(
+    await req.db.execute(
       `UPDATE customers SET
         name     = COALESCE(?, name),
         email    = COALESCE(?, email),
@@ -100,7 +99,7 @@ const updateCustomer = async (req, res, next) => {
 
 const deleteCustomer = async (req, res, next) => {
   try {
-    await pool.execute(
+    await req.db.execute(
       "UPDATE customers SET isActive = FALSE WHERE customer_id = ?", [req.params.id]
     );
     res.json({ success: true, message: "Customer deactivated." });

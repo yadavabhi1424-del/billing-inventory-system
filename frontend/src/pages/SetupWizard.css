@@ -1,0 +1,143 @@
+.wizard-overlay {
+  position: fixed; inset: 0;
+  background: #0a0c14;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 20px;
+}
+
+.wizard {
+  background: #13151f;
+  border: 1px solid #2a2d3e;
+  border-radius: 20px;
+  width: 100%; max-width: 680px;
+  max-height: 90vh; overflow-y: auto;
+}
+
+.wizard-header {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid #2a2d3e;
+}
+
+.wizard-logo { font-size: 16px; font-weight: 700; color: #e2e8f0; }
+
+.wizard-steps { display: flex; align-items: center; gap: 8px; }
+
+.wizard-step-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid #2a2d3e;
+  background: #1a1d2e;
+  color: #64748b;
+  font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+
+.wizard-step-dot.active { border-color: #7c3aed; color: #a78bfa; }
+.wizard-step-dot.done   { border-color: #16a34a; background: #0a2d14; color: #4ade80; }
+
+.wizard-body { padding: 28px; }
+
+.wizard-title { font-size: 22px; font-weight: 700; color: #e2e8f0; margin-bottom: 6px; }
+.wizard-sub   { font-size: 14px; color: #64748b; margin-bottom: 24px; }
+
+.wizard-field { margin-bottom: 16px; }
+.wizard-field label { display: block; font-size: 13px; font-weight: 500; color: #94a3b8; margin-bottom: 6px; }
+.wizard-field input,
+.wizard-field select,
+.wizard-field textarea {
+  width: 100%; padding: 10px 14px;
+  background: #1a1d2e; border: 1px solid #2a2d3e;
+  border-radius: 8px; color: #e2e8f0; font-size: 14px;
+  outline: none; transition: border .2s;
+  font-family: inherit;
+}
+.wizard-field input:focus,
+.wizard-field select:focus,
+.wizard-field textarea:focus { border-color: #7c3aed; }
+
+.wizard-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.wizard-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.wizard-type-card {
+  background: #1a1d2e; border: 1px solid #2a2d3e;
+  border-radius: 12px; padding: 16px 12px;
+  cursor: pointer; transition: all .2s; text-align: center;
+}
+.wizard-type-card:hover    { border-color: #7c3aed; }
+.wizard-type-card.selected { border-color: #7c3aed; background: #1e1b4b; }
+
+.wizard-type-icon { font-size: 28px; margin-bottom: 8px; }
+.wizard-type-name { font-size: 13px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+.wizard-type-desc { font-size: 11px; color: #64748b; }
+
+.wizard-inv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.wizard-inv-card {
+  background: #1a1d2e; border: 1px solid #2a2d3e;
+  border-radius: 12px; padding: 16px;
+  cursor: pointer; transition: all .2s;
+  position: relative;
+}
+.wizard-inv-card:hover    { border-color: #7c3aed; }
+.wizard-inv-card.selected { border-color: #7c3aed; background: #1e1b4b; }
+
+.wizard-inv-icon { font-size: 24px; margin-bottom: 8px; }
+.wizard-inv-name { font-size: 13px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+.wizard-inv-desc { font-size: 11px; color: #64748b; }
+.wizard-inv-check {
+  position: absolute; top: 10px; right: 10px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #16a34a; color: white;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.wizard-summary {
+  background: #1a1d2e; border: 1px solid #2a2d3e;
+  border-radius: 12px; overflow: hidden;
+}
+.wizard-summary-row {
+  display: flex; justify-content: space-between;
+  align-items: center; padding: 14px 18px;
+  border-bottom: 1px solid #2a2d3e; font-size: 14px;
+}
+.wizard-summary-row:last-child { border-bottom: none; }
+.wizard-summary-row span  { color: #64748b; }
+.wizard-summary-row strong { color: #e2e8f0; }
+
+.wizard-footer {
+  display: flex; justify-content: flex-end; gap: 10px;
+  padding: 20px 28px;
+  border-top: 1px solid #2a2d3e;
+}
+
+.wizard-btn-back {
+  padding: 10px 20px; border-radius: 8px;
+  border: 1px solid #2a2d3e; background: transparent;
+  color: #94a3b8; font-size: 14px; cursor: pointer;
+}
+.wizard-btn-back:hover { border-color: #475569; color: #e2e8f0; }
+
+.wizard-btn-next,
+.wizard-btn-finish {
+  padding: 10px 24px; border-radius: 8px; border: none;
+  background: #7c3aed; color: white;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: opacity .2s;
+}
+.wizard-btn-next:hover,
+.wizard-btn-finish:hover   { opacity: .9; }
+.wizard-btn-next:disabled,
+.wizard-btn-finish:disabled { opacity: .4; cursor: not-allowed; }

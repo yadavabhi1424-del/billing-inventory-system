@@ -319,18 +319,6 @@ export async function getUsers(params = {}) {
   return await api.get('/users', { params });
 }
 
-export async function getPendingUsers() {
-  return await api.get('/users/pending');
-}
-
-export async function approveUser(id) {
-  return await api.patch(`/users/${id}/approve`);
-}
-
-export async function rejectUser(id) {
-  return await api.patch(`/users/${id}/reject`);
-}
-
 export async function createUser(data) {
   return await api.post('/users', data);
 }
@@ -367,5 +355,26 @@ export async function getAIHealth() {
   return await api.get('/ai/health');
 }
 
-// Export instance for custom calls
+// ============================================================
+//  SHOP PROFILE
+// ============================================================
+export async function getShopTypes() {
+  return await api.get('/shop/shop-types');
+}
+
+export async function getShopProfile() {
+  return await api.get('/shop/profile');
+}
+
+export async function saveShopProfile(data) {
+  return await api.post('/shop/profile', data);
+}
+
+export async function registerTenant(data) {
+  return await api.post('/tenants/register', data);
+}
+
+export async function updateMyProfile(data) {
+  return await api.put('/users/me', data);
+}
 export { api, API_URL };

@@ -426,7 +426,7 @@ export default function Inventory() {
                     <div className="inventory-actions">
                       <button className="inventory-action-btn" title="Edit"
                         onClick={e => { e.stopPropagation(); setSelected(p); setShowEdit(true); }}>
-                        <Icon name="settings" size={14} />
+                        <Icon name="edit" size={15} />
                       </button>
                       <button className="inventory-action-btn inventory-action-btn--danger"
                         title="Delete" onClick={e => handleDelete(e, p)}>

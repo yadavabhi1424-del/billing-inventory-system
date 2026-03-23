@@ -1,11 +1,13 @@
 import bcrypt            from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 import { pool }          from "../../config/database.js";
+import { masterPool }    from "../../config/masterDatabase.js";
+import { getTenantPool } from "../../middleware/tenant.middleware.js";
 import { generateTokenPair, verifyRefreshToken } from "../../config/jwt.js";
-import { sendVerificationEmail, sendApprovalEmail, sendRejectionEmail } from "../../config/email.js";
+import { sendVerificationEmail } from "../../config/email.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
-// ─── SIGNUP ───────────────────────────────────────────
+// ─── SIGNUP (legacy — single tenant) ─────────────────
 const signup = async (req, res, next) => {
   try {
     const { name, email, password, role, phone } = req.body;
@@ -81,7 +83,7 @@ const verifyEmail = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: "Email verified successfully! Your request is now pending admin approval.",
+      message: "Email verified successfully!",
     });
   } catch (error) { next(error); }
 };
@@ -93,7 +95,28 @@ const login = async (req, res, next) => {
     if (!email || !password)
       return next(new AppError("Email and password are required.", 400));
 
-    const [rows] = await pool.execute(
+    // Find which tenant this email belongs to
+    const [tenantRows] = await masterPool.execute(
+      `SELECT t.tenant_id, t.db_name, t.status
+       FROM tenants t
+       WHERE t.owner_email = ?`,
+      [email]
+    );
+
+    let db;
+    let dbName = null;
+
+    if (tenantRows.length > 0) {
+      if (tenantRows[0].status === 'SUSPENDED')
+        return next(new AppError("Your shop has been suspended.", 403));
+      dbName = tenantRows[0].db_name;
+      db     = await getTenantPool(dbName);
+    } else {
+      // Staff login — use default pool for now
+      db = pool;
+    }
+
+    const [rows] = await db.execute(
       "SELECT * FROM users WHERE email = ?", [email]
     );
 
@@ -107,17 +130,16 @@ const login = async (req, res, next) => {
       return next(new AppError("Invalid email or password.", 401));
 
     if (user.status === "PENDING")
-      return next(new AppError("Your account is pending admin approval.", 403));
-
+      return next(new AppError("Your account is pending approval.", 403));
     if (user.status === "REJECTED")
-      return next(new AppError("Your account request was rejected. Contact admin.", 403));
-
+      return next(new AppError("Your account was rejected.", 403));
     if (!user.isActive)
-      return next(new AppError("Your account has been deactivated. Contact admin.", 403));
+      return next(new AppError("Your account has been deactivated.", 403));
 
-    const tokens = generateTokenPair(user);
+    // Include dbName in token so middleware knows which DB to use
+    const tokens = generateTokenPair({ ...user, dbName });
 
-    await pool.execute(
+    await db.execute(
       "UPDATE users SET refreshToken = ? WHERE user_id = ?",
       [tokens.refreshToken, user.user_id]
     );
@@ -128,7 +150,14 @@ const login = async (req, res, next) => {
     res.json({
       success: true,
       message: "Login successful.",
-      data: { user: safeUser, ...tokens },
+      data: {
+        user: safeUser,
+        ...tokens,
+        tenant: tenantRows.length > 0 ? {
+          tenantId: tenantRows[0].tenant_id,
+          dbName:   tenantRows[0].db_name,
+        } : null,
+      },
     });
   } catch (error) { next(error); }
 };
@@ -142,7 +171,16 @@ const refreshToken = async (req, res, next) => {
 
     const decoded = verifyRefreshToken(refreshToken);
 
-    const [rows] = await pool.execute(
+    // Find correct DB from master
+    const [tenantRows] = await masterPool.execute(
+      "SELECT db_name FROM tenants WHERE owner_email = ?",
+      [decoded.email]
+    );
+
+    const dbName = tenantRows.length > 0 ? tenantRows[0].db_name : null;
+    const db     = dbName ? await getTenantPool(dbName) : pool;
+
+    const [rows] = await db.execute(
       "SELECT user_id, name, email, role, refreshToken FROM users WHERE user_id = ?",
       [decoded.id]
     );
@@ -150,9 +188,9 @@ const refreshToken = async (req, res, next) => {
     if (rows.length === 0 || rows[0].refreshToken !== refreshToken)
       return next(new AppError("Invalid refresh token.", 401));
 
-    const tokens = generateTokenPair(rows[0]);
+    const tokens = generateTokenPair({ ...rows[0], dbName });
 
-    await pool.execute(
+    await db.execute(
       "UPDATE users SET refreshToken = ? WHERE user_id = ?",
       [tokens.refreshToken, rows[0].user_id]
     );
@@ -164,7 +202,7 @@ const refreshToken = async (req, res, next) => {
 // ─── LOGOUT ───────────────────────────────────────────
 const logout = async (req, res, next) => {
   try {
-    await pool.execute(
+    await req.db.execute(
       "UPDATE users SET refreshToken = NULL WHERE user_id = ?",
       [req.user.user_id]
     );
@@ -175,7 +213,7 @@ const logout = async (req, res, next) => {
 // ─── GET ME ───────────────────────────────────────────
 const getMe = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       `SELECT user_id, name, email, role, phone, avatar, 
               isActive, status, createdAt 
        FROM users WHERE user_id = ?`,
@@ -196,7 +234,7 @@ const changePassword = async (req, res, next) => {
     if (newPassword.length < 6)
       return next(new AppError("New password must be at least 6 characters.", 400));
 
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       "SELECT password FROM users WHERE user_id = ?", [req.user.user_id]
     );
 
@@ -205,7 +243,7 @@ const changePassword = async (req, res, next) => {
       return next(new AppError("Current password is incorrect.", 400));
 
     const hashed = await bcrypt.hash(newPassword, 12);
-    await pool.execute(
+    await req.db.execute(
       "UPDATE users SET password = ? WHERE user_id = ?",
       [hashed, req.user.user_id]
     );

@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { pool }          from "../../config/database.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const getMovements = async (req, res, next) => {
@@ -9,14 +8,14 @@ const getMovements = async (req, res, next) => {
     const conditions = ["1=1"];
     const params     = [];
 
-    if (productId) { conditions.push("sm.product_id = ?");       params.push(productId); }
-    if (type)      { conditions.push("sm.type = ?");              params.push(type); }
-    if (startDate) { conditions.push("DATE(sm.createdAt) >= ?");  params.push(startDate); }
-    if (endDate)   { conditions.push("DATE(sm.createdAt) <= ?");  params.push(endDate); }
+    if (productId) { conditions.push("sm.product_id = ?");      params.push(productId); }
+    if (type)      { conditions.push("sm.type = ?");             params.push(type); }
+    if (startDate) { conditions.push("DATE(sm.createdAt) >= ?"); params.push(startDate); }
+    if (endDate)   { conditions.push("DATE(sm.createdAt) <= ?"); params.push(endDate); }
 
     const where = conditions.join(" AND ");
 
-    const [movements] = await pool.execute(
+    const [movements] = await req.db.execute(
       `SELECT sm.*, p.name as productName, p.sku as productSku,
               p.unit as productUnit, u.name as userName
        FROM stock_movements sm
@@ -27,7 +26,7 @@ const getMovements = async (req, res, next) => {
       params
     );
 
-    const [[{ total }]] = await pool.execute(
+    const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM stock_movements sm WHERE ${where}`, params
     );
 
@@ -49,7 +48,7 @@ const adjustStock = async (req, res, next) => {
     if (!validTypes.includes(type))
       return next(new AppError(`Invalid type. Use: ${validTypes.join(", ")}`, 400));
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 
@@ -96,7 +95,7 @@ const bulkAdjust = async (req, res, next) => {
     if (!adjustments?.length)
       return next(new AppError("Adjustments array is required.", 400));
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 

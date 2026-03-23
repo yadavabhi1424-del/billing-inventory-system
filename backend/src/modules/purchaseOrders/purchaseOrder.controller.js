@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { pool }          from "../../config/database.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const generatePONumber = async (conn) => {
@@ -23,14 +22,14 @@ const getAllOrders = async (req, res, next) => {
     const conditions = ["1=1"];
     const params     = [];
 
-    if (status)     { conditions.push("po.status = ?");              params.push(status); }
-    if (supplierId) { conditions.push("po.supplier_id = ?");         params.push(supplierId); }
-    if (startDate)  { conditions.push("DATE(po.createdAt) >= ?");    params.push(startDate); }
-    if (endDate)    { conditions.push("DATE(po.createdAt) <= ?");    params.push(endDate); }
+    if (status)     { conditions.push("po.status = ?");           params.push(status); }
+    if (supplierId) { conditions.push("po.supplier_id = ?");      params.push(supplierId); }
+    if (startDate)  { conditions.push("DATE(po.createdAt) >= ?"); params.push(startDate); }
+    if (endDate)    { conditions.push("DATE(po.createdAt) <= ?"); params.push(endDate); }
 
     const where = conditions.join(" AND ");
 
-    const [orders] = await pool.execute(
+    const [orders] = await req.db.execute(
       `SELECT po.*, s.name as supplierName, s.phone as supplierPhone,
               u.name as createdBy, COUNT(poi.po_item_id) as itemCount
        FROM purchase_orders po
@@ -42,7 +41,7 @@ const getAllOrders = async (req, res, next) => {
       params
     );
 
-    const [[{ total }]] = await pool.execute(
+    const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM purchase_orders po WHERE ${where}`, params
     );
 
@@ -55,7 +54,7 @@ const getAllOrders = async (req, res, next) => {
 
 const getOrderById = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       `SELECT po.*, s.name as supplierName, s.phone as supplierPhone, u.name as createdBy
        FROM purchase_orders po
        LEFT JOIN suppliers s ON s.supplier_id = po.supplier_id
@@ -65,7 +64,7 @@ const getOrderById = async (req, res, next) => {
     );
     if (rows.length === 0) return next(new AppError("Purchase order not found.", 404));
 
-    const [items] = await pool.execute(
+    const [items] = await req.db.execute(
       `SELECT poi.*, p.sku, p.unit, p.stock as currentStock
        FROM purchase_order_items poi
        LEFT JOIN products p ON p.product_id = poi.product_id
@@ -83,7 +82,7 @@ const createOrder = async (req, res, next) => {
     if (!supplierId || !items?.length)
       return next(new AppError("Supplier and items are required.", 400));
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 
@@ -136,14 +135,14 @@ const receiveOrder = async (req, res, next) => {
   try {
     const { receivedItems } = req.body;
 
-    const [[po]] = await pool.execute(
+    const [[po]] = await req.db.execute(
       "SELECT * FROM purchase_orders WHERE po_id = ?", [req.params.id]
     );
-    if (!po)                    return next(new AppError("Purchase order not found.", 404));
+    if (!po)                       return next(new AppError("Purchase order not found.", 404));
     if (po.status === "RECEIVED")  return next(new AppError("Order already received.", 400));
     if (po.status === "CANCELLED") return next(new AppError("Cannot receive cancelled order.", 400));
 
-    const conn = await pool.getConnection();
+    const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
 
@@ -208,7 +207,7 @@ const updateStatus = async (req, res, next) => {
     if (!valid.includes(status))
       return next(new AppError(`Use: ${valid.join(", ")}`, 400));
 
-    await pool.execute(
+    await req.db.execute(
       "UPDATE purchase_orders SET status = ? WHERE po_id = ?", [status, req.params.id]
     );
     res.json({ success: true, message: "Status updated." });

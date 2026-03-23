@@ -19,6 +19,8 @@ import Suppliers from './modules/Suppliers/Suppliers';
 import UserManagement from './modules/Users/UserManagement';
 import Settings from './modules/Settings/Settings';
 import * as authAPI from './services/api';
+import SetupWizard    from './pages/SetupWizard';
+import { getShopProfile } from './services/api';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
@@ -130,6 +132,29 @@ function ProtectedRoute({ page, user, children }) {
 
 // ── Main app (authenticated users) ──────────────────────────
 function AuthenticatedApp({ user, logout }) {
+  const [setupDone, setSetupDone] = useState(true);
+
+useEffect(() => {
+  getShopProfile()
+    .then(r => {
+      if (!r.data || !r.data.is_setup_done) {
+        setSetupDone(false);
+      }
+    })
+    .catch(() => {
+      // Error means table exists but no profile yet
+      // Only show wizard for non-admin roles
+      if (user.role !== 'admin') setSetupDone(false);
+    });
+}, []);
+if (!setupDone) {
+  return (
+    <SetupWizard
+      user={user}
+      onComplete={() => setSetupDone(true)}
+    />
+  );
+}
   return (
     <MainLayout 
       user={user} 
@@ -201,12 +226,8 @@ export default function App() {
       {!user ? (
         <Routes>
           <Route path="/signup" element={
-            <SignupPage 
-              onSignup={async (data) => {
-                const res = await authAPI.signup(data);
-                return res;
-              }}
-              onLoginRedirect={() => window.location.href = '/'} 
+            <SignupPage
+              onLoginRedirect={() => window.location.href = '/'}
             />
           } />
           <Route path="*" element={

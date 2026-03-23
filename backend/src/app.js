@@ -22,6 +22,8 @@ import purchaseOrderRoutes from "./modules/purchaseOrders/purchaseOrder.routes.j
 import reportRoutes        from "./modules/reports/report.routes.js";
 import dashboardRoutes     from "./modules/dashboard/dashboard.routes.js";
 import aiRoutes            from "./modules/ai/ai.routes.js";
+import tenantRoutes        from "./modules/tenants/tenant.routes.js";
+import shopProfileRoutes   from "./modules/tenants/shopProfile.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
@@ -75,6 +77,8 @@ app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/reports",         reportRoutes);
 app.use("/api/dashboard",       dashboardRoutes);
 app.use("/api/ai",              aiRoutes);
+app.use("/api/tenants",         tenantRoutes);
+app.use("/api/shop",            shopProfileRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

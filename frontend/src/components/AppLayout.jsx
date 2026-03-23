@@ -1,31 +1,22 @@
-// ============================================================
-//  MainLayout.jsx — App Shell Layout
-//  StockSense Pro
-// ============================================================
-
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Icon from './Icon';
 import './AppLayout.css';
 
-// ── Route configuration ─────────────────────────────────────
 const NAV_ITEMS = [
-  { id: 'dashboard',     label: 'Dashboard',     icon: 'dashboard',     path: '/dashboard',     badge: null },
-  { id: 'billing',       label: 'Billing',       icon: 'billing',       path: '/billing',       badge: null },
-  { id: 'inventory',     label: 'Inventory',     icon: 'inventory',     path: '/inventory',     badge: 5    }, // low stock count
-  { id: 'ai-predict',    label: 'AI Predict',    icon: 'ai',            path: '/ai-predict',    badge: null },
-  { id: 'reports',       label: 'Reports',       icon: 'reports',       path: '/reports',       badge: null },
-  { id: 'customers',     label: 'Customers',     icon: 'customers',     path: '/customers',     badge: null },
-  { id: 'manufacturers', label: 'Manufacturers', icon: 'manufacturer',  path: '/manufacturers', badge: null },
-  { id: 'users',         label: 'User Management', icon: 'users',       path: '/users',         badge: null },
-  { id: 'settings',      label: 'Settings',      icon: 'settings',      path: '/settings',      badge: null },
+  { id: 'dashboard',     label: 'Dashboard',     icon: 'dashboard',    path: '/dashboard'     },
+  { id: 'billing',       label: 'Billing',       icon: 'billing',      path: '/billing'       },
+  { id: 'inventory',     label: 'Inventory',     icon: 'inventory',    path: '/inventory'     },
+  { id: 'ai-predict',    label: 'AI Predict',    icon: 'ai',           path: '/ai-predict'    },
+  { id: 'reports',       label: 'Reports',       icon: 'reports',      path: '/reports'       },
+  { id: 'manufacturers', label: 'Manufacturers', icon: 'manufacturer', path: '/manufacturers' },
+  { id: 'settings',      label: 'Settings',      icon: 'settings',     path: '/settings'      },
 ];
 
-// ── Theme hook ──────────────────────────────────────────────
 function useTheme() {
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('stocksense_theme') || 'dark';
-  });
+  const [theme, setTheme] = useState(() =>
+    localStorage.getItem('stocksense_theme') || 'dark'
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -33,7 +24,6 @@ function useTheme() {
   }, [theme]);
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
-
   return { theme, toggleTheme };
 }
 
@@ -43,8 +33,7 @@ function useTheme() {
 function Sidebar({ collapsed, onToggle, user, allowedRoutes, activePath, onNavigate, onLogout, mobileOpen, onCloseMobile }) {
   return (
     <aside className={`main-sidebar ${collapsed ? 'main-sidebar--collapsed' : ''} ${mobileOpen ? 'main-sidebar--mobile-open' : ''}`}>
-      
-      {/* Logo */}
+
       <div className="sidebar-logo">
         <div className="sidebar-logo__icon">
           <Icon name="box" size={18} />
@@ -58,25 +47,18 @@ function Sidebar({ collapsed, onToggle, user, allowedRoutes, activePath, onNavig
         </button>
       </div>
 
-      {/* Navigation */}
       <nav className="sidebar-nav">
         {NAV_ITEMS.filter(item => allowedRoutes.includes(item.id)).map(item => (
-          <a
-            key={item.id}
+          <a key={item.id}
             className={`sidebar-nav__item ${activePath === item.path ? 'sidebar-nav__item--active' : ''}`}
-            onClick={(e) => { e.preventDefault(); onNavigate(item.path); onCloseMobile(); }}
-            href={item.path}
-          >
-            <span className="sidebar-nav__icon">
-              <Icon name={item.icon} size={20} />
-            </span>
+            onClick={e => { e.preventDefault(); onNavigate(item.path); onCloseMobile(); }}
+            href={item.path}>
+            <span className="sidebar-nav__icon"><Icon name={item.icon} size={20} /></span>
             <span className="sidebar-nav__label">{item.label}</span>
-            {item.badge && <span className="sidebar-nav__badge">{item.badge}</span>}
           </a>
         ))}
       </nav>
 
-      {/* User section */}
       <div className="sidebar-user">
         <div className="sidebar-user__profile">
           <div className="sidebar-user__avatar">
@@ -101,12 +83,11 @@ function Sidebar({ collapsed, onToggle, user, allowedRoutes, activePath, onNavig
 // ══════════════════════════════════════════════════════════
 function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [refreshing,       setRefreshing]       = useState(false);
   const location = useLocation();
 
-  // Get current page name from path
   const currentPage = NAV_ITEMS.find(item => item.path === location.pathname)?.label || 'Dashboard';
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClick = () => setUserDropdownOpen(false);
     if (userDropdownOpen) {
@@ -115,15 +96,20 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
     }
   }, [userDropdownOpen]);
 
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      window.location.reload();
+    }, 300);
+  };
+
   return (
     <header className="main-header">
-      
-      {/* Mobile menu button */}
+
       <button className="mobile-menu-btn" onClick={onMobileMenuToggle}>
         <Icon name="menu" size={20} />
       </button>
 
-      {/* Breadcrumb */}
       <div className="header-breadcrumb">
         <span className="header-breadcrumb__item">
           <Icon name="home" size={14} />
@@ -136,21 +122,22 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
         </span>
       </div>
 
-      {/* Search bar */}
       <div className="header-search">
-        <span className="header-search__icon">
-          <Icon name="search" size={16} />
-        </span>
-        <input
-          type="search"
-          className="header-search__input"
-          placeholder="Search anything..."
-        />
+        <span className="header-search__icon"><Icon name="search" size={16} /></span>
+        <input type="search" className="header-search__input" placeholder="Search anything..." />
       </div>
 
-      {/* Actions */}
       <div className="header-actions">
-        
+
+        {/* Refresh */}
+        <button
+          className={`header-action-btn ${refreshing ? 'header-action-btn--spinning' : ''}`}
+          onClick={handleRefresh}
+          aria-label="Refresh page"
+          title="Refresh">
+          <Icon name="refresh" size={18} />
+        </button>
+
         {/* Notifications */}
         <button className="header-action-btn" aria-label="Notifications">
           <Icon name="bell" size={20} />
@@ -166,8 +153,7 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
         <div className="header-user">
           <button
             className={`header-user__trigger ${userDropdownOpen ? 'header-user__trigger--open' : ''}`}
-            onClick={(e) => { e.stopPropagation(); setUserDropdownOpen(!userDropdownOpen); }}
-          >
+            onClick={e => { e.stopPropagation(); setUserDropdownOpen(!userDropdownOpen); }}>
             <div className="header-user__avatar">
               {user?.name?.charAt(0) || 'U'}
             </div>
@@ -191,7 +177,8 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
                 Settings
               </button>
               <div className="header-user__dropdown-divider" />
-              <button className="header-user__dropdown-item header-user__dropdown-item--danger" onClick={onLogout}>
+              <button className="header-user__dropdown-item header-user__dropdown-item--danger"
+                onClick={onLogout}>
                 <Icon name="logout" size={16} />
                 Logout
               </button>
@@ -208,10 +195,10 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
 // ══════════════════════════════════════════════════════════
 export default function MainLayout({ user, onLogout, allowedRoutes, children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false);
   const { theme, toggleTheme } = useTheme();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
 
   const handleNavigate = (path) => {
     navigate(path);
@@ -220,8 +207,6 @@ export default function MainLayout({ user, onLogout, allowedRoutes, children }) 
 
   return (
     <div className="main-layout">
-      
-      {/* Sidebar */}
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -234,15 +219,11 @@ export default function MainLayout({ user, onLogout, allowedRoutes, children }) 
         onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
-      {/* Mobile overlay */}
       {mobileMenuOpen && (
         <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)} />
       )}
 
-      {/* Main content */}
       <div className={`main-layout__content ${sidebarCollapsed ? 'main-layout__content--collapsed' : ''}`}>
-        
-        {/* Header */}
         <Header
           user={user}
           onLogout={onLogout}
@@ -250,8 +231,6 @@ export default function MainLayout({ user, onLogout, allowedRoutes, children }) 
           onToggleTheme={toggleTheme}
           onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)}
         />
-
-        {/* Page content */}
         <main className="main-layout__page">
           {children}
         </main>

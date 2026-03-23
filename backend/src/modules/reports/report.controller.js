@@ -1,5 +1,3 @@
-import { pool } from "../../config/database.js";
-
 const getDateRange = (req) => {
   const start = req.query.startDate
     ? `${req.query.startDate} 00:00:00`
@@ -15,7 +13,7 @@ const getSalesReport = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
 
-    const [[summary]] = await pool.execute(
+    const [[summary]] = await req.db.execute(
       `SELECT COUNT(*) as totalTransactions,
               COALESCE(SUM(totalAmount),0)    as totalSales,
               COALESCE(SUM(taxAmount),0)      as totalTax,
@@ -25,14 +23,14 @@ const getSalesReport = async (req, res, next) => {
       [start, end]
     );
 
-    const [byPaymentMethod] = await pool.execute(
+    const [byPaymentMethod] = await req.db.execute(
       `SELECT paymentMethod, COUNT(*) as count, SUM(totalAmount) as total
        FROM transactions WHERE createdAt BETWEEN ? AND ? AND status = 'COMPLETED'
        GROUP BY paymentMethod`,
       [start, end]
     );
 
-    const [topProducts] = await pool.execute(
+    const [topProducts] = await req.db.execute(
       `SELECT ti.productName, ti.product_id,
               SUM(ti.quantity) as totalQty, SUM(ti.totalAmount) as totalRevenue
        FROM transaction_items ti
@@ -43,7 +41,7 @@ const getSalesReport = async (req, res, next) => {
       [start, end]
     );
 
-    const [dailyBreakdown] = await pool.execute(
+    const [dailyBreakdown] = await req.db.execute(
       `SELECT DATE(createdAt) as date, COUNT(*) as transactions,
               SUM(totalAmount) as sales, SUM(taxAmount) as tax, SUM(discountAmount) as discount
        FROM transactions WHERE createdAt BETWEEN ? AND ? AND status = 'COMPLETED'
@@ -57,7 +55,7 @@ const getSalesReport = async (req, res, next) => {
 
 const getInventoryReport = async (req, res, next) => {
   try {
-    const [[totals]] = await pool.execute(
+    const [[totals]] = await req.db.execute(
       `SELECT COUNT(*) as totalProducts,
               COALESCE(SUM(stock * costPrice), 0)    as totalCostValue,
               COALESCE(SUM(stock * sellingPrice), 0) as totalRetailValue,
@@ -66,7 +64,7 @@ const getInventoryReport = async (req, res, next) => {
        FROM products WHERE isActive = TRUE`
     );
 
-    const [lowStockItems] = await pool.execute(
+    const [lowStockItems] = await req.db.execute(
       `SELECT p.product_id, p.name, p.sku, p.stock, p.minStockLevel,
               p.sellingPrice, s.name as supplierName, s.phone as supplierPhone
        FROM products p
@@ -75,7 +73,7 @@ const getInventoryReport = async (req, res, next) => {
        ORDER BY (p.stock - p.minStockLevel) ASC`
     );
 
-    const [categoryWise] = await pool.execute(
+    const [categoryWise] = await req.db.execute(
       `SELECT c.name as categoryName, COUNT(p.product_id) as productCount,
               SUM(p.stock) as totalStock, SUM(p.stock * p.costPrice) as stockValue
        FROM categories c
@@ -92,14 +90,14 @@ const getCustomerReport = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
 
-    const [[summary]] = await pool.execute(
+    const [[summary]] = await req.db.execute(
       `SELECT COUNT(*) as totalCustomers,
               SUM(CASE WHEN createdAt BETWEEN ? AND ? THEN 1 ELSE 0 END) as newCustomers
        FROM customers WHERE isActive = TRUE`,
       [start, end]
     );
 
-    const [topCustomers] = await pool.execute(
+    const [topCustomers] = await req.db.execute(
       `SELECT customer_id, name, phone, totalSpent, loyaltyPoints,
               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
        FROM customers c
@@ -115,7 +113,7 @@ const getSupplierReport = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
 
-    const [suppliers] = await pool.execute(
+    const [suppliers] = await req.db.execute(
       `SELECT s.supplier_id, s.name, s.phone,
               COUNT(DISTINCT p.product_id)     as productCount,
               COUNT(DISTINCT po.po_id)         as totalOrders,
@@ -137,12 +135,12 @@ const getProfitLoss = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
 
-    const [[result]] = await pool.execute(
-      `SELECT COALESCE(SUM(ti.totalAmount), 0)            as totalRevenue,
+    const [[result]] = await req.db.execute(
+      `SELECT COALESCE(SUM(ti.totalAmount), 0)             as totalRevenue,
               COALESCE(SUM(ti.costPrice * ti.quantity), 0) as totalCost,
-              COALESCE(SUM(ti.taxAmount), 0)              as totalTax,
-              COALESCE(SUM(ti.discountAmount), 0)         as totalDiscount,
-              COALESCE(SUM(ti.quantity), 0)               as totalItemsSold
+              COALESCE(SUM(ti.taxAmount), 0)               as totalTax,
+              COALESCE(SUM(ti.discountAmount), 0)          as totalDiscount,
+              COALESCE(SUM(ti.quantity), 0)                as totalItemsSold
        FROM transaction_items ti
        JOIN transactions t ON t.transaction_id = ti.transaction_id
        WHERE t.createdAt BETWEEN ? AND ? AND t.status = 'COMPLETED'`,

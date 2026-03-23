@@ -3,6 +3,9 @@ from flask_cors import CORS
 from predictor import train_all, train_product, predict_product, get_recommendations
 from database import fetch_all_products
 import os
+import threading
+import schedule
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -71,11 +74,45 @@ def predict_all():
         return jsonify({'success': True, 'data': results})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+    
+@app.route('/debug/<product_id>')
+def debug_product(product_id):
+    from database import fetch_sales_data
+    rows = fetch_sales_data(product_id)
+    return jsonify({
+        'real_rows':    len(rows),
+        'data':         rows,
+    })
+
+def scheduled_train():
+    print("\n🔄 Auto-retraining models (weekly schedule)...")
+    try:
+        result = train_all()
+        print(f"✅ Auto-retrain complete: {result['trained']}/{result['total']} products")
+    except Exception as e:
+        print(f"❌ Auto-retrain failed: {e}")
+
+def run_scheduler():
+    schedule.every().sunday.at("02:00").do(scheduled_train)
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
 
 if __name__ == '__main__':
     print("\n🤖 ─────────────────────────────────────")
     print("   StockSense AI Service starting...")
     print("   Port : http://localhost:5001")
     print("   Train: POST http://localhost:5001/train")
+    print("   Auto : Every Sunday at 2:00 AM")
     print("─────────────────────────────────────────\n")
-    app.run(host='0.0.0.0', port=5001, debug=True)
+
+    # Train on startup if no models exist
+    if not os.listdir('models'):
+        print("📦 No models found — running initial training...")
+        train_all()
+
+    # Start scheduler in background thread
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+
+    app.run(host='0.0.0.0', port=5001, debug=False)

@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from "uuid";
-import { pool }          from "../../config/database.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const getAllSuppliers = async (req, res, next) => {
@@ -14,7 +13,7 @@ const getAllSuppliers = async (req, res, next) => {
 
     const where = conditions.join(" AND ");
 
-    const [suppliers] = await pool.execute(
+    const [suppliers] = await req.db.execute(
       `SELECT s.*,
               COUNT(DISTINCT p.product_id) as productCount,
               COUNT(DISTINCT po.po_id)     as orderCount
@@ -26,7 +25,7 @@ const getAllSuppliers = async (req, res, next) => {
       params
     );
 
-    const [[{ total }]] = await pool.execute(
+    const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM suppliers s WHERE ${where}`, params
     );
 
@@ -39,18 +38,18 @@ const getAllSuppliers = async (req, res, next) => {
 
 const getSupplierById = async (req, res, next) => {
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await req.db.execute(
       "SELECT * FROM suppliers WHERE supplier_id = ?", [req.params.id]
     );
     if (rows.length === 0) return next(new AppError("Supplier not found.", 404));
 
-    const [products] = await pool.execute(
+    const [products] = await req.db.execute(
       `SELECT product_id, name, sku, stock, sellingPrice
        FROM products WHERE supplier_id = ? AND isActive = TRUE ORDER BY name ASC`,
       [req.params.id]
     );
 
-    const [orders] = await pool.execute(
+    const [orders] = await req.db.execute(
       `SELECT po_id, poNumber, totalAmount, status, createdAt
        FROM purchase_orders WHERE supplier_id = ? ORDER BY createdAt DESC LIMIT 5`,
       [req.params.id]
@@ -68,7 +67,7 @@ const createSupplier = async (req, res, next) => {
     if (!name || !phone) return next(new AppError("Supplier name and phone are required.", 400));
 
     const supplierId = uuidv4();
-    await pool.execute(
+    await req.db.execute(
       `INSERT INTO suppliers
         (supplier_id, name, contactPerson, email, phone, address, city, state,
          pincode, gstin, bankName, bankAccount, ifscCode, paymentTerms, notes)
@@ -92,12 +91,12 @@ const updateSupplier = async (req, res, next) => {
             pincode, gstin, bankName, bankAccount, ifscCode,
             paymentTerms, notes, isActive } = req.body;
 
-    const [existing] = await pool.execute(
+    const [existing] = await req.db.execute(
       "SELECT supplier_id FROM suppliers WHERE supplier_id = ?", [req.params.id]
     );
     if (existing.length === 0) return next(new AppError("Supplier not found.", 404));
 
-    await pool.execute(
+    await req.db.execute(
       `UPDATE suppliers SET
         name          = COALESCE(?, name),
         contactPerson = COALESCE(?, contactPerson),
@@ -128,7 +127,7 @@ const updateSupplier = async (req, res, next) => {
 
 const deleteSupplier = async (req, res, next) => {
   try {
-    await pool.execute(
+    await req.db.execute(
       "UPDATE suppliers SET isActive = FALSE WHERE supplier_id = ?", [req.params.id]
     );
     res.json({ success: true, message: "Supplier deactivated." });
