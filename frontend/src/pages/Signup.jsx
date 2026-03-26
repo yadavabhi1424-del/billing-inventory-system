@@ -262,11 +262,43 @@ function SignupRightPanel() {
   );
 }
 
+// ── Country Data ──────────────────────────────────────────────
+const COUNTRY_CODES = [
+  { name: 'India', code: 'IN', dial: '+91', flag: '🇮🇳' },
+  { name: 'United States', code: 'US', dial: '+1', flag: '🇺🇸' },
+  { name: 'United Kingdom', code: 'GB', dial: '+44', flag: '🇬🇧' },
+  { name: 'Australia', code: 'AU', dial: '+61', flag: '🇦🇺' },
+  { name: 'Canada', code: 'CA', dial: '+1', flag: '🇨🇦' },
+  { name: 'Germany', code: 'DE', dial: '+49', flag: '🇩🇪' },
+  { name: 'France', code: 'FR', dial: '+33', flag: '🇫🇷' },
+  { name: 'Japan', code: 'JP', dial: '+81', flag: '🇯🇵' },
+  { name: 'China', code: 'CN', dial: '+86', flag: '🇨🇳' },
+  { name: 'Brazil', code: 'BR', dial: '+55', flag: '🇧🇷' },
+  { name: 'South Africa', code: 'ZA', dial: '+27', flag: '🇿🇦' },
+  { name: 'Nigeria', code: 'NG', dial: '+234', flag: '🇳🇬' },
+  { name: 'Mexico', code: 'MX', dial: '+52', flag: '🇲🇽' },
+  { name: 'Russia', code: 'RU', dial: '+7', flag: '🇷🇺' },
+  { name: 'Italy', code: 'IT', dial: '+39', flag: '🇮🇹' },
+  { name: 'Spain', code: 'ES', dial: '+34', flag: '🇪🇸' },
+  { name: 'South Korea', code: 'KR', dial: '+82', flag: '🇰🇷' },
+  { name: 'Singapore', code: 'SG', dial: '+65', flag: '🇸🇬' },
+  { name: 'UAE', code: 'AE', dial: '+971', flag: '🇦🇪' },
+  { name: 'Saudi Arabia', code: 'SA', dial: '+966', flag: '🇸🇦' }
+];
+
 // ── Signup form ────────────────────────────────────────
 function SignupForm({ onLoginRedirect, onOtpRequired }) {
   const [fullName,    setFullName]    = useState('');
   const [email,       setEmail]       = useState('');
   const [phone,       setPhone]       = useState('');
+  
+  // Phone selection state
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [prefixInput, setPrefixInput]         = useState(COUNTRY_CODES[0].dial);
+  const [showPrefixDrop, setShowPrefixDrop]   = useState(false);
+  const [prefixSearch, setPrefixSearch]       = useState('');
+  const prefixDropRef = useRef(null);
+
   const [password,    setPassword]    = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [showPass,    setShowPass]    = useState(false);
@@ -279,27 +311,79 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
   const passwordMismatch = confirmPass.length > 0 && password !== confirmPass;
   const { level: passStrength } = getPasswordStrength(password);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (prefixDropRef.current && !prefixDropRef.current.contains(e.target)) {
+        setShowPrefixDrop(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handlePrefixInputChange = (e) => {
+    const val = e.target.value;
+    setPrefixInput(val);
+    setShowPrefixDrop(true);
+    
+    // Auto-detect country from exact dial code typed
+    // Filter by elements that have exactly this dial code. Use US as default for +1 over CA initially
+    const exactMatch = COUNTRY_CODES.find(c => c.dial === val);
+    if (exactMatch) setSelectedCountry(exactMatch);
+    
+    setPrefixSearch(val.replace('+', '')); // auto-search the list too
+  };
+
+  const selectCountry = (country) => {
+    setSelectedCountry(country);
+    setPrefixInput(country.dial);
+    setShowPrefixDrop(false);
+    setPrefixSearch('');
+  };
+
+  const handlePhoneChange = (e) => {
+    let val = e.target.value;
+    // Auto-detect if user pasted a number with a country code
+    if (val.startsWith('+')) {
+      const match = COUNTRY_CODES.find(c => val.startsWith(c.dial));
+      if (match) {
+        selectCountry(match);
+        val = val.substring(match.dial.length);
+      } else {
+        val = val.replace('+', '');
+      }
+    }
+    // Only keep digits and cap at 15
+    setPhone(val.replace(/\D/g, '').slice(0, 15));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     if (!fullName.trim())  return setError('Please enter your full name.');
     if (!email.trim())     return setError('Please enter a valid email address.');
     if (!phone.trim())     return setError('Please enter your phone number.');
+    if (phone.length < 10) return setError('Phone number must be at least 10 digits.');
     if (passStrength < 2)  return setError('Please use a stronger password.');
     if (!passwordsMatch)   return setError('Passwords do not match.');
     if (!agreed)           return setError('Please agree to the Terms of Service.');
+
+    // Ensure valid prefix
+    let finalPrefix = prefixInput;
+    if (!finalPrefix.startsWith('+')) finalPrefix = '+' + finalPrefix.replace(/\D/g, '');
+    if (finalPrefix === '+') return setError('Please select a valid country code.');
 
     setLoading(true);
     try {
       const res = await authAPI.signup({
         fullName,
         email,
-        phone:    `+91${phone}`,
+        phone:    `${finalPrefix}${phone}`,
         password,
       });
 
       if (res.success) {
-        // Move to OTP step
         onOtpRequired(email);
       }
     } catch (err) {
@@ -308,6 +392,12 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
       setLoading(false);
     }
   };
+
+  const filteredCountries = COUNTRY_CODES.filter(c => 
+    c.name.toLowerCase().includes(prefixSearch.toLowerCase()) || 
+    c.dial.includes(prefixSearch) || 
+    c.code.toLowerCase().includes(prefixSearch.toLowerCase())
+  );
 
   return (
     <div className="auth-form-panel auth-form-panel--signup">
@@ -350,13 +440,60 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
                 <span className="auth-field__icon"><UserIcon /></span>
               </div>
             </div>
+            
             <div className="auth-field">
               <label className="auth-field__label" htmlFor="signup-phone">Phone Number</label>
               <div className="auth-field__phone-wrap">
-                <span className="auth-field__prefix">🇮🇳 +91</span>
+                
+                {/* Custom Prefix Dropdown */}
+                <div className="auth-prefix-selector" ref={prefixDropRef}>
+                  <div className="auth-prefix-trigger">
+                    <span className="auth-prefix-flag">{selectedCountry?.flag || '🌍'}</span>
+                    <input 
+                      type="text" 
+                      className="auth-prefix-input"
+                      value={prefixInput}
+                      onChange={handlePrefixInputChange}
+                      onFocus={() => setShowPrefixDrop(true)}
+                      placeholder="+91"
+                      disabled={loading}
+                    />
+                  </div>
+                  
+                  {showPrefixDrop && (
+                    <div className="auth-prefix-dropdown">
+                      <div className="auth-prefix-search">
+                        <input 
+                          type="text" 
+                          placeholder="Search country..." 
+                          value={prefixSearch}
+                          onChange={(e) => setPrefixSearch(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <div className="auth-prefix-list">
+                        {filteredCountries.map(c => (
+                          <div 
+                            key={c.code} 
+                            className={`auth-prefix-item ${selectedCountry.code === c.code ? 'active' : ''}`}
+                            onClick={() => selectCountry(c)}
+                          >
+                            <span className="auth-prefix-item-flag">{c.flag}</span>
+                            <span className="auth-prefix-item-name">{c.name}</span>
+                            <span className="auth-prefix-item-dial">{c.dial}</span>
+                          </div>
+                        ))}
+                        {filteredCountries.length === 0 && (
+                          <div className="auth-prefix-item empty">No countries found</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <input id="signup-phone" type="tel" className="auth-field__phone-input"
-                  placeholder="98765 43210" value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g,'').slice(0,10))}
+                  placeholder="9876543210" value={phone}
+                  onChange={handlePhoneChange}
                   autoComplete="tel" inputMode="numeric" disabled={loading} required />
               </div>
             </div>

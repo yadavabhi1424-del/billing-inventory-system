@@ -390,6 +390,7 @@ function InventoryPreferences() {
     defaultTaxRate: getLocal('defaultTaxRate', '18'),
     defaultTaxType: getLocal('defaultTaxType', 'GST'),
     barcodeFormat: getLocal('barcodeFormat', 'CODE128'),
+    skuPrefix: getLocal('skuPrefix', 'SKU'),
   });
   const [saved, setSaved] = useState(false);
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
@@ -412,6 +413,13 @@ function InventoryPreferences() {
               <option key={u} value={u}>{u}</option>
             )}
           </select>
+        </div>
+        <div className="settings-field">
+          <label className="settings-label">SKU Prefix</label>
+          <input className="settings-input" type="text" value={form.skuPrefix}
+            onChange={e => set('skuPrefix', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} 
+            placeholder="SKU" maxLength={10} />
+          <span className="settings-hint">Used for auto-generating SKUs (e.g. PRD)</span>
         </div>
         <div className="settings-field">
           <label className="settings-label">Default Low Stock Threshold</label>

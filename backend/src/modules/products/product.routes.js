@@ -1,6 +1,6 @@
 import { Router }     from "express";
 import { getAllProducts, getProductById, getProductBySku,
-         getLowStockProducts, createProduct,
+         getLowStockProducts, createProduct, getNextSkuSeq,
          updateProduct, deleteProduct } from "./product.controller.js";
 import { protect, adminOrOwner }       from "../../middleware/auth.js";
 import upload                          from "../../middleware/upload.js";
@@ -9,6 +9,7 @@ const router = Router();
 
 router.use(protect);
 router.get("/",           getAllProducts);
+router.get("/next-sku-seq", getNextSkuSeq);
 router.get("/low-stock",  getLowStockProducts);
 router.get("/sku/:sku",   getProductBySku);
 router.get("/:id",        getProductById);

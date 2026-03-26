@@ -165,6 +165,10 @@ export async function getLowStockProducts() {
   return await api.get('/products/low-stock');
 }
 
+export async function getNextSkuSeq() {
+  return await api.get('/products/next-sku-seq');
+}
+
 export async function createProduct(formData) {
   return await api.post('/products', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

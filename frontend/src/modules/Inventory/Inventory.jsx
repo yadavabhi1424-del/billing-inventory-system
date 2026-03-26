@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
 import {
   getProducts, createProduct, updateProduct,
-  deleteProduct, getCategories, getSuppliers, createCategory,
+  deleteProduct, getCategories, getSuppliers, createCategory, getNextSkuSeq
 } from '../../services/api';
 import './Inventory.css';
 
@@ -41,6 +41,22 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
   const [errors,       setErrors]       = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [saving,       setSaving]       = useState(false);
+  const [predictedSku, setPredictedSku] = useState('Generating...');
+
+  useEffect(() => {
+    if (!isEdit) {
+      getNextSkuSeq().then(res => {
+        if (res.success) {
+          const seq = res.nextSeq || 1;
+          const prefix = localStorage.getItem('ss_skuPrefix') || 'SKU';
+          setPredictedSku(`${prefix}-${String(seq).padStart(3, '0')}`);
+        }
+      }).catch(err => {
+        console.error('Failed to predict SKU:', err);
+        setPredictedSku('Auto-generated upon save');
+      });
+    }
+  }, [isEdit]);
 
   // Searchable select state
   const [catSearch,    setCatSearch]    = useState('');
@@ -121,8 +137,6 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
   const validate = () => {
     const e = {};
     if (!form.name.trim())                           e.name         = 'Product name is required';
-    if (!form.sku.trim())                            e.sku          = 'SKU is required';
-    if (!/^[A-Z0-9-]+$/i.test(form.sku))            e.sku          = 'SKU must be alphanumeric (e.g., GR-001)';
     if (!form.sellingPrice || form.sellingPrice <= 0) e.sellingPrice = 'Price must be greater than 0';
     if (form.stock === '' || form.stock < 0)         e.stock        = 'Stock cannot be negative';
     if (!form.minStockLevel && form.minStockLevel !== 0) e.minStockLevel = 'Min stock is required';
@@ -131,9 +145,21 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
     return Object.keys(e).length === 0;
   };
 
+  const cp = parseFloat(form.costPrice) || 0;
+  const sp = parseFloat(form.sellingPrice) || 0;
+  const hasLoss = cp > 0 && sp > 0 && sp < cp;
+  const lossAmount = cp - sp;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
+    
+    if (hasLoss) {
+      if (!window.confirm(`Warning: Selling price (₹${sp}) is less than Cost price (₹${cp}). This results in a loss of ₹${lossAmount.toFixed(2)} per item.\n\nAre you sure you want to save?`)) {
+        return;
+      }
+    }
+
     try {
       setSaving(true);
       // Use FormData for image upload
@@ -141,6 +167,9 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
       Object.entries(form).forEach(([k, v]) => {
         if (v !== null && v !== '') data.append(k, v);
       });
+      if (!isEdit) {
+        data.append('skuPrefix', localStorage.getItem('ss_skuPrefix') || 'SKU');
+      }
       await onSave(data, form.image);
     } finally {
       setSaving(false);
@@ -194,13 +223,21 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
               </div>
 
               {/* SKU */}
-              <div className="product-form__field">
-                <label className="product-form__label">SKU *</label>
-                <input type="text" className={`product-form__input ${errors.sku ? 'product-form__input--error' : ''}`}
-                  placeholder="GR-001" value={form.sku}
-                  onChange={e => set('sku', e.target.value.toUpperCase())} />
-                {errors.sku && <span className="product-form__error">{errors.sku}</span>}
-              </div>
+              {isEdit ? (
+                <div className="product-form__field">
+                  <label className="product-form__label">SKU</label>
+                  <input type="text" className="product-form__input"
+                    value={form.sku} readOnly disabled style={{background: 'rgba(255,255,255,0.02)', color: 'var(--color-text-muted)'}} />
+                  <span className="product-form__hint">SKU cannot be changed</span>
+                </div>
+              ) : (
+                <div className="product-form__field">
+                  <label className="product-form__label">SKU</label>
+                  <input type="text" className="product-form__input"
+                    value={predictedSku} readOnly disabled style={{background: 'rgba(255,255,255,0.02)', color: 'var(--color-text-muted)', fontStyle: 'italic'}} />
+                  <span className="product-form__hint">Prefix can be changed in Settings &gt; Inventory</span>
+                </div>
+              )}
 
               {/* Barcode */}
               <div className="product-form__field">
@@ -297,10 +334,17 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
               <div className="product-form__field">
                 <label className="product-form__label">Selling Price (₹) *</label>
                 <input type="number" step="0.01"
-                  className={`product-form__input ${errors.sellingPrice ? 'product-form__input--error' : ''}`}
+                  className={`product-form__input ${errors.sellingPrice ? 'product-form__input--error' : hasLoss ? 'product-form__input--warning' : ''}`}
+                  style={hasLoss && !errors.sellingPrice ? { borderColor: 'var(--color-warning)' } : {}}
                   placeholder="320.00" value={form.sellingPrice}
                   onChange={e => set('sellingPrice', e.target.value)} />
-                {errors.sellingPrice && <span className="product-form__error">{errors.sellingPrice}</span>}
+                {errors.sellingPrice ? (
+                  <span className="product-form__error">{errors.sellingPrice}</span>
+                ) : hasLoss ? (
+                  <span className="product-form__warning" style={{ color: 'var(--color-warning)', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>
+                    ⚠️ Selling price is lower than cost price (Loss: ₹{lossAmount.toFixed(2)})
+                  </span>
+                ) : null}
               </div>
 
               {/* Cost Price */}

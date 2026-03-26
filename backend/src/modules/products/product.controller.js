@@ -83,30 +83,57 @@ const getLowStockProducts = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const getNextSkuSeq = async (req, res, next) => {
+  try {
+    const [[{ nextSeq }]] = await req.db.execute(`
+      SELECT IFNULL(MAX(product_seq), 0) + 1 AS nextSeq 
+      FROM products
+    `);
+    
+    res.json({ success: true, nextSeq });
+  } catch (error) { next(error); }
+};
+
 const createProduct = async (req, res, next) => {
   try {
-    const { name, sku, barcode, description, categoryId, supplierId, unit,
+    const { name, skuPrefix, barcode, description, categoryId, supplierId, unit,
             costPrice, sellingPrice, mrp, taxRate, taxType, stock,
             minStockLevel, maxStockLevel, location, expiryDate } = req.body;
 
-    if (!name || !sku || !categoryId || sellingPrice === undefined)
-      return next(new AppError("Name, SKU, category and selling price are required.", 400));
+    if (!name || !categoryId || sellingPrice === undefined)
+      return next(new AppError("Name, category and selling price are required.", 400));
+
+    // Sanitize and set prefix
+    let finalPrefix = "SKU";
+    if (skuPrefix && typeof skuPrefix === "string") {
+      const cleaned = skuPrefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (cleaned) finalPrefix = cleaned;
+    }
 
     const productId    = uuidv4();
+    const tempSku      = `TEMP-${productId}`;
     const image        = req.file ? req.file.filename : null;
     const initialStock = parseInt(stock) || 0;
+    
+    const cp = parseFloat(costPrice) || 0;
+    const sp = parseFloat(sellingPrice) || 0;
+    if (cp > 0 && sp > 0 && sp < cp) {
+      console.warn(`[Pricing Warning] Creating product '${name}' with selling price (${sp}) lower than cost price (${cp})`);
+    }
 
     const conn = await req.db.getConnection();
+    let finalSku = tempSku;
+
     try {
       await conn.beginTransaction();
 
-      await conn.execute(
+      const [result] = await conn.execute(
         `INSERT INTO products
           (product_id, name, sku, barcode, description, category_id, supplier_id,
            unit, costPrice, sellingPrice, mrp, taxRate, taxType, stock,
            minStockLevel, maxStockLevel, location, image, expiryDate)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [productId, name, sku, barcode || null, description || null,
+        [productId, name, tempSku, barcode || null, description || null,
          categoryId, supplierId || null, unit || "pcs",
          parseFloat(costPrice) || 0, parseFloat(sellingPrice),
          mrp ? parseFloat(mrp) : null,
@@ -115,6 +142,13 @@ const createProduct = async (req, res, next) => {
          maxStockLevel ? parseInt(maxStockLevel) : null,
          location || null, image, expiryDate || null]
       );
+
+      // result.insertId contains the generated product_seq
+      const productSeq = result.insertId;
+      finalSku = `${finalPrefix}-${String(productSeq).padStart(3, '0')}`;
+
+      // Update the row with the actual generated SKU
+      await conn.execute("UPDATE products SET sku = ? WHERE product_id = ?", [finalSku, productId]);
 
       if (initialStock > 0) {
         await conn.execute(
@@ -135,7 +169,7 @@ const createProduct = async (req, res, next) => {
 
     res.status(201).json({
       success: true, message: "Product created successfully.",
-      data: { product_id: productId, name, sku },
+      data: { product_id: productId, name, sku: finalSku },
     });
   } catch (error) { next(error); }
 };
@@ -168,6 +202,14 @@ const updateProduct = async (req, res, next) => {
         `Stock cannot be decreased from ${currentStock} to ${newStock}. Use stock adjustment instead.`,
         400
       ));
+    }
+
+    if (sellingPrice !== undefined && costPrice !== undefined) {
+      const sp = parseFloat(sellingPrice) || 0;
+      const cp = parseFloat(costPrice) || (rows[0].costPrice || 0);
+      if (cp > 0 && sp > 0 && sp < cp) {
+        console.warn(`[Pricing Warning] Updating product '${name || rows[0].name}' with selling price (${sp}) lower than cost price (${cp})`);
+      }
     }
 
     await req.db.execute(
@@ -238,5 +280,5 @@ const deleteProduct = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-export { getAllProducts, getProductById, getProductBySku,
+export { getAllProducts, getProductById, getProductBySku, getNextSkuSeq,
          getLowStockProducts, createProduct, updateProduct, deleteProduct };
