@@ -2,15 +2,68 @@ import "dotenv/config";
 import app                       from "./app.js";
 import { connectDB }             from "./config/database.js";
 import { verifyEmailConnection } from "./config/email.js";
-import { seedMasterData } from "./config/masterDatabase.js";
+import { seedMasterData, masterPool } from "./config/masterDatabase.js";
+import mysql from "mysql2/promise";
+
 
 const PORT = process.env.PORT || 5000;
+
+// ── Auto-migrate all existing tenant DBs ──────────────────────
+async function runTenantMigrations() {
+  try {
+    const [tenants] = await masterPool.execute(
+      "SELECT db_name FROM tenants WHERE status != 'SUSPENDED'"
+    );
+
+    // Default DB where pending users are staged must also get the migrations!
+    const allDbs = [{ db_name: process.env.DB_NAME }, ...tenants];
+
+    const conn = await mysql.createConnection({
+      host:               process.env.DB_HOST,
+      user:               process.env.DB_USER,
+      password:           process.env.DB_PASSWORD,
+      port:               process.env.DB_PORT || 3306,
+      multipleStatements: true,
+    });
+
+    for (const { db_name } of allDbs) {
+      try {
+        await conn.query(`USE \`${db_name}\``);
+        // Create email_otps if not exists
+        await conn.query(`
+          CREATE TABLE IF NOT EXISTS email_otps (
+            id        VARCHAR(36) PRIMARY KEY,
+            user_id   VARCHAR(36) NOT NULL,
+            code      CHAR(6) NOT NULL,
+            expiry    DATETIME NOT NULL,
+            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+          )
+        `);
+        // Add provider column if missing
+        await conn.query(`
+          ALTER TABLE users
+            MODIFY COLUMN password VARCHAR(255) NULL,
+            ADD COLUMN IF NOT EXISTS provider ENUM('local','google') DEFAULT 'local' AFTER password
+        `).catch(() => { /* column may already exist in newer DBs */ });
+        console.log(`  ✅ Migration OK: ${db_name}`);
+      } catch (e) {
+        console.warn(`  ⚠️  Migration skipped for ${db_name}: ${e.message}`);
+      }
+    }
+    await conn.end();
+    console.log("🔄 Tenant migrations complete.");
+  } catch (err) {
+    console.warn("⚠️  Tenant migrations failed (non-fatal):", err.message);
+  }
+}
 
 async function startServer() {
   try {
     await connectDB();
     await verifyEmailConnection();
-    await seedMasterData(); 
+    await seedMasterData();
+    await runTenantMigrations();
 
     app.listen(PORT, () => {
       console.log("\n🚀 ──────────────────────────────────────────");

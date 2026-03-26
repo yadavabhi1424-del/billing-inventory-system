@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
   user_id             VARCHAR(36)  PRIMARY KEY,
   name                VARCHAR(100) NOT NULL,
   email               VARCHAR(100) UNIQUE NOT NULL,
-  password            VARCHAR(255) NOT NULL,
+  password            VARCHAR(255),
+  provider            ENUM('local','google') DEFAULT 'local',
   role                ENUM('OWNER','ADMIN','MANAGER','CASHIER','STAFF') DEFAULT 'CASHIER',
   phone               VARCHAR(20),
   avatar              VARCHAR(255),
@@ -31,6 +32,15 @@ CREATE TABLE IF NOT EXISTS users (
   approvedBy          VARCHAR(36),
   approvedAt          DATETIME,
   createdAt           DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS email_otps (
+  id        VARCHAR(36) PRIMARY KEY,
+  user_id   VARCHAR(36) NOT NULL,
+  code      CHAR(6) NOT NULL,
+  expiry    DATETIME NOT NULL,
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS categories (

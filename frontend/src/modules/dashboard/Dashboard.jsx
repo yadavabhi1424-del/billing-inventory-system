@@ -400,6 +400,21 @@ function LowStockAlerts() {
 //  6. RECENT TRANSACTIONS
 // ══════════════════════════════════════════════════════════
 function RecentTransactions() {
+  const [transactions, setTransactions] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await getDashboard();
+        setTransactions(res.data.recentTransactions); // depends on your backend response
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   return (
     <div className="recent-tx">
       <div className="dashboard-section__header" style={{ marginBottom: 'var(--space-4)' }}>
@@ -408,19 +423,21 @@ function RecentTransactions() {
           Recent Transactions
         </span>
       </div>
-      {RECENT_TRANSACTIONS.map((tx) => (
-        <div key={tx.id} className="recent-tx__item">
+
+      {transactions.map((tx) => (
+        <div key={tx.transaction_id} className="recent-tx__item">
           <div style={{ flex: 1 }}>
-            <div className="recent-tx__customer">{tx.customer}</div>
+            <div className="recent-tx__customer">{tx.customerName}</div>
             <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-              <span className="recent-tx__id">{tx.id}</span>
-              <span className="recent-tx__time">· {tx.time}</span>
+              <span className="recent-tx__id">{tx.invoiceNumber}</span>
+              <span className="recent-tx__time">· {new Date(tx.createdAt).toLocaleTimeString()}</span>
             </div>
           </div>
+
           <div className="recent-tx__right">
-            <div className="recent-tx__amount">{fmt(tx.amount)}</div>
-            <span className={`recent-tx__payment recent-tx__payment--${tx.payment.toLowerCase()}`}>
-              {tx.payment}
+            <div className="recent-tx__amount">{fmt(tx.totalAmount)}</div>
+            <span className={`recent-tx__payment recent-tx__payment--${tx.paymentMethod.toLowerCase()}`}>
+              {tx.paymentMethod}
             </span>
           </div>
         </div>

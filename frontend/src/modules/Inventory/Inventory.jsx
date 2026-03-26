@@ -3,11 +3,11 @@
 //  StockSense Pro
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
 import {
   getProducts, createProduct, updateProduct,
-  deleteProduct, getCategories, getSuppliers,
+  deleteProduct, getCategories, getSuppliers, createCategory,
 } from '../../services/api';
 import './Inventory.css';
 
@@ -19,7 +19,7 @@ const getStatus = (stock, min) =>
 // ══════════════════════════════════════════════════════════
 //  PRODUCT FORM MODAL
 // ══════════════════════════════════════════════════════════
-function ProductFormModal({ title, product = null, categories = [], suppliers = [], onClose, onSave }) {
+function ProductFormModal({ title, product = null, categories = [], suppliers = [], onClose, onSave, onCategoriesUpdate }) {
   const isEdit = !!product;
 
   const [form, setForm] = useState({
@@ -41,6 +41,64 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
   const [errors,       setErrors]       = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [saving,       setSaving]       = useState(false);
+
+  // Searchable select state
+  const [catSearch,    setCatSearch]    = useState('');
+  const [catOpen,      setCatOpen]      = useState(false);
+  const [supSearch,    setSupSearch]    = useState('');
+  const [supOpen,      setSupOpen]      = useState(false);
+  const [creatingCat,  setCreatingCat]  = useState(false);
+  const catRef = useRef(null);
+  const supRef = useRef(null);
+
+  // Debounced search values
+  const [catDebounced, setCatDebounced] = useState('');
+  const [supDebounced, setSupDebounced] = useState('');
+  useEffect(() => { const t = setTimeout(() => setCatDebounced(catSearch), 200); return () => clearTimeout(t); }, [catSearch]);
+  useEffect(() => { const t = setTimeout(() => setSupDebounced(supSearch), 200); return () => clearTimeout(t); }, [supSearch]);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (catRef.current && !catRef.current.contains(e.target)) setCatOpen(false);
+      if (supRef.current && !supRef.current.contains(e.target)) setSupOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filteredCats = categories.filter(c =>
+    c.name.toLowerCase().includes(catDebounced.toLowerCase())
+  );
+  const filteredSups = suppliers.filter(s =>
+    s.name.toLowerCase().includes(supDebounced.toLowerCase())
+  );
+  const selectedCat = categories.find(c => String(c.category_id) === String(form.categoryId));
+  const selectedSup = suppliers.find(s => String(s.supplier_id) === String(form.supplierId));
+
+  const handleCreateCategory = async () => {
+    if (creatingCat) return;
+    const name = catSearch.trim();
+    if (!name) return;
+    const clean = name.toLowerCase();
+    if (categories.some(c => c.name.trim().toLowerCase() === clean)) return;
+    setCreatingCat(true);
+    try {
+      const res = await createCategory({ name });
+      if (!res.success) {
+        alert('Failed to create category');
+        return;
+      }
+      const newCat = res.data;
+      onCategoriesUpdate(prev => [...prev, newCat]);
+      set('categoryId', newCat.category_id);
+      setCatSearch('');
+      setCatOpen(false);
+    } catch (err) {
+      alert('Failed to create category: ' + err.message);
+    } finally {
+      setCreatingCat(false);
+    }
+  };
 
   const set = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -153,28 +211,86 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
               </div>
 
               {/* Category */}
-              <div className="product-form__field">
+              <div className={`product-form__field product-form__searchable-select ${catOpen ? 'is-open' : ''}`} ref={catRef}>
                 <label className="product-form__label">Category *</label>
-                <select className={`product-form__input ${errors.categoryId ? 'product-form__input--error' : ''}`}
-                  value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
-                  <option value="">Select category</option>
-                  {categories.map(c => (
-                    <option key={c.category_id} value={c.category_id}>{c.name}</option>
-                  ))}
-                </select>
+                <div
+                  className={`product-form__input product-form__select-trigger ${errors.categoryId ? 'product-form__input--error' : ''}`}
+                  onClick={() => { setCatOpen(o => !o); setCatSearch(''); }}
+                >
+                  <span className={selectedCat ? '' : 'product-form__select-placeholder'}>
+                    {selectedCat ? selectedCat.name : 'Select category'}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                {catOpen && (
+                  <div className="product-form__dropdown">
+                    <input
+                      className="product-form__dropdown-search"
+                      placeholder="Search category..."
+                      value={catSearch}
+                      autoFocus
+                      onChange={e => setCatSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                    <div className="product-form__dropdown-list">
+                      {filteredCats.map(c => (
+                        <div key={c.category_id} className="product-form__dropdown-item"
+                          onClick={() => { set('categoryId', c.category_id); setCatOpen(false); setCatSearch(''); }}>
+                          {c.name}
+                        </div>
+                      ))}
+                      {catSearch.trim() && !filteredCats.some(c => c.name.toLowerCase() === catSearch.toLowerCase()) && (
+                        <div
+                          className="product-form__dropdown-item product-form__dropdown-create"
+                          onClick={handleCreateCategory}
+                        >
+                          {creatingCat ? 'Creating...' : `+ Create "${catSearch}"`}
+                        </div>
+                      )}
+                      {filteredCats.length === 0 && !catSearch.trim() && (
+                        <div className="product-form__dropdown-empty">No categories found</div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {errors.categoryId && <span className="product-form__error">{errors.categoryId}</span>}
               </div>
 
               {/* Supplier */}
-              <div className="product-form__field">
+              <div className={`product-form__field product-form__searchable-select ${supOpen ? 'is-open' : ''}`} ref={supRef}>
                 <label className="product-form__label">Supplier</label>
-                <select className="product-form__input" value={form.supplierId}
-                  onChange={e => set('supplierId', e.target.value)}>
-                  <option value="">Select supplier</option>
-                  {suppliers.map(s => (
-                    <option key={s.supplier_id} value={s.supplier_id}>{s.name}</option>
-                  ))}
-                </select>
+                <div
+                  className="product-form__input product-form__select-trigger"
+                  onClick={() => { setSupOpen(o => !o); setSupSearch(''); }}
+                >
+                  <span className={selectedSup ? '' : 'product-form__select-placeholder'}>
+                    {selectedSup ? selectedSup.name : 'Select supplier'}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                </div>
+                {supOpen && (
+                  <div className="product-form__dropdown">
+                    <input
+                      className="product-form__dropdown-search"
+                      placeholder="Search supplier..."
+                      value={supSearch}
+                      autoFocus
+                      onChange={e => setSupSearch(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                    />
+                    <div className="product-form__dropdown-list">
+                      {filteredSups.map(s => (
+                        <div key={s.supplier_id} className="product-form__dropdown-item"
+                          onClick={() => { set('supplierId', s.supplier_id); setSupOpen(false); setSupSearch(''); }}>
+                          {s.name}
+                        </div>
+                      ))}
+                      {filteredSups.length === 0 && (
+                        <div className="product-form__dropdown-empty">No suppliers found (leave empty if not applicable)</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Selling Price */}
@@ -299,7 +415,7 @@ export default function Inventory() {
 
  const fetchAll = async () => {
   try {
-    setLoading(false); // don't show spinner on refresh
+    setLoading(true);
     const [prodRes, catRes, supRes] = await Promise.all([
       getProducts({ limit: 100 }),
       getCategories(),
@@ -310,6 +426,8 @@ export default function Inventory() {
     if (supRes.success)  setSuppliers(supRes.data);
   } catch (err) {
     console.error('Inventory fetch error:', err.message);
+  } finally {
+    setLoading(false);
   }
 };
   const handleAdd = async (formData) => {
@@ -541,7 +659,8 @@ export default function Inventory() {
         <ProductFormModal title="Add New Product"
           categories={categories} suppliers={suppliers}
           onClose={() => setShowAdd(false)}
-          onSave={handleAdd} />
+          onSave={handleAdd}
+          onCategoriesUpdate={setCategories} />
       )}
 
       {/* Edit Modal */}
@@ -549,7 +668,8 @@ export default function Inventory() {
         <ProductFormModal title="Edit Product"
           product={selected} categories={categories} suppliers={suppliers}
           onClose={() => { setShowEdit(false); setSelected(null); }}
-          onSave={handleEdit} />
+          onSave={handleEdit}
+          onCategoriesUpdate={setCategories} />
       )}
     </div>
   );

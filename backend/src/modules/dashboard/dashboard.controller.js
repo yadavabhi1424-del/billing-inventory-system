@@ -64,7 +64,7 @@ const getDashboard = async (req, res, next) => {
        FROM transactions t
        LEFT JOIN customers c ON c.customer_id = t.customer_id
        LEFT JOIN users     u ON u.user_id     = t.user_id
-       ORDER BY t.createdAt DESC LIMIT 5`
+       ORDER BY t.createdAt DESC LIMIT 4`
     );
 
     const [[{ pendingApprovals }]] = await req.db.execute(

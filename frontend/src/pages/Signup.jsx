@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './Auth.css';
 import * as authAPI from '../services/api';
 
@@ -43,11 +43,6 @@ const LockIcon = () => (
     <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
   </svg>
 );
-const PhoneIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.29 6.29l.95-.95a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-  </svg>
-);
 const EyeIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
@@ -81,6 +76,155 @@ function PasswordStrength({ password }) {
   );
 }
 
+// ── OTP Verification Step ──────────────────────────────
+function OtpStep({ email, onVerified, onLoginRedirect }) {
+  const OTP_LENGTH = 6;
+  const [digits,       setDigits]       = useState(Array(OTP_LENGTH).fill(''));
+  const [loading,      setLoading]      = useState(false);
+  const [resending,    setResending]    = useState(false);
+  const [error,        setError]        = useState('');
+  const [countdown,    setCountdown]    = useState(60); // resend cooldown
+  const inputRefs = useRef([]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const handleDigitChange = (idx, val) => {
+    const cleaned = val.replace(/\D/g, '').slice(-1);
+    const next = [...digits];
+    next[idx] = cleaned;
+    setDigits(next);
+    // Auto-advance
+    if (cleaned && idx < OTP_LENGTH - 1) {
+      inputRefs.current[idx + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (idx, e) => {
+    if (e.key === 'Backspace' && !digits[idx] && idx > 0) {
+      inputRefs.current[idx - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+    if (pasted.length > 0) {
+      const next = Array(OTP_LENGTH).fill('');
+      pasted.split('').forEach((ch, i) => { next[i] = ch; });
+      setDigits(next);
+      inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
+      e.preventDefault();
+    }
+  };
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    const code = digits.join('');
+    if (code.length < OTP_LENGTH) return setError('Please enter the complete 6-digit code.');
+    setError('');
+    setLoading(true);
+    try {
+      const res = await authAPI.verifyOtp({ email, code });
+      if (res.success) onVerified();
+    } catch (err) {
+      setError(err.message || 'Invalid or expired code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (countdown > 0 || resending) return;
+    setResending(true);
+    setError('');
+    try {
+      await authAPI.resendOtp({ email });
+      setCountdown(60);
+      setDigits(Array(OTP_LENGTH).fill(''));
+      inputRefs.current[0]?.focus();
+    } catch (err) {
+      setError(err.message || 'Failed to resend. Please try again.');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  return (
+    <div className="auth-form-panel auth-form-panel--signup">
+      <div className="auth-form-wrapper auth-form-card">
+
+        <div className="auth-otp__icon">📬</div>
+        <div className="auth-form__header">
+          <h2 className="auth-form__title">Check your email</h2>
+          <p className="auth-form__subtitle">
+            We sent a 6-digit code to<br />
+            <strong>{email}</strong>
+          </p>
+        </div>
+
+        <form onSubmit={handleVerify} noValidate>
+          {error && (
+            <div className="auth-error" role="alert">
+              <AlertIcon />
+              <span className="auth-error__text">{error}</span>
+            </div>
+          )}
+
+          {/* OTP digit inputs */}
+          <div className="auth-otp__inputs" onPaste={handlePaste}>
+            {digits.map((d, i) => (
+              <input
+                key={i}
+                ref={el => { inputRefs.current[i] = el; }}
+                type="text"
+                inputMode="numeric"
+                maxLength={1}
+                className={`auth-otp__input ${d ? 'auth-otp__input--filled' : ''}`}
+                value={d}
+                onChange={e => handleDigitChange(i, e.target.value)}
+                onKeyDown={e => handleKeyDown(i, e)}
+                disabled={loading}
+                autoFocus={i === 0}
+                autoComplete="one-time-code"
+              />
+            ))}
+          </div>
+
+          <button type="submit" className="auth-submit" disabled={loading}>
+            {loading && <span className="auth-submit__spinner" aria-hidden="true" />}
+            {loading ? 'Verifying…' : 'Verify Email →'}
+          </button>
+        </form>
+
+        <div className="auth-otp__resend">
+          {countdown > 0 ? (
+            <span className="auth-otp__resend-timer">Resend code in <strong>{countdown}s</strong></span>
+          ) : (
+            <button
+              type="button"
+              className="auth-otp__resend-btn"
+              onClick={handleResend}
+              disabled={resending}
+            >
+              {resending ? 'Sending…' : 'Resend code'}
+            </button>
+          )}
+        </div>
+
+        <p className="auth-form__footer" style={{ textAlign: 'center' }}>
+          Already verified?{' '}
+          <a href="#login" onClick={e => { e.preventDefault(); onLoginRedirect?.(); }}>Sign in</a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Right panel ────────────────────────────────────────
 function SignupRightPanel() {
   return (
     <div className="auth-brand auth-brand--signup">
@@ -118,7 +262,8 @@ function SignupRightPanel() {
   );
 }
 
-function SignupForm({ onLoginRedirect }) {
+// ── Signup form ────────────────────────────────────────
+function SignupForm({ onLoginRedirect, onOtpRequired }) {
   const [fullName,    setFullName]    = useState('');
   const [email,       setEmail]       = useState('');
   const [phone,       setPhone]       = useState('');
@@ -129,7 +274,6 @@ function SignupForm({ onLoginRedirect }) {
   const [agreed,      setAgreed]      = useState(false);
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
-  const [success,     setSuccess]     = useState(false);
 
   const passwordsMatch   = confirmPass.length > 0 && password === confirmPass;
   const passwordMismatch = confirmPass.length > 0 && password !== confirmPass;
@@ -147,17 +291,16 @@ function SignupForm({ onLoginRedirect }) {
 
     setLoading(true);
     try {
-      // Call tenant registration endpoint
-      const res = await authAPI.registerTenant({
-        ownerName:  fullName,
-        ownerEmail: email,
-        ownerPhone: `+91${phone}`,
+      const res = await authAPI.signup({
+        fullName,
+        email,
+        phone:    `+91${phone}`,
         password,
-        shopName:   fullName + "'s Shop", // temp — wizard will update this
       });
 
       if (res.success) {
-        setSuccess(true);
+        // Move to OTP step
+        onOtpRequired(email);
       }
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -165,24 +308,6 @@ function SignupForm({ onLoginRedirect }) {
       setLoading(false);
     }
   };
-
-  // Success state
-  if (success) {
-    return (
-      <div className="auth-form-panel auth-form-panel--signup">
-        <div className="auth-form-wrapper auth-form-card" style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
-          <h2 className="auth-form__title">Shop registered!</h2>
-          <p className="auth-form__subtitle" style={{ marginBottom: 24 }}>
-            Your account is ready. Sign in to complete your shop setup.
-          </p>
-          <button className="auth-submit" onClick={onLoginRedirect}>
-            Go to Sign In →
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="auth-form-panel auth-form-panel--signup">
@@ -304,10 +429,35 @@ function SignupForm({ onLoginRedirect }) {
   );
 }
 
+// ── Page root ──────────────────────────────────────────
 export default function SignupPage({ onLoginRedirect }) {
+  const [step,  setStep]  = useState('form'); // 'form' | 'otp'
+  const [email, setEmail] = useState('');
+
+  const handleOtpRequired = (registeredEmail) => {
+    setEmail(registeredEmail);
+    setStep('otp');
+  };
+
+  const handleVerified = () => {
+    // Redirect to login after verification
+    onLoginRedirect?.();
+  };
+
   return (
     <div className="auth-page">
-      <SignupForm onLoginRedirect={onLoginRedirect} />
+      {step === 'form' ? (
+        <SignupForm
+          onLoginRedirect={onLoginRedirect}
+          onOtpRequired={handleOtpRequired}
+        />
+      ) : (
+        <OtpStep
+          email={email}
+          onVerified={handleVerified}
+          onLoginRedirect={onLoginRedirect}
+        />
+      )}
       <SignupRightPanel />
     </div>
   );

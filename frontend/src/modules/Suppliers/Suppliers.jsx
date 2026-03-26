@@ -16,6 +16,24 @@ const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 // ══════════════════════════════════════════════════════════
 //  SUPPLIER FORM MODAL
 // ══════════════════════════════════════════════════════════
+// Field defined OUTSIDE the modal so React never unmounts/remounts inputs on re-render
+function SupplierField({ label, field, placeholder, type = 'text', required, full, hint, form, errors, set }) {
+  return (
+    <div className={`supplier-form__field ${full ? 'supplier-form__field--full' : ''}`}>
+      <label className="supplier-form__label">{label}{required && ' *'}</label>
+      <input type={type}
+        className={`supplier-form__input ${errors[field] ? 'supplier-form__input--error' : ''}`}
+        placeholder={placeholder} value={form[field]}
+        onChange={e => set(field, type === 'tel'
+          ? e.target.value.replace(/\D/g, '').slice(0, 10)
+          : e.target.value)}
+      />
+      {errors[field] && <span className="supplier-form__error">{errors[field]}</span>}
+      {hint && <span className="supplier-form__hint">{hint}</span>}
+    </div>
+  );
+}
+
 function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
   const isEdit = !!supplier;
   const [form, setForm] = useState({
@@ -62,20 +80,7 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
     }
   };
 
-  const Field = ({ label, field, placeholder, type = 'text', required, full, hint }) => (
-    <div className={`supplier-form__field ${full ? 'supplier-form__field--full' : ''}`}>
-      <label className="supplier-form__label">{label}{required && ' *'}</label>
-      <input type={type}
-        className={`supplier-form__input ${errors[field] ? 'supplier-form__input--error' : ''}`}
-        placeholder={placeholder} value={form[field]}
-        onChange={e => set(field, type === 'tel'
-          ? e.target.value.replace(/\D/g, '').slice(0, 10)
-          : e.target.value)}
-      />
-      {errors[field] && <span className="supplier-form__error">{errors[field]}</span>}
-      {hint && <span className="supplier-form__hint">{hint}</span>}
-    </div>
-  );
+  const f = { form, errors, set };
 
   return (
     <div className="supplier-form-modal-backdrop" onClick={onClose}>
@@ -90,15 +95,15 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
         <form className="supplier-form" onSubmit={handleSubmit}>
           <div className="supplier-form__content">
             <div className="supplier-form__grid">
-              <Field label="Supplier Name"   field="name"          placeholder="ABC Foods"          required />
-              <Field label="Contact Person"  field="contactPerson" placeholder="Rajesh Kumar" />
-              <Field label="Phone"           field="phone"         placeholder="9876543210" type="tel" required />
-              <Field label="Email"           field="email"         placeholder="contact@abc.com" type="email" />
-              <Field label="City"            field="city"          placeholder="Delhi" />
-              <Field label="State"           field="state"         placeholder="Delhi" />
-              <Field label="Pincode"         field="pincode"       placeholder="110001" />
-              <Field label="GSTIN"           field="gstin"         placeholder="07AABCT1234A1Z5" />
-              <Field label="Payment Terms"   field="paymentTerms"  placeholder="30 days" hint="e.g. 30 days, 45 days" />
+              <SupplierField label="Supplier Name"   field="name"          placeholder="ABC Foods"          required {...f} />
+              <SupplierField label="Contact Person"  field="contactPerson" placeholder="Rajesh Kumar"              {...f} />
+              <SupplierField label="Phone"           field="phone"         placeholder="9876543210" type="tel" required {...f} />
+              <SupplierField label="Email"           field="email"         placeholder="contact@abc.com" type="email" {...f} />
+              <SupplierField label="City"            field="city"          placeholder="Delhi"                    {...f} />
+              <SupplierField label="State"           field="state"         placeholder="Delhi"                    {...f} />
+              <SupplierField label="Pincode"         field="pincode"       placeholder="110001"                   {...f} />
+              <SupplierField label="GSTIN"           field="gstin"         placeholder="07AABCT1234A1Z5"          {...f} />
+              <SupplierField label="Payment Terms"   field="paymentTerms"  placeholder="30 days" hint="e.g. 30 days, 45 days" {...f} />
 
               <div className="supplier-form__field supplier-form__field--full">
                 <label className="supplier-form__label">Address</label>
@@ -130,6 +135,7 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
     </div>
   );
 }
+
 
 // ══════════════════════════════════════════════════════════
 //  MAIN SUPPLIERS

@@ -107,6 +107,24 @@ export async function changePassword(data) {
   return await api.put('/auth/change-password', data);
 }
 
+export async function verifyOtp(data) {
+  return await api.post('/auth/verify-email', data); // { email, code }
+}
+
+export async function resendOtp(data) {
+  return await api.post('/auth/resend-otp', data); // { email }
+}
+
+export async function googleLogin(data) {
+  const res = await api.post('/auth/google', data); // { idToken }
+  if (res.success) {
+    localStorage.setItem('accessToken',    res.data.accessToken);
+    localStorage.setItem('refreshToken',   res.data.refreshToken);
+    localStorage.setItem('stocksense_user', JSON.stringify(res.data.user));
+  }
+  return res;
+}
+
 // ============================================================
 //  DASHBOARD
 // ============================================================

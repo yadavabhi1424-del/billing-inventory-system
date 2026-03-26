@@ -4,28 +4,28 @@ import { getUsers, createUser, updateUser, deleteUser } from '../../services/api
 import './UserManagement.css';
 
 const ROLE_COLORS = {
-  OWNER:   'um-badge--owner',
-  ADMIN:   'um-badge--admin',
+  OWNER: 'um-badge--owner',
+  ADMIN: 'um-badge--admin',
   MANAGER: 'um-badge--manager',
   CASHIER: 'um-badge--cashier',
-  STAFF:   'um-badge--staff',
+  STAFF: 'um-badge--staff',
 };
 
 const ROLES = [
-  { value: 'ADMIN',   label: 'Admin',   desc: 'Full access except billing' },
+  { value: 'ADMIN', label: 'Admin', desc: 'Full access except billing' },
   { value: 'MANAGER', label: 'Manager', desc: 'Products, inventory, reports' },
   { value: 'CASHIER', label: 'Cashier', desc: 'Billing & POS only' },
-  { value: 'STAFF',   label: 'Staff',   desc: 'View only' },
+  { value: 'STAFF', label: 'Staff', desc: 'View only' },
 ];
 
 // ══════════════════════════════════════════════════════════
 //  CREATE USER MODAL
 // ══════════════════════════════════════════════════════════
 function CreateUserModal({ onClose, onSave }) {
-  const [form,   setForm]   = useState({ name: '', email: '', password: '', role: 'CASHIER', phone: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'CASHIER', phone: '' });
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
-  const [error,  setError]  = useState('');
+  const [error, setError] = useState('');
 
   const set = (f, v) => {
     setForm(p => ({ ...p, [f]: v }));
@@ -34,10 +34,10 @@ function CreateUserModal({ onClose, onSave }) {
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())  e.name = 'Name is required';
+    if (!form.name.trim()) e.name = 'Name is required';
     if (!form.email.trim()) e.email = 'Email is required';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email';
-    if (!form.password)     e.password = 'Password is required';
+    if (!form.password) e.password = 'Password is required';
     if (form.password.length < 6) e.password = 'Min 6 characters';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -69,17 +69,17 @@ function CreateUserModal({ onClose, onSave }) {
 
         <form onSubmit={handleSubmit} className="um-modal__body">
           {[
-            { label: 'Full Name *',  field: 'name',     type: 'text',     placeholder: 'Rajesh Kumar'     },
-            { label: 'Email *',      field: 'email',    type: 'email',    placeholder: 'rajesh@gmail.com' },
-            { label: 'Password *',   field: 'password', type: 'password', placeholder: 'Min 6 characters' },
-            { label: 'Phone',        field: 'phone',    type: 'tel',      placeholder: '9876543210'       },
+            { label: 'Full Name *', field: 'name', type: 'text', placeholder: 'Rajesh Kumar' },
+            { label: 'Email *', field: 'email', type: 'email', placeholder: 'rajesh@gmail.com' },
+            { label: 'Password *', field: 'password', type: 'password', placeholder: 'Min 6 characters' },
+            { label: 'Phone', field: 'phone', type: 'tel', placeholder: '9876543210' },
           ].map(({ label, field, type, placeholder }) => (
             <div key={field} className="um-field">
               <label className="um-field__label">{label}</label>
               <input type={type} placeholder={placeholder} value={form[field]}
                 className={`um-field__input ${errors[field] ? 'um-field__input--error' : ''}`}
                 onChange={e => set(field, type === 'tel'
-                  ? e.target.value.replace(/\D/g,'').slice(0,10)
+                  ? e.target.value.replace(/\D/g, '').slice(0, 10)
                   : e.target.value)}
               />
               {errors[field] && <span className="um-field__error">{errors[field]}</span>}
@@ -116,8 +116,8 @@ function CreateUserModal({ onClose, onSave }) {
 // ══════════════════════════════════════════════════════════
 function InviteUserModal({ onClose }) {
   const [email, setEmail] = useState('');
-  const [role,  setRole]  = useState('CASHIER');
-  const [sent,  setSent]  = useState(false);
+  const [role, setRole] = useState('CASHIER');
+  const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
 
   const handleInvite = (e) => {
@@ -185,9 +185,9 @@ function InviteUserModal({ onClose }) {
 //  MAIN EXPORT
 // ══════════════════════════════════════════════════════════
 export default function UserManagement({ user: currentUser }) {
-  const [users,      setUsers]      = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState('');
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -230,8 +230,8 @@ export default function UserManagement({ user: currentUser }) {
 
   const filtered = users.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
-                        u.email.toLowerCase().includes(search.toLowerCase());
-    const matchRole   = roleFilter === 'all' || u.role === roleFilter;
+      u.email.toLowerCase().includes(search.toLowerCase());
+    const matchRole = roleFilter === 'all' || u.role === roleFilter;
     return matchSearch && matchRole;
   });
 

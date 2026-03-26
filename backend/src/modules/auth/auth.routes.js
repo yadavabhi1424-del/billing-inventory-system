@@ -1,6 +1,7 @@
 import { Router }  from "express";
 import {
-  signup, verifyEmail, login, refreshToken, logout, getMe, changePassword,
+  signup, verifyEmail, resendOtp, login, googleAuth,
+  refreshToken, logout, getMe, changePassword,
 } from "./auth.controller.js";
 import { protect } from "../../middleware/auth.js";
 
@@ -8,8 +9,10 @@ const router = Router();
 
 // Public
 router.post("/signup",        signup);
-router.get("/verify-email",   verifyEmail);
+router.post("/verify-email",  verifyEmail);
+router.post("/resend-otp",    resendOtp);
 router.post("/login",         login);
+router.post("/google",        googleAuth);
 router.post("/refresh-token", refreshToken);
 
 // Protected
