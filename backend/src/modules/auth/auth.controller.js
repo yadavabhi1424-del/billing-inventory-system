@@ -1,12 +1,12 @@
-import bcrypt            from "bcryptjs";
+import bcrypt from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
-import { OAuth2Client }  from "google-auth-library";
-import { pool }          from "../../config/database.js";
-import { masterPool }    from "../../config/masterDatabase.js";
+import { OAuth2Client } from "google-auth-library";
+import { pool } from "../../config/database.js";
+import { masterPool } from "../../config/masterDatabase.js";
 import { getTenantPool, provisionTenant } from "../../middleware/tenant.middleware.js";
 import { generateTokenPair, verifyRefreshToken } from "../../config/jwt.js";
-import { sendOtpEmail, sendPasswordResetEmail }  from "../../config/email.js";
-import { AppError }      from "../../middleware/errorHandler.js";
+import { sendOtpEmail, sendPasswordResetEmail } from "../../config/email.js";
+import { AppError } from "../../middleware/errorHandler.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -18,7 +18,7 @@ function generateOtp() {
 // ── Helper: upsert OTP (delete old + insert new) ──────────────
 async function saveOtp(db, userId) {
   await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-  const code   = generateOtp();
+  const code = generateOtp();
   const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min
   await db.execute(
     "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
@@ -78,7 +78,7 @@ const signup = async (req, res, next) => {
         return next(new AppError("Email already registered.", 409));
       // Unverified — resend a fresh OTP
       const code = await saveOtp(pool, existing[0].user_id);
-      try { await sendOtpEmail(email, name, code); } catch {}
+      try { await sendOtpEmail(email, name, code); } catch { }
       return res.status(200).json({
         success: true,
         message: "A new verification code has been sent to your email.",
@@ -87,7 +87,7 @@ const signup = async (req, res, next) => {
 
     // Create a new pending user in the default (staging) pool
     const hashedPassword = await bcrypt.hash(password, 12);
-    const userId         = uuidv4();
+    const userId = uuidv4();
 
     await pool.execute(
       `INSERT INTO users
@@ -161,7 +161,7 @@ const verifyEmail = async (req, res, next) => {
     if (existingTenant.length > 0) {
       // Already provisioned (edge case: verify called twice)
       tenantId = existingTenant[0].tenant_id;
-      dbName   = existingTenant[0].db_name;
+      dbName = existingTenant[0].db_name;
     } else {
       // Parse shop metadata stored in verifyToken during signup
       let shopName = stagingUser.name + "'s Shop";
@@ -170,12 +170,12 @@ const verifyEmail = async (req, res, next) => {
         const meta = JSON.parse(stagingUser.verifyToken || '{}');
         if (meta.shopName) shopName = meta.shopName;
         if (meta.shopType) shopType = meta.shopType;
-      } catch {}
+      } catch { }
 
-      tenantId      = uuidv4();
+      tenantId = uuidv4();
       const shopSlug = shopName.toLowerCase()
         .replace(/[^a-z0-9]/g, '_').slice(0, 40) + '_' + tenantId.slice(0, 6);
-      dbName        = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g,'').slice(0, 16)}`;
+      dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
 
       // Insert tenant record in master DB
       await masterPool.execute(
@@ -335,16 +335,16 @@ const googleAuth = async (req, res, next) => {
       [email]
     );
 
-    let db     = pool;
+    let db = pool;
     let dbName = null;
     let tenantRow = null;
 
     if (tenantRows.length > 0) {
       if (tenantRows[0].status === "SUSPENDED")
         return next(new AppError("Your shop has been suspended.", 403));
-      dbName    = tenantRows[0].db_name;
+      dbName = tenantRows[0].db_name;
       tenantRow = tenantRows[0];
-      db        = await getTenantPool(dbName);
+      db = await getTenantPool(dbName);
     }
     console.log("Using DB:", dbName);
 
@@ -361,7 +361,7 @@ const googleAuth = async (req, res, next) => {
       }
     } else {
       // New Google user
-      const userId   = uuidv4();
+      const userId = uuidv4();
       const userName = name || email.split("@")[0];
       await db.execute(
         `INSERT INTO users
@@ -412,7 +412,7 @@ const refreshToken = async (req, res, next) => {
       "SELECT db_name FROM tenants WHERE owner_email = ?", [decoded.email]
     );
     const dbName = tenantRows.length > 0 ? tenantRows[0].db_name : null;
-    const db     = dbName ? await getTenantPool(dbName) : pool;
+    const db = dbName ? await getTenantPool(dbName) : pool;
 
     const [rows] = await db.execute(
       "SELECT user_id, name, email, role, refreshToken FROM users WHERE user_id = ?",
@@ -503,30 +503,35 @@ const forgotPassword = async (req, res, next) => {
     // Resolve tenant DB
     const { db, tenantRow } = await resolveDb(email);
 
-    // If tenant exists, generate OTP
-    if (tenantRow) {
-      const [rows] = await db.execute(
-        "SELECT user_id, name, provider FROM users WHERE email = ?", [email]
-      );
-      // Only local users can reset passwords
-      if (rows.length > 0 && rows[0].provider === "local") {
-        const userId = rows[0].user_id;
-        // Generate new OTP with slightly longer expiry (10 mins)
-        await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-        const code   = generateOtp();
-        const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-        await db.execute(
-          "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
-          [uuidv4(), userId, code, expiry]
-        );
-        sendPasswordResetEmail(email, rows[0].name, code).catch(e => console.warn(e));
-      }
+    if (!tenantRow) {
+      return next(new AppError("Account not found.", 404));
     }
 
-    // Always return success to prevent email enumeration
+    const [rows] = await db.execute(
+      "SELECT user_id, name, provider FROM users WHERE email = ?", [email]
+    );
+
+    if (rows.length === 0) {
+      return next(new AppError("Account not found.", 404));
+    }
+    if (rows[0].provider === "google") {
+      return next(new AppError("Google accounts cannot reset password here. Please sign in with Google.", 400));
+    }
+
+    const userId = rows[0].user_id;
+    // Generate new OTP with slightly longer expiry (10 mins)
+    await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
+    const code = generateOtp();
+    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    await db.execute(
+      "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
+      [uuidv4(), userId, code, expiry]
+    );
+    sendPasswordResetEmail(email, rows[0].name, code).catch(e => console.warn(e));
+
     res.json({
       success: true,
-      message: "If an account exists, a password reset code has been sent.",
+      message: "Password reset code sent to your email.",
     });
   } catch (error) { next(error); }
 };
