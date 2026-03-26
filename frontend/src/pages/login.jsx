@@ -430,7 +430,7 @@ function ForgotPasswordForm({ onBack }) {
               <h2 className="auth-form__title">Enter reset code</h2>
               <p className="auth-form__subtitle">We sent a 6-digit code to <strong>{email}</strong></p>
             </div>
-            {successMsg && <p style={{ color: '#10b981', background: '#064e3b', padding: '12px', borderRadius: '6px', textAlign: 'center', marginBottom: '20px', fontSize: '14px' }}>{successMsg}</p>}
+            {successMsg && <p style={{ color: '#10b981', background: 'rgba(34, 197, 94, 0.15)', padding: '12px', borderRadius: '6px', textAlign: 'center', marginBottom: '20px', fontSize: '14px' }}>{successMsg}</p>}
             <form onSubmit={handleVerifyOtp} noValidate>
               {error && (
                 <div className="auth-error" role="alert">
