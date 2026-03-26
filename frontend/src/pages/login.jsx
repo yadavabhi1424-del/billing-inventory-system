@@ -6,69 +6,69 @@ const GOOGLE_CLIENT_ID = '289907685647-v75q9qu13fl8po09up7t5fb4knmjjr70.apps.goo
 
 const FEATURES = [
   { dot: 'indigo', text: 'AI-powered stock prediction with Prophet' },
-  { dot: 'violet', text: 'Real-time billing and inventory sync'     },
-  { dot: 'cyan',   text: 'Role-based access for your entire team'   },
+  { dot: 'violet', text: 'Real-time billing and inventory sync' },
+  { dot: 'cyan', text: 'Role-based access for your entire team' },
 ];
 
 const STATS = [
-  { value: '10K+',  label: 'Transactions daily' },
-  { value: '99.9%', label: 'Uptime SLA'         },
-  { value: '< 2s',  label: 'Bill generation'    },
+  { value: '10K+', label: 'Transactions daily' },
+  { value: '99.9%', label: 'Uptime SLA' },
+  { value: '< 2s', label: 'Bill generation' },
 ];
 
 // ── Icons ──────────────────────────────────────────────
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="4" width="20" height="16" rx="2"/>
-    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
   </svg>
 );
 const LockIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
   </svg>
 );
 const EyeIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-    <circle cx="12" cy="12" r="3"/>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
   </svg>
 );
 const EyeOffIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-    <line x1="1" y1="1" x2="23" y2="23"/>
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+    <line x1="1" y1="1" x2="23" y2="23" />
   </svg>
 );
 const AlertIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="12" y1="8" x2="12" y2="12"/>
-    <line x1="12" y1="16" x2="12.01" y2="16"/>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );
 const BoxIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-    <line x1="12" y1="22.08" x2="12" y2="12"/>
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+    <line x1="12" y1="22.08" x2="12" y2="12" />
   </svg>
 );
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 48 48">
-    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-    <path fill="none" d="M0 0h48v48H0z"/>
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    <path fill="none" d="M0 0h48v48H0z" />
   </svg>
 );
 
@@ -121,60 +121,61 @@ function LoginLeftPanel() {
 
 // ── Login form ─────────────────────────────────────────
 function LoginForm({ onLogin, onSignupRedirect, onForgotClick }) {
-  const [email,       setEmail]       = useState('');
-  const [password,    setPassword]    = useState('');
-  const [showPass,    setShowPass]    = useState(false);
-  const [loading,     setLoading]     = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error,       setError]       = useState('');
-  const [isNotFound,  setIsNotFound]  = useState(false); // show "Go to Sign Up" link
+  const [error, setError] = useState('');
+  const [isNotFound, setIsNotFound] = useState(false); // show "Go to Sign Up" link
 
-  // ── Google Sign-In (ID token via GSI) ──────────────────────────
+  // ── Google Sign-In (Token via GSI OAuth2) ──────────────────────────
   useEffect(() => {
-    const loadGsi = () => {
-      if (typeof window.google === 'undefined' || window.__gsiInitialized) return;
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback:  handleGoogleCredential,
-      });
-      window.__gsiInitialized = true;
-    };
-
-    if (typeof window.google !== 'undefined') {
-      loadGsi();
-    } else {
+    if (typeof window.google === 'undefined') {
       const script = document.createElement('script');
-      script.src   = 'https://accounts.google.com/gsi/client';
+      script.src = 'https://accounts.google.com/gsi/client';
       script.async = true;
       script.defer = true;
-      script.onload = loadGsi;
       document.head.appendChild(script);
     }
   }, []);
 
-  const handleGoogleCredential = async ({ credential }) => {
-    if (!credential) return setError('Google sign-in was cancelled or failed.');
-    setGoogleLoading(true);
-    setError('');
-    try {
-      // credential IS the ID token — send directly to backend for verifyIdToken
-      const result = await authAPI.googleLogin({ idToken: credential });
-      if (result.success) {
-        onLogin({ ...result.data.user, role: result.data.user.role.toLowerCase() });
-      }
-    } catch (err) {
-      setError(err.message || 'Google sign-in failed. Please try again.');
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
   const handleGoogleClick = () => {
-    if (typeof window.google === 'undefined')
+    if (typeof window.google === 'undefined' || !window.google.accounts || !window.google.accounts.oauth2)
       return setError('Google Sign-In is loading. Please try again in a moment.');
+    
     setError('');
-    // Trigger the One Tap / popup flow — credential (ID token) delivered to handleGoogleCredential
-    window.google.accounts.id.prompt();
+    
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid',
+        callback: async (response) => {
+          if (response.error) {
+            setError('Google sign-in was cancelled or failed.');
+            return;
+          }
+          setGoogleLoading(true);
+          try {
+            const result = await authAPI.googleLogin({ accessToken: response.access_token });
+            if (result.success) {
+              onLogin({ ...result.data.user, role: result.data.user.role.toLowerCase() });
+            }
+          } catch (err) {
+            const msg = err.message || 'Google sign-in failed. Please try again.';
+            setError(msg);
+            if (msg.toLowerCase().includes('not found') || err.status === 404) {
+              setIsNotFound(true);
+            }
+          } finally {
+            setGoogleLoading(false);
+          }
+        },
+      });
+      client.requestAccessToken();
+    } catch (err) {
+      setError('Failed to initialize Google Sign-In.');
+    }
   };
 
 
@@ -183,7 +184,7 @@ function LoginForm({ onLogin, onSignupRedirect, onForgotClick }) {
     setError('');
     setIsNotFound(false);
     if (!email.trim()) return setError('Please enter your email address.');
-    if (!password)     return setError('Please enter your password.');
+    if (!password) return setError('Please enter your password.');
     setLoading(true);
     try {
       const result = await authAPI.login({ email, password });
@@ -522,9 +523,9 @@ export default function LoginPage({ onLogin, onSignupRedirect }) {
     <div className="auth-page">
       <LoginLeftPanel />
       {view === 'login' ? (
-        <LoginForm 
-          onLogin={onLogin} 
-          onSignupRedirect={onSignupRedirect} 
+        <LoginForm
+          onLogin={onLogin}
+          onSignupRedirect={onSignupRedirect}
           onForgotClick={() => setView('forgot')}
         />
       ) : (

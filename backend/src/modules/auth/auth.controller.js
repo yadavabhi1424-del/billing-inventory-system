@@ -312,20 +312,36 @@ const login = async (req, res, next) => {
 };
 
 // ══════════════════════════════════════════════════════════════
-//  GOOGLE AUTH  →  POST { idToken }
+//  GOOGLE AUTH  →  POST { idToken, accessToken }
 // ══════════════════════════════════════════════════════════════
 const googleAuth = async (req, res, next) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) return next(new AppError("Google ID token is required.", 400));
+    const { idToken, accessToken } = req.body;
+    if (!idToken && !accessToken) return next(new AppError("Google token is required.", 400));
 
-    // Cryptographically verify the ID token signature, audience, and expiry
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-    const { email, name, picture } = payload;
+    let email, name, picture;
+
+    if (idToken) {
+      // Cryptographically verify the ID token signature, audience, and expiry
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      const payload = ticket.getPayload();
+      email = payload.email;
+      name = payload.name;
+      picture = payload.picture;
+    } else {
+      // Fetch user info from Google using access token (for custom UI buttons via initTokenClient)
+      const resp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (!resp.ok) return next(new AppError("Failed to fetch user info from Google.", 400));
+      const payload = await resp.json();
+      email = payload.email;
+      name = payload.name;
+      picture = payload.picture;
+    }
 
     if (!email) return next(new AppError("Could not retrieve email from Google.", 400));
 
