@@ -94,6 +94,27 @@ CREATE TABLE IF NOT EXISTS invitations (
   createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (invited_by) REFERENCES users(user_id)
 );
+
+CREATE TABLE IF NOT EXISTS shop_types (
+  type_key        VARCHAR(50)  PRIMARY KEY,
+  display_name    VARCHAR(100) NOT NULL,
+  icon            VARCHAR(10)  DEFAULT NULL,
+  inventory_types JSON         DEFAULT NULL,
+  description     VARCHAR(255) DEFAULT NULL
+);
+
+INSERT IGNORE INTO shop_types (type_key, display_name, icon, inventory_types, description) VALUES
+  ('auto_parts','Auto Parts','🚗','["FINISHED", "COMPONENT"]','Vehicle parts, accessories'),
+  ('electronics','Electronics Shop','📱','["FINISHED", "COMPONENT"]','Phones, appliances, gadgets'),
+  ('general_store','General Store','🛒','["FINISHED"]','Grocery, FMCG, daily needs'),
+  ('hardware','Hardware Store','🔧','["FINISHED", "COMPONENT"]','Tools, materials, parts'),
+  ('jewellery','Jewellery','💍','["FINISHED", "RAW"]','Gold, silver, gems'),
+  ('manufacturing','Manufacturing','🏭','["RAW", "WIP", "COMPONENT", "FINISHED"]','Full production cycle'),
+  ('other','Other','🏪','["FINISHED"]','Custom business type'),
+  ('pharmacy','Pharmacy','💊','["FINISHED"]','Medicines, healthcare'),
+  ('restaurant','Restaurant / Cafe','🍽️','["RAW", "FINISHED"]','Food ingredients, beverages'),
+  ('stationery','Stationery / Books','📚','["FINISHED"]','Office supplies, books'),
+  ('textile','Textile / Clothing','👕','["FINISHED", "RAW"]','Fabric, garments, fashion');
 `;
 
 export const STOCK_SCHEMA = `
@@ -250,13 +271,13 @@ export const SHOP_TYPE_SCHEMAS = {
   general_store:  ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   electronics:    ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   textile:        ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
-  pharmacy:       ['CORE', 'SALES', 'PROCUREMENT'],
-  restaurant:     ['CORE', 'SALES', 'PROCUREMENT'],
+  pharmacy:       ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  restaurant:     ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   manufacturing:  ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
   hardware:       ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   auto_parts:     ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  stationery:     ['CORE', 'SALES', 'PROCUREMENT'],
-  jewellery:      ['CORE', 'SALES', 'PROCUREMENT', 'MANUFACTURING'],
+  stationery:     ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  jewellery:      ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
   warehouse:      ['CORE', 'PROCUREMENT', 'STOCK'],
-  other:          ['CORE', 'SALES', 'PROCUREMENT'],
+  other:          ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
 };
