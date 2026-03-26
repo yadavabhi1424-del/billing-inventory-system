@@ -95,10 +95,30 @@ const sendOtpEmail = async (toEmail, name, code) => {
   });
 };
 
+const sendPasswordResetEmail = async (toEmail, name, code) => {
+  await transporter.sendMail({
+    from:    process.env.EMAIL_FROM,
+    to:      toEmail,
+    subject: `${code} — StockSense Password Reset`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:30px;border:1px solid #eee;border-radius:8px">
+        <h2 style="color:#6366f1;margin-top:0">StockSense Pro</h2>
+        <p>Hi <strong>${name}</strong>,</p>
+        <p>Use the code below to reset your password. It expires in <strong>5 minutes</strong>.</p>
+        <div style="text-align:center;margin:32px 0">
+          <span style="font-size:42px;font-weight:800;letter-spacing:12px;color:#1e1b4b;background:#f0f0ff;padding:16px 28px;border-radius:10px;display:inline-block">${code}</span>
+        </div>
+        <p style="color:#888;font-size:13px">If you didn't request a password reset, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
+};
+
 export {
   verifyEmailConnection,
   sendVerificationEmail,
   sendApprovalEmail,
   sendRejectionEmail,
   sendOtpEmail,
+  sendPasswordResetEmail,
 };

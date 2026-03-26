@@ -115,6 +115,18 @@ export async function resendOtp(data) {
   return await api.post('/auth/resend-otp', data); // { email }
 }
 
+export async function forgotPassword(data) {
+  return await api.post('/auth/forgot-password', data); // { email }
+}
+
+export async function verifyResetOtp(data) {
+  return await api.post('/auth/verify-reset-otp', data); // { email, code }
+}
+
+export async function resetPassword(data) {
+  return await api.post('/auth/reset-password', data); // { email, code, newPassword }
+}
+
 export async function googleLogin(data) {
   const res = await api.post('/auth/google', data); // { idToken }
   if (res.success) {

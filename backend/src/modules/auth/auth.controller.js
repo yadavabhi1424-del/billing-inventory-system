@@ -5,7 +5,7 @@ import { pool }          from "../../config/database.js";
 import { masterPool }    from "../../config/masterDatabase.js";
 import { getTenantPool, provisionTenant } from "../../middleware/tenant.middleware.js";
 import { generateTokenPair, verifyRefreshToken } from "../../config/jwt.js";
-import { sendOtpEmail }  from "../../config/email.js";
+import { sendOtpEmail, sendPasswordResetEmail }  from "../../config/email.js";
 import { AppError }      from "../../middleware/errorHandler.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -492,7 +492,107 @@ const changePassword = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// ══════════════════════════════════════════════════════════════
+//  FORGOT PASSWORD  →  POST { email }
+// ══════════════════════════════════════════════════════════════
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return next(new AppError("Email is required.", 400));
+
+    // Resolve tenant DB
+    const { db, tenantRow } = await resolveDb(email);
+
+    // If tenant exists, generate OTP
+    if (tenantRow) {
+      const [rows] = await db.execute(
+        "SELECT user_id, name, provider FROM users WHERE email = ?", [email]
+      );
+      // Only local users can reset passwords
+      if (rows.length > 0 && rows[0].provider === "local") {
+        const userId = rows[0].user_id;
+        // Generate new OTP with slightly longer expiry (10 mins)
+        await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
+        const code   = generateOtp();
+        const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+        await db.execute(
+          "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
+          [uuidv4(), userId, code, expiry]
+        );
+        sendPasswordResetEmail(email, rows[0].name, code).catch(e => console.warn(e));
+      }
+    }
+
+    // Always return success to prevent email enumeration
+    res.json({
+      success: true,
+      message: "If an account exists, a password reset code has been sent.",
+    });
+  } catch (error) { next(error); }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  VERIFY RESET OTP  →  POST { email, code }
+// ══════════════════════════════════════════════════════════════
+const verifyResetOtp = async (req, res, next) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) return next(new AppError("Email and code are required.", 400));
+
+    const { db, tenantRow } = await resolveDb(email);
+    if (!tenantRow) return next(new AppError("Invalid or expired OTP.", 400));
+
+    const [userRows] = await db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
+    if (!userRows.length) return next(new AppError("Invalid or expired OTP.", 400));
+
+    const [otpRows] = await db.execute(
+      "SELECT id, expiry FROM email_otps WHERE user_id = ? AND code = ? ORDER BY createdAt DESC LIMIT 1",
+      [userRows[0].user_id, code]
+    );
+
+    if (!otpRows.length || new Date() > new Date(otpRows[0].expiry))
+      return next(new AppError("Invalid or expired OTP.", 400));
+
+    res.json({ success: true, message: "OTP verified." });
+  } catch (error) { next(error); }
+};
+
+// ══════════════════════════════════════════════════════════════
+//  RESET PASSWORD  →  POST { email, code, newPassword }
+// ══════════════════════════════════════════════════════════════
+const resetPassword = async (req, res, next) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword)
+      return next(new AppError("Email, code, and new password are required.", 400));
+    if (newPassword.length < 6)
+      return next(new AppError("Password must be at least 6 characters.", 400));
+
+    const { db, tenantRow } = await resolveDb(email);
+    if (!tenantRow) return next(new AppError("Invalid or expired OTP.", 400));
+
+    const [userRows] = await db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
+    if (!userRows.length) return next(new AppError("Invalid or expired OTP.", 400));
+
+    const userId = userRows[0].user_id;
+    const [otpRows] = await db.execute(
+      "SELECT id, expiry FROM email_otps WHERE user_id = ? AND code = ? ORDER BY createdAt DESC LIMIT 1",
+      [userId, code]
+    );
+
+    if (!otpRows.length || new Date() > new Date(otpRows[0].expiry))
+      return next(new AppError("Invalid or expired OTP.", 400));
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await db.execute("UPDATE users SET password = ? WHERE user_id = ?", [hashed, userId]);
+    await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
+
+    res.json({ success: true, message: "Password reset successfully. You can now sign in." });
+  } catch (error) { next(error); }
+};
+
 export {
   signup, verifyEmail, resendOtp, login, googleAuth,
+  forgotPassword, verifyResetOtp, resetPassword,
   refreshToken, logout, getMe, changePassword,
 };

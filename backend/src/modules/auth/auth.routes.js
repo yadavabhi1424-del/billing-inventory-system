@@ -1,6 +1,7 @@
 import { Router }  from "express";
 import {
   signup, verifyEmail, resendOtp, login, googleAuth,
+  forgotPassword, verifyResetOtp, resetPassword,
   refreshToken, logout, getMe, changePassword,
 } from "./auth.controller.js";
 import { protect } from "../../middleware/auth.js";
@@ -8,12 +9,15 @@ import { protect } from "../../middleware/auth.js";
 const router = Router();
 
 // Public
-router.post("/signup",        signup);
-router.post("/verify-email",  verifyEmail);
-router.post("/resend-otp",    resendOtp);
-router.post("/login",         login);
-router.post("/google",        googleAuth);
-router.post("/refresh-token", refreshToken);
+router.post("/signup",           signup);
+router.post("/verify-email",     verifyEmail);
+router.post("/resend-otp",       resendOtp);
+router.post("/login",            login);
+router.post("/google",           googleAuth);
+router.post("/forgot-password",  forgotPassword);
+router.post("/verify-reset-otp", verifyResetOtp);
+router.post("/reset-password",   resetPassword);
+router.post("/refresh-token",    refreshToken);
 
 // Protected
 router.post("/logout",          protect, logout);
