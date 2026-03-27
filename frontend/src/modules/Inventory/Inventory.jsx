@@ -23,24 +23,24 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
   const isEdit = !!product;
 
   const [form, setForm] = useState({
-    name:         product?.name         || '',
-    sku:          product?.sku          || '',
+    name: product?.name || '',
+    sku: product?.sku || '',
     sellingPrice: product?.sellingPrice || '',
-    costPrice:    product?.costPrice    || '',
-    stock:        product?.stock        || '',
-    unit:         product?.unit         || 'pcs',
-    taxRate:      product?.taxRate      || '0',
+    costPrice: product?.costPrice || '',
+    stock: product?.stock || '',
+    unit: product?.unit || 'pcs',
+    taxRate: product?.taxRate || '0',
     minStockLevel: product?.minStockLevel || '',
-    categoryId:   product?.category_id  || '',
-    supplierId:   product?.supplier_id  || '',
-    barcode:      product?.barcode      || '',
-    expiryDate:   product?.expiryDate?.split('T')[0] || '',
-    image:        null,
+    categoryId: product?.category_id || '',
+    supplierId: product?.supplier_id || '',
+    barcode: product?.barcode || '',
+    expiryDate: product?.expiryDate?.split('T')[0] || '',
+    image: null,
   });
 
-  const [errors,       setErrors]       = useState({});
+  const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
-  const [saving,       setSaving]       = useState(false);
+  const [saving, setSaving] = useState(false);
   const [predictedSku, setPredictedSku] = useState('Generating...');
 
   useEffect(() => {
@@ -59,13 +59,17 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
   }, [isEdit]);
 
   // Searchable select state
-  const [catSearch,    setCatSearch]    = useState('');
-  const [catOpen,      setCatOpen]      = useState(false);
-  const [supSearch,    setSupSearch]    = useState('');
-  const [supOpen,      setSupOpen]      = useState(false);
-  const [creatingCat,  setCreatingCat]  = useState(false);
+  const [catSearch, setCatSearch] = useState('');
+  const [catOpen, setCatOpen] = useState(false);
+  const [supSearch, setSupSearch] = useState('');
+  const [supOpen, setSupOpen] = useState(false);
+  const [creatingCat, setCreatingCat] = useState(false);
+  const [unitOpen, setUnitOpen] = useState(false);
+  const [gstOpen, setGstOpen] = useState(false);
   const catRef = useRef(null);
   const supRef = useRef(null);
+  const unitRef = useRef(null);
+  const gstRef = useRef(null);
 
   // Debounced search values
   const [catDebounced, setCatDebounced] = useState('');
@@ -77,6 +81,8 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
     const handleClick = (e) => {
       if (catRef.current && !catRef.current.contains(e.target)) setCatOpen(false);
       if (supRef.current && !supRef.current.contains(e.target)) setSupOpen(false);
+      if (unitRef.current && !unitRef.current.contains(e.target)) setUnitOpen(false);
+      if (gstRef.current && !gstRef.current.contains(e.target)) setGstOpen(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -136,11 +142,11 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())                           e.name         = 'Product name is required';
+    if (!form.name.trim()) e.name = 'Product name is required';
     if (!form.sellingPrice || form.sellingPrice <= 0) e.sellingPrice = 'Price must be greater than 0';
-    if (form.stock === '' || form.stock < 0)         e.stock        = 'Stock cannot be negative';
+    if (form.stock === '' || form.stock < 0) e.stock = 'Stock cannot be negative';
     if (!form.minStockLevel && form.minStockLevel !== 0) e.minStockLevel = 'Min stock is required';
-    if (!form.categoryId)                            e.categoryId   = 'Category is required';
+    if (!form.categoryId) e.categoryId = 'Category is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -153,7 +159,7 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    
+
     if (hasLoss) {
       if (!window.confirm(`Warning: Selling price (₹${sp}) is less than Cost price (₹${cp}). This results in a loss of ₹${lossAmount.toFixed(2)} per item.\n\nAre you sure you want to save?`)) {
         return;
@@ -227,14 +233,14 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
                 <div className="product-form__field">
                   <label className="product-form__label">SKU</label>
                   <input type="text" className="product-form__input"
-                    value={form.sku} readOnly disabled style={{background: 'rgba(255,255,255,0.02)', color: 'var(--color-text-muted)'}} />
+                    value={form.sku} readOnly disabled style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--color-text-muted)' }} />
                   <span className="product-form__hint">SKU cannot be changed</span>
                 </div>
               ) : (
                 <div className="product-form__field">
                   <label className="product-form__label">SKU</label>
                   <input type="text" className="product-form__input"
-                    value={predictedSku} readOnly disabled style={{background: 'rgba(255,255,255,0.02)', color: 'var(--color-text-muted)', fontStyle: 'italic'}} />
+                    value={predictedSku} readOnly disabled style={{ background: 'rgba(255,255,255,0.02)', color: 'var(--color-text-muted)', fontStyle: 'italic' }} />
                   <span className="product-form__hint">Prefix can be changed in Settings &gt; Inventory</span>
                 </div>
               )}
@@ -257,7 +263,7 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
                   <span className={selectedCat ? '' : 'product-form__select-placeholder'}>
                     {selectedCat ? selectedCat.name : 'Select category'}
                   </span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </div>
                 {catOpen && (
                   <div className="product-form__dropdown">
@@ -303,7 +309,7 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
                   <span className={selectedSup ? '' : 'product-form__select-placeholder'}>
                     {selectedSup ? selectedSup.name : 'Select supplier'}
                   </span>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </div>
                 {supOpen && (
                   <div className="product-form__dropdown">
@@ -356,54 +362,80 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
               </div>
 
               {/* GST */}
-              <div className="product-form__field">
+              <div className={`product-form__field product-form__searchable-select ${gstOpen ? 'is-open' : ''}`} ref={gstRef}>
                 <label className="product-form__label">GST Rate (%)</label>
-                <select className="product-form__input" value={form.taxRate}
-                  onChange={e => set('taxRate', e.target.value)}>
-                  {[0, 5, 12, 18, 28].map(r => (
-                    <option key={r} value={r}>{r}%</option>
-                  ))}
-                </select>
+                <div
+                  className="product-form__input product-form__select-trigger"
+                  onClick={() => setGstOpen(o => !o)}
+                >
+                  <span>{form.taxRate}%</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                </div>
+                {gstOpen && (
+                  <div className="product-form__dropdown">
+                    <div className="product-form__dropdown-list">
+                      {[0, 5, 12, 18, 28].map(r => (
+                        <div key={r} className="product-form__dropdown-item"
+                          onClick={() => { set('taxRate', r.toString()); setGstOpen(false); }}>
+                          {r}%
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-{/* Stock */}
-<div className="product-form__field">
-  <label className="product-form__label">
-    Current Stock *
-    {isEdit && (
-      <span style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginLeft: '0.5rem', fontWeight: 400 }}>
-        ⚠️ Can only increase stock here. Use Stock Adjustment for corrections.
-      </span>
-    )}
-  </label>
-  <input type="number" step="1"
-    className={`product-form__input ${errors.stock ? 'product-form__input--error' : ''}`}
-    placeholder="48" value={form.stock}
-    min={isEdit ? product?.stock : 0}  // ← can't go below current stock
-    onChange={e => {
-      const val = parseInt(e.target.value);
-      if (isEdit && val < (product?.stock || 0)) {
-        setErrors(prev => ({ ...prev, stock: `Stock cannot be decreased. Current: ${product?.stock}` }));
-        return;
-      }
-      set('stock', e.target.value);
-    }} />
-  {errors.stock && <span className="product-form__error">{errors.stock}</span>}
-  {isEdit && (
-    <span className="product-form__hint">
-      Current: {product?.stock} {product?.unit}. You can only add more stock here.
-    </span>
-  )}
-</div>
+              {/* Stock */}
+              <div className="product-form__field">
+                <label className="product-form__label">
+                  Current Stock *
+                  {isEdit && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginLeft: '0.5rem', fontWeight: 400 }}>
+                      ⚠️ Can only increase stock here. Use Stock Adjustment for corrections.
+                    </span>
+                  )}
+                </label>
+                <input type="number" step="1"
+                  className={`product-form__input ${errors.stock ? 'product-form__input--error' : ''}`}
+                  placeholder="48" value={form.stock}
+                  min={isEdit ? product?.stock : 0}  // ← can't go below current stock
+                  onChange={e => {
+                    const val = parseInt(e.target.value);
+                    if (isEdit && val < (product?.stock || 0)) {
+                      setErrors(prev => ({ ...prev, stock: `Stock cannot be decreased. Current: ${product?.stock}` }));
+                      return;
+                    }
+                    set('stock', e.target.value);
+                  }} />
+                {errors.stock && <span className="product-form__error">{errors.stock}</span>}
+                {isEdit && (
+                  <span className="product-form__hint">
+                    Current: {product?.stock} {product?.unit}. You can only add more stock here.
+                  </span>
+                )}
+              </div>
 
               {/* Unit */}
-              <div className="product-form__field">
+              <div className={`product-form__field product-form__searchable-select ${unitOpen ? 'is-open' : ''}`} ref={unitRef}>
                 <label className="product-form__label">Unit</label>
-                <select className="product-form__input" value={form.unit}
-                  onChange={e => set('unit', e.target.value)}>
-                  {['pcs', 'kg', 'L', 'box', 'pack', 'dozen'].map(u => (
-                    <option key={u} value={u}>{u}</option>
-                  ))}
-                </select>
+                <div
+                  className="product-form__input product-form__select-trigger"
+                  onClick={() => setUnitOpen(o => !o)}
+                >
+                  <span>{form.unit}</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                </div>
+                {unitOpen && (
+                  <div className="product-form__dropdown">
+                    <div className="product-form__dropdown-list">
+                      {['pcs', 'kg', 'L', 'box', 'pack', 'dozen'].map(u => (
+                        <div key={u} className="product-form__dropdown-item"
+                          onClick={() => { set('unit', u); setUnitOpen(false); }}>
+                          {u}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Min Stock */}
@@ -446,68 +478,68 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
 //  MAIN INVENTORY
 // ══════════════════════════════════════════════════════════
 export default function Inventory() {
-  const [products,  setProducts]  = useState([]);
+  const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [search,    setSearch]    = useState('');
-  const [selected,  setSelected]  = useState(null);
-  const [showAdd,   setShowAdd]   = useState(false);
-  const [showEdit,  setShowEdit]  = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
- const fetchAll = async () => {
-  try {
-    setLoading(true);
-    const [prodRes, catRes, supRes] = await Promise.all([
-      getProducts({ limit: 100 }),
-      getCategories(),
-      getSuppliers(),
-    ]);
-    if (prodRes.success) setProducts(prodRes.data);
-    if (catRes.success)  setCategories(catRes.data);
-    if (supRes.success)  setSuppliers(supRes.data);
-  } catch (err) {
-    console.error('Inventory fetch error:', err.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  const fetchAll = async () => {
+    try {
+      setLoading(true);
+      const [prodRes, catRes, supRes] = await Promise.all([
+        getProducts({ limit: 100 }),
+        getCategories(),
+        getSuppliers(),
+      ]);
+      if (prodRes.success) setProducts(prodRes.data);
+      if (catRes.success) setCategories(catRes.data);
+      if (supRes.success) setSuppliers(supRes.data);
+    } catch (err) {
+      console.error('Inventory fetch error:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
   const handleAdd = async (formData) => {
     await createProduct(formData);
     setShowAdd(false);
     fetchAll();
   };
 
- const handleEdit = async (formData) => {
-  try {
-    // Send plain JSON — no FormData for edit
-    const payload = {
-      name:          formData.get('name'),
-      sellingPrice:  formData.get('sellingPrice'),
-      costPrice:     formData.get('costPrice'),
-      stock:         formData.get('stock'),
-      unit:          formData.get('unit'),
-      taxRate:       formData.get('taxRate'),
-      minStockLevel: formData.get('minStockLevel'),
-      categoryId:    formData.get('categoryId'),
-      supplierId:    formData.get('supplierId'),
-      barcode:       formData.get('barcode'),
-      expiryDate:    formData.get('expiryDate'),
-    };
+  const handleEdit = async (formData) => {
+    try {
+      // Send plain JSON — no FormData for edit
+      const payload = {
+        name: formData.get('name'),
+        sellingPrice: formData.get('sellingPrice'),
+        costPrice: formData.get('costPrice'),
+        stock: formData.get('stock'),
+        unit: formData.get('unit'),
+        taxRate: formData.get('taxRate'),
+        minStockLevel: formData.get('minStockLevel'),
+        categoryId: formData.get('categoryId'),
+        supplierId: formData.get('supplierId'),
+        barcode: formData.get('barcode'),
+        expiryDate: formData.get('expiryDate'),
+      };
 
-    const res = await updateProduct(selected.product_id, payload);
-    if (res.success) {
-      setShowEdit(false);
-      setSelected(null);
-      fetchAll();
+      const res = await updateProduct(selected.product_id, payload);
+      if (res.success) {
+        setShowEdit(false);
+        setSelected(null);
+        fetchAll();
+      }
+    } catch (err) {
+      console.error('Update error:', err.message);
+      alert('Update failed: ' + err.message);
     }
-  } catch (err) {
-    console.error('Update error:', err.message);
-    alert('Update failed: ' + err.message);
-  }
-};
+  };
 
   const handleDelete = async (e, product) => {
     e.stopPropagation();
@@ -522,9 +554,9 @@ export default function Inventory() {
   );
 
   // Stats
-  const lowStock  = products.filter(p => p.stock > 0 && p.stock <= p.minStockLevel).length;
-  const outStock  = products.filter(p => p.stock === 0).length;
-  const expiring  = products.filter(p => p.expiryDate &&
+  const lowStock = products.filter(p => p.stock > 0 && p.stock <= p.minStockLevel).length;
+  const outStock = products.filter(p => p.stock === 0).length;
+  const expiring = products.filter(p => p.expiryDate &&
     new Date(p.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)).length;
 
   const statusBadge = (stock, min) => {
@@ -544,10 +576,10 @@ export default function Inventory() {
       {/* Stats */}
       <div className="inventory-stats">
         {[
-          { label: 'Total Products', value: products.length, icon: 'box',   bg: 'var(--color-accent-soft)',   color: 'var(--color-accent-primary)' },
-          { label: 'Low Stock',      value: lowStock,         icon: 'alert', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)'        },
-          { label: 'Expiring Soon',  value: expiring,         icon: 'alert', bg: 'rgba(245,158,11,0.15)',     color: '#f59e0b'                      },
-          { label: 'Out of Stock',   value: outStock,         icon: 'x',     bg: 'var(--color-danger-soft)',  color: 'var(--color-danger)'          },
+          { label: 'Total Products', value: products.length, icon: 'box', bg: 'var(--color-accent-soft)', color: 'var(--color-accent-primary)' },
+          { label: 'Low Stock', value: lowStock, icon: 'alert', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)' },
+          { label: 'Expiring Soon', value: expiring, icon: 'alert', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+          { label: 'Out of Stock', value: outStock, icon: 'x', bg: 'var(--color-danger-soft)', color: 'var(--color-danger)' },
         ].map(s => (
           <div key={s.label} className="inventory-stat-card">
             <div className="inventory-stat-card__icon" style={{ background: s.bg, color: s.color }}>
@@ -604,7 +636,7 @@ export default function Inventory() {
                   <td>
                     {p.image
                       ? <img src={`http://localhost:5000/uploads/${p.image}`} alt={p.name}
-                          style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover' }} />
+                        style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover' }} />
                       : <div className="inventory-image-placeholder"><Icon name="box" size={20} /></div>
                     }
                   </td>
@@ -651,7 +683,7 @@ export default function Inventory() {
               <div className="inventory-detail-image">
                 {selected.image
                   ? <img src={`http://localhost:5000/uploads/${selected.image}`} alt={selected.name}
-                      style={{ width: 80, height: 80, borderRadius: 8, objectFit: 'cover' }} />
+                    style={{ width: 80, height: 80, borderRadius: 8, objectFit: 'cover' }} />
                   : <Icon name="box" size={64} />
                 }
               </div>
@@ -659,22 +691,28 @@ export default function Inventory() {
               <p className="inventory-detail-sku">SKU: {selected.sku}</p>
 
               {[
-                { title: 'Pricing', rows: [
-                  ['Selling Price', fmt(selected.sellingPrice)],
-                  ['Cost Price',    fmt(selected.costPrice || 0)],
-                  ['GST Rate',      `${selected.taxRate}%`],
-                ]},
-                { title: 'Stock', rows: [
-                  ['Current Stock', `${selected.stock} ${selected.unit}`],
-                  ['Min Level',     `${selected.minStockLevel} ${selected.unit}`],
-                  ['Status',        statusBadge(selected.stock, selected.minStockLevel)],
-                ]},
-                { title: 'Info', rows: [
-                  ['Category', selected.categoryName || '—'],
-                  ['Supplier', selected.supplierName || '—'],
-                  ['Barcode',  selected.barcode      || '—'],
-                  ['Expiry',   selected.expiryDate ? new Date(selected.expiryDate).toLocaleDateString('en-IN') : 'N/A'],
-                ]},
+                {
+                  title: 'Pricing', rows: [
+                    ['Selling Price', fmt(selected.sellingPrice)],
+                    ['Cost Price', fmt(selected.costPrice || 0)],
+                    ['GST Rate', `${selected.taxRate}%`],
+                  ]
+                },
+                {
+                  title: 'Stock', rows: [
+                    ['Current Stock', `${selected.stock} ${selected.unit}`],
+                    ['Min Level', `${selected.minStockLevel} ${selected.unit}`],
+                    ['Status', statusBadge(selected.stock, selected.minStockLevel)],
+                  ]
+                },
+                {
+                  title: 'Info', rows: [
+                    ['Category', selected.categoryName || '—'],
+                    ['Supplier', selected.supplierName || '—'],
+                    ['Barcode', selected.barcode || '—'],
+                    ['Expiry', selected.expiryDate ? new Date(selected.expiryDate).toLocaleDateString('en-IN') : 'N/A'],
+                  ]
+                },
               ].map(section => (
                 <div key={section.title} className="inventory-detail-section">
                   <h4>{section.title}</h4>

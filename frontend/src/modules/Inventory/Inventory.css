@@ -163,7 +163,12 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow-y: auto;
-  max-height: 380px; /* ~4.5 rows to hint scroll */
+  max-height: 365px; /* ~5 rows + header */
+}
+
+.inventory-table-wrapper::-webkit-scrollbar-track {
+  margin-top: 44px;
+  margin-bottom: 10px; /* Offset to start below sticky header */
 }
 
 .inventory-table {
@@ -184,7 +189,8 @@
   text-transform: uppercase;
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
-  box-shadow: 0 1px 0 var(--color-border); /* Fake border to stick with header */
+  box-shadow: 0 1px 0 var(--color-border);
+  /* Fake border to stick with header */
 }
 
 .inventory-table td {
@@ -853,7 +859,7 @@
 }
 
 .product-form__dropdown-list {
-  max-height: 180px;
+  max-height: 140px; /* ~4 items */
   overflow-y: auto;
 }
 

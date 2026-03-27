@@ -89,10 +89,10 @@ function InvoiceModal({ invoice, onClose }) {
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>{item.sku}</div>
                   </td>
                   <td>{item.taxRate || 0}%</td>
-                  <td style={{ textAlign: 'right' }}>{item.qty}</td>
+                  <td style={{ textAlign: 'right' }}>{parseInt(item.qty) || 1}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmt(item.sellingPrice)}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
-                    {fmt(item.sellingPrice * item.qty)}
+                    {fmt(item.sellingPrice * (parseInt(item.qty) || 1))}
                   </td>
                 </tr>
               ))}
@@ -272,7 +272,27 @@ export default function Payment({ user }) {
   const updateQty = (id, delta) => {
     setCart(prev =>
       prev
-        .map(i => i.product_id === id ? { ...i, qty: Math.max(0, i.qty + delta) } : i)
+        .map(i => {
+           if (i.product_id === id) {
+             const currentQty = parseInt(i.qty) || 0;
+             return { ...i, qty: Math.max(0, currentQty + delta) };
+           }
+           return i;
+        })
+        .filter(i => i.qty > 0)
+    );
+  };
+
+  const handleManualQty = (id, val) => {
+    const newQty = val === '' ? '' : parseInt(val, 10);
+    if (val !== '' && isNaN(newQty)) return;
+    setCart(prev => prev.map(i => i.product_id === id ? { ...i, qty: newQty } : i));
+  };
+
+  const handleQtyBlur = (id) => {
+    setCart(prev =>
+      prev
+        .map(i => i.product_id === id && (i.qty === '' || i.qty <= 0) ? { ...i, qty: 0 } : i)
         .filter(i => i.qty > 0)
     );
   };
@@ -285,7 +305,7 @@ export default function Payment({ user }) {
   };
 
   // ── Calculations ────────────────────────────────────────────
-  const subtotal    = cart.reduce((sum, i) => sum + i.sellingPrice * i.qty, 0);
+  const subtotal    = cart.reduce((sum, i) => sum + i.sellingPrice * (parseInt(i.qty) || 0), 0);
   const discountAmt = discountVal
     ? discountType === '%'
       ? (subtotal * parseFloat(discountVal)) / 100
@@ -297,7 +317,7 @@ export default function Payment({ user }) {
   const gstGroups = cart.reduce((acc, item) => {
     const key = item.taxRate || 0;
     if (!acc[key]) acc[key] = 0;
-    acc[key] += item.sellingPrice * item.qty;
+    acc[key] += item.sellingPrice * (parseInt(item.qty) || 0);
     return acc;
   }, {});
 
@@ -328,7 +348,7 @@ export default function Payment({ user }) {
         notes:         `Customer: ${customerName}${customerPhone ? ' | Ph: ' + customerPhone : ''}`,
         items: cart.map(item => ({
           productId:    item.product_id,
-          quantity:     item.qty,
+          quantity:     parseInt(item.qty) || 1,
           sellingPrice: item.sellingPrice,
         })),
       };
@@ -439,10 +459,14 @@ export default function Payment({ user }) {
                 onClick={() => p.stock > 0 && addToCart(p)}
                 style={{ opacity: p.stock === 0 ? 0.5 : 1, cursor: p.stock === 0 ? 'not-allowed' : 'pointer' }}
               >
-                <span className={`product-card__badge product-card__badge--${
-                  p.stock === 0 ? 'red' : p.stock <= p.minStockLevel ? 'yellow' : 'green'
-                }`}>
-                  {p.stock === 0 ? 'Out of Stock' : p.stock <= p.minStockLevel ? 'Low Stock' : 'In Stock'}
+                <span 
+                  className={`product-card__badge product-card__badge--${
+                    p.stock === 0 ? 'danger' : p.stock <= p.minStockLevel ? 'warning' : 'success'
+                  }`}
+                  title={p.stock === 0 ? 'Out of Stock' : p.stock <= p.minStockLevel ? 'Low Stock' : 'In Stock'}
+                  style={{ padding: '0.25rem 0.5rem', minWidth: 'unset', fontSize: '0.8rem' }}
+                >
+                  {p.stock === 0 ? '✕' : p.stock <= p.minStockLevel ? '⚠' : '✓'}
                 </span>
                 <div className="product-card__name">{p.name}</div>
                 <div className="product-card__sku">{p.sku}</div>
@@ -495,10 +519,20 @@ export default function Payment({ user }) {
                 </div>
                 <div className="bill-item__qty">
                   <button className="bill-item__qty-btn" onClick={() => updateQty(item.product_id, -1)}>−</button>
-                  <span className="bill-item__qty-val">{item.qty}</span>
+                  <input
+                    className="bill-item__qty-input"
+                    value={item.qty}
+                    onChange={(e) => handleManualQty(item.product_id, e.target.value)}
+                    onBlur={() => handleQtyBlur(item.product_id)}
+                    style={{
+                      width: '40px', textAlign: 'center', background: 'transparent',
+                      border: '1px solid var(--border-color)', color: 'inherit',
+                      borderRadius: '4px', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
                   <button className="bill-item__qty-btn" onClick={() => updateQty(item.product_id, +1)}>+</button>
                 </div>
-                <span className="bill-item__total">{fmt(item.sellingPrice * item.qty)}</span>
+                <span className="bill-item__total">{fmt(item.sellingPrice * (parseInt(item.qty) || 0))}</span>
                 <button className="bill-item__remove" onClick={() => removeItem(item.product_id)}>
                   <Icon name="x" size={14} />
                 </button>

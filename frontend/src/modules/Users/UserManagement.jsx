@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
 import { getUsers, createUser, updateUser, deleteUser } from '../../services/api';
 import './UserManagement.css';
@@ -26,6 +26,16 @@ function CreateUserModal({ onClose, onSave }) {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [roleOpen, setRoleOpen] = useState(false);
+  const roleRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (roleRef.current && !roleRef.current.contains(e.target)) setRoleOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const set = (f, v) => {
     setForm(p => ({ ...p, [f]: v }));
@@ -86,14 +96,23 @@ function CreateUserModal({ onClose, onSave }) {
             </div>
           ))}
 
-          <div className="um-field">
+          <div className="um-field" ref={roleRef}>
             <label className="um-field__label">Role *</label>
-            <select value={form.role} onChange={e => set('role', e.target.value)}
-              className="um-field__input">
-              {ROLES.map(r => (
-                <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>
-              ))}
-            </select>
+            <div className={`um-field__input um-select-trigger um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} onClick={() => setRoleOpen(o => !o)}>
+              <span>{ROLES.find(r => r.value === form.role)?.label || form.role}</span>
+              <Icon name="chevron-down" size={14} />
+            </div>
+            {roleOpen && (
+              <div className="um-dropdown-menu">
+                <div className="um-dropdown-list">
+                  {ROLES.map(r => (
+                    <div key={r.value} className="um-dropdown-item" onClick={() => { set('role', r.value); setRoleOpen(false); }}>
+                      {r.label} — {r.desc}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <div className="um-field__error" style={{ marginTop: 8 }}>{error}</div>}
@@ -119,6 +138,16 @@ function InviteUserModal({ onClose }) {
   const [role, setRole] = useState('CASHIER');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [roleOpen, setRoleOpen] = useState(false);
+  const roleRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (roleRef.current && !roleRef.current.contains(e.target)) setRoleOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const handleInvite = (e) => {
     e.preventDefault();
@@ -159,14 +188,23 @@ function InviteUserModal({ onClose }) {
                   placeholder="staff@email.com"
                   value={email} onChange={e => setEmail(e.target.value)} />
               </div>
-              <div className="um-field">
+              <div className="um-field" ref={roleRef}>
                 <label className="um-field__label">Role *</label>
-                <select className="um-field__input" value={role}
-                  onChange={e => setRole(e.target.value)}>
-                  {ROLES.map(r => (
-                    <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>
-                  ))}
-                </select>
+                <div className={`um-field__input um-select-trigger um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} onClick={() => setRoleOpen(o => !o)}>
+                  <span>{ROLES.find(r => r.value === role)?.label || role}</span>
+                  <Icon name="chevron-down" size={14} />
+                </div>
+                {roleOpen && (
+                  <div className="um-dropdown-menu">
+                    <div className="um-dropdown-list">
+                      {ROLES.map(r => (
+                        <div key={r.value} className="um-dropdown-item" onClick={() => { setRole(r.value); setRoleOpen(false); }}>
+                          {r.label} — {r.desc}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               {error && <div className="um-field__error">{error}</div>}
               <div className="um-modal__footer">
@@ -191,6 +229,16 @@ export default function UserManagement({ user: currentUser }) {
   const [roleFilter, setRoleFilter] = useState('all');
   const [showCreate, setShowCreate] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [roleOpen, setRoleOpen] = useState(false);
+  const roleRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (roleRef.current && !roleRef.current.contains(e.target)) setRoleOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -249,11 +297,24 @@ export default function UserManagement({ user: currentUser }) {
           <input className="um-search__input" placeholder="Search members..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
-        <select className="um-select" value={roleFilter}
-          onChange={e => setRoleFilter(e.target.value)}>
-          <option value="all">All Roles</option>
-          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-        </select>
+        <div className={`um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} ref={roleRef} style={{ width: '160px' }}>
+          <div className="um-select um-select-trigger" onClick={() => setRoleOpen(o => !o)}>
+            <span>{roleFilter === 'all' ? 'All Roles' : ROLES.find(r => r.value === roleFilter)?.label || roleFilter}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {roleOpen && (
+            <div className="um-dropdown-menu">
+              <div className="um-dropdown-list">
+                <div className="um-dropdown-item" onClick={() => { setRoleFilter('all'); setRoleOpen(false); }}>All Roles</div>
+                {ROLES.map(r => (
+                  <div key={r.value} className="um-dropdown-item" onClick={() => { setRoleFilter(r.value); setRoleOpen(false); }}>
+                    {r.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         <button className="um-btn um-btn--secondary um-btn--ml"
           onClick={() => setShowInvite(true)}>
           Invite by Email

@@ -40,7 +40,7 @@ async function resolveDb(email) {
     const db = await getTenantPool(rows[0].db_name);
     return { db, tenantRow: rows[0], dbName: rows[0].db_name };
   }
-  return { db: pool, tenantRow: null, dbName: null };
+  return { db: null, tenantRow: null, dbName: null };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -49,7 +49,16 @@ async function resolveDb(email) {
 // ══════════════════════════════════════════════════════════════
 const signup = async (req, res, next) => {
   try {
-    const { name, email, password, phone, shopType = 'other' } = req.body;
+    // ── Cleanup abandoned signups (older than 24 hours) from the staging pool
+    try {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      await pool.execute("DELETE FROM users WHERE emailVerified = FALSE AND createdAt < ?", [oneDayAgo]);
+      await pool.execute("DELETE FROM email_otps WHERE createdAt < ?", [oneDayAgo]);
+    } catch (cleanupErr) {
+      console.warn("Cleanup error:", cleanupErr.message);
+    }
+
+    const { name, email, password, phone, shopName, shopType = 'other' } = req.body;
 
     if (!name || !email || !password)
       return next(new AppError("Name, email, and password are required.", 400));
@@ -102,7 +111,7 @@ const signup = async (req, res, next) => {
     // Simplest clean approach: store shopName in the users table verifyToken field temporarily
     await pool.execute(
       "UPDATE users SET verifyToken = ? WHERE user_id = ?",
-      [JSON.stringify({ shopName, shopType }), userId]
+      [JSON.stringify({ shopName: shopName || `${name}'s Shop`, shopType }), userId]
     );
 
     const code = await saveOtp(pool, userId);
@@ -376,9 +385,40 @@ const googleAuth = async (req, res, next) => {
         user.avatar = picture;
       }
     } else {
-      // New Google user
+      // New Google user - Must provision a tenant DB, not use the fallback pool
       const userId = uuidv4();
       const userName = name || email.split("@")[0];
+      const tenantId = uuidv4();
+      
+      let shopName = userName + "'s Shop";
+      const shopSlug = shopName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40) + '_' + tenantId.slice(0, 6);
+      dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
+
+      // Insert tenant record in master DB
+      await masterPool.execute(
+        `INSERT INTO tenants
+          (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, 'TRIAL')`,
+        [tenantId, shopName, shopSlug, userName, email, dbName]
+      );
+
+      // Attach a FREE subscription
+      await masterPool.execute(
+        `INSERT INTO subscriptions
+          (sub_id, tenant_id, plan, status, max_users, max_products, ai_enabled, reports_enabled, expires_at)
+         SELECT ?, ?, plan_name, 'ACTIVE', max_users, max_products, ai_enabled, reports_enabled,
+                DATE_ADD(NOW(), INTERVAL 30 DAY)
+         FROM plans WHERE plan_name = 'FREE'`,
+        [uuidv4(), tenantId]
+      );
+
+      // Create the tenant's MySQL database and run all schema migrations
+      await provisionTenant(tenantId, dbName, 'other');
+
+      // Now set db to the newly provisioned tenant's db
+      db = await getTenantPool(dbName);
+      tenantRow = { tenant_id: tenantId, db_name: dbName };
+
       await db.execute(
         `INSERT INTO users
           (user_id, name, email, password, provider, role, avatar, status, isActive, emailVerified)

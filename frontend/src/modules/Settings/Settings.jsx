@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
 import {
   getMe, changePassword, updateMyProfile,
@@ -39,6 +39,20 @@ function ShopProfile() {
     address: '',
     gstin: '',
   });
+
+  const [currOpen, setCurrOpen] = useState(false);
+  const [tzOpen, setTzOpen] = useState(false);
+  const currRef = useRef(null);
+  const tzRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (currRef.current && !currRef.current.contains(e.target)) setCurrOpen(false);
+      if (tzRef.current && !tzRef.current.contains(e.target)) setTzOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   useEffect(() => {
     Promise.all([getShopProfile(), getShopTypes()])
@@ -122,19 +136,37 @@ function ShopProfile() {
             onChange={e => update('gstin', e.target.value.toUpperCase())}
             placeholder="07AABCT1234A1Z5" />
         </div>
-        <div className="settings-field">
+        <div className={`settings-field settings-dropdown-wrapper ${currOpen ? 'is-open' : ''}`} ref={currRef}>
           <label className="settings-label">Currency</label>
-          <select className="settings-input" value={form.currency}
-            onChange={e => update('currency', e.target.value)}>
-            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <div className="settings-input settings-select-trigger" onClick={() => setCurrOpen(o => !o)}>
+            <span>{form.currency}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {currOpen && (
+            <div className="settings-dropdown-menu">
+              <div className="settings-dropdown-list">
+                {CURRENCIES.map(c => (
+                  <div key={c} className="settings-dropdown-item" onClick={() => { update('currency', c); setCurrOpen(false); }}>{c}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="settings-field">
+        <div className={`settings-field settings-dropdown-wrapper ${tzOpen ? 'is-open' : ''}`} ref={tzRef}>
           <label className="settings-label">Timezone</label>
-          <select className="settings-input" value={form.timezone}
-            onChange={e => update('timezone', e.target.value)}>
-            {TIMEZONES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <div className="settings-input settings-select-trigger" onClick={() => setTzOpen(o => !o)}>
+            <span>{form.timezone}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {tzOpen && (
+            <div className="settings-dropdown-menu">
+              <div className="settings-dropdown-list">
+                {TIMEZONES.map(t => (
+                  <div key={t} className="settings-dropdown-item" onClick={() => { update('timezone', t); setTzOpen(false); }}>{t}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -190,6 +222,17 @@ function BillingSettings() {
     lowStockAlert: getLocal('lowStockAlert', 'true') === 'true',
   });
   const [saved, setSaved] = useState(false);
+  const [currOpen, setCurrOpen] = useState(false);
+  const currRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (currRef.current && !currRef.current.contains(e.target)) setCurrOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
   const handleSave = (e) => {
@@ -202,14 +245,21 @@ function BillingSettings() {
   return (
     <form className="settings-form" onSubmit={handleSave}>
       <div className="settings-grid">
-        <div className="settings-field">
+        <div className={`settings-field settings-dropdown-wrapper ${currOpen ? 'is-open' : ''}`} ref={currRef}>
           <label className="settings-label">Currency</label>
-          <select className="settings-input" value={form.currency}
-            onChange={e => set('currency', e.target.value)}>
-            <option value="INR">INR — Indian Rupee</option>
-            <option value="USD">USD — US Dollar</option>
-            <option value="EUR">EUR — Euro</option>
-          </select>
+          <div className="settings-input settings-select-trigger" onClick={() => setCurrOpen(o => !o)}>
+            <span>{form.currency} — {form.currency === 'INR' ? 'Indian Rupee' : form.currency === 'USD' ? 'US Dollar' : 'Euro'}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {currOpen && (
+            <div className="settings-dropdown-menu">
+              <div className="settings-dropdown-list">
+                {['INR', 'USD', 'EUR'].map(c => (
+                  <div key={c} className="settings-dropdown-item" onClick={() => { set('currency', c); setCurrOpen(false); }}>{c} — {c === 'INR' ? 'Indian Rupee' : c === 'USD' ? 'US Dollar' : 'Euro'}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="settings-field">
           <label className="settings-label">Currency Symbol</label>
@@ -393,6 +443,23 @@ function InventoryPreferences() {
     skuPrefix: getLocal('skuPrefix', 'SKU'),
   });
   const [saved, setSaved] = useState(false);
+  const [unitOpen, setUnitOpen] = useState(false);
+  const [taxOpen, setTaxOpen] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const unitRef = useRef(null);
+  const taxRef = useRef(null);
+  const barcodeRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (unitRef.current && !unitRef.current.contains(e.target)) setUnitOpen(false);
+      if (taxRef.current && !taxRef.current.contains(e.target)) setTaxOpen(false);
+      if (barcodeRef.current && !barcodeRef.current.contains(e.target)) setBarcodeOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   const set = (f, v) => setForm(p => ({ ...p, [f]: v }));
 
   const handleSave = (e) => {
@@ -405,14 +472,21 @@ function InventoryPreferences() {
   return (
     <form className="settings-form" onSubmit={handleSave}>
       <div className="settings-grid">
-        <div className="settings-field">
+        <div className={`settings-field settings-dropdown-wrapper ${unitOpen ? 'is-open' : ''}`} ref={unitRef}>
           <label className="settings-label">Default Unit</label>
-          <select className="settings-input" value={form.defaultUnit}
-            onChange={e => set('defaultUnit', e.target.value)}>
-            {['pcs', 'kg', 'g', 'ltr', 'ml', 'box', 'pack', 'dozen', 'meter', 'feet'].map(u =>
-              <option key={u} value={u}>{u}</option>
-            )}
-          </select>
+          <div className="settings-input settings-select-trigger" onClick={() => setUnitOpen(o => !o)}>
+            <span>{form.defaultUnit}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {unitOpen && (
+            <div className="settings-dropdown-menu">
+              <div className="settings-dropdown-list">
+                {['pcs', 'kg', 'g', 'ltr', 'ml', 'box', 'pack', 'dozen', 'meter', 'feet'].map(u => (
+                  <div key={u} className="settings-dropdown-item" onClick={() => { set('defaultUnit', u); setUnitOpen(false); }}>{u}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="settings-field">
           <label className="settings-label">SKU Prefix</label>
@@ -432,19 +506,37 @@ function InventoryPreferences() {
           <input className="settings-input" type="number" value={form.defaultTaxRate}
             onChange={e => set('defaultTaxRate', e.target.value)} min={0} max={100} placeholder="18" />
         </div>
-        <div className="settings-field">
+        <div className={`settings-field settings-dropdown-wrapper ${taxOpen ? 'is-open' : ''}`} ref={taxRef}>
           <label className="settings-label">Default Tax Type</label>
-          <select className="settings-input" value={form.defaultTaxType}
-            onChange={e => set('defaultTaxType', e.target.value)}>
-            {['GST', 'VAT', 'TAX', 'NONE'].map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+          <div className="settings-input settings-select-trigger" onClick={() => setTaxOpen(o => !o)}>
+            <span>{form.defaultTaxType}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {taxOpen && (
+            <div className="settings-dropdown-menu">
+              <div className="settings-dropdown-list">
+                {['GST', 'VAT', 'TAX', 'NONE'].map(t => (
+                  <div key={t} className="settings-dropdown-item" onClick={() => { set('defaultTaxType', t); setTaxOpen(false); }}>{t}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="settings-field">
+        <div className={`settings-field settings-dropdown-wrapper ${barcodeOpen ? 'is-open' : ''}`} ref={barcodeRef}>
           <label className="settings-label">Barcode Format</label>
-          <select className="settings-input" value={form.barcodeFormat}
-            onChange={e => set('barcodeFormat', e.target.value)}>
-            {['CODE128', 'EAN13', 'EAN8', 'QR', 'UPC'].map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
+          <div className="settings-input settings-select-trigger" onClick={() => setBarcodeOpen(o => !o)}>
+            <span>{form.barcodeFormat}</span>
+            <Icon name="chevron-down" size={14} />
+          </div>
+          {barcodeOpen && (
+            <div className="settings-dropdown-menu">
+              <div className="settings-dropdown-list">
+                {['CODE128', 'EAN13', 'EAN8', 'QR', 'UPC'].map(b => (
+                  <div key={b} className="settings-dropdown-item" onClick={() => { set('barcodeFormat', b); setBarcodeOpen(false); }}>{b}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="settings-footer">
