@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
-import { getUsers, createUser, updateUser, deleteUser } from '../../services/api';
+import { getUsers, createUser, updateUser, deleteUser, inviteUser } from '../../services/api';
 import './UserManagement.css';
 
 const ROLE_COLORS = {
@@ -96,9 +96,9 @@ function CreateUserModal({ onClose, onSave }) {
             </div>
           ))}
 
-          <div className="um-field" ref={roleRef}>
+          <div className={`um-field um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} ref={roleRef}>
             <label className="um-field__label">Role *</label>
-            <div className={`um-field__input um-select-trigger um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} onClick={() => setRoleOpen(o => !o)}>
+            <div className="um-field__input um-select-trigger" onClick={() => setRoleOpen(o => !o)}>
               <span>{ROLES.find(r => r.value === form.role)?.label || form.role}</span>
               <Icon name="chevron-down" size={14} />
             </div>
@@ -138,6 +138,7 @@ function InviteUserModal({ onClose }) {
   const [role, setRole] = useState('CASHIER');
   const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const roleRef = useRef(null);
 
@@ -149,13 +150,21 @@ function InviteUserModal({ onClose }) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  const handleInvite = (e) => {
+  const handleInvite = async (e) => {
     e.preventDefault();
     setError('');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return setError('Please enter a valid email.');
-    // TODO: connect to invite API when built
-    setSent(true);
+    
+    try {
+      setSaving(true);
+      await inviteUser({ email, role });
+      setSent(true);
+    } catch (err) {
+      setError(err.message || 'Failed to send invitation.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -168,7 +177,7 @@ function InviteUserModal({ onClose }) {
           </button>
         </div>
 
-        <div className="um-modal__body">
+        <div className="um-modal__body" style={{ minHeight: '350px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           {sent ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
@@ -181,16 +190,16 @@ function InviteUserModal({ onClose }) {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleInvite}>
+            <form onSubmit={handleInvite} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div className="um-field">
                 <label className="um-field__label">Email Address *</label>
                 <input type="email" className="um-field__input"
                   placeholder="staff@email.com"
                   value={email} onChange={e => setEmail(e.target.value)} />
               </div>
-              <div className="um-field" ref={roleRef}>
+              <div className={`um-field um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} ref={roleRef}>
                 <label className="um-field__label">Role *</label>
-                <div className={`um-field__input um-select-trigger um-dropdown-wrapper ${roleOpen ? 'is-open' : ''}`} onClick={() => setRoleOpen(o => !o)}>
+                <div className="um-field__input um-select-trigger" onClick={() => setRoleOpen(o => !o)}>
                   <span>{ROLES.find(r => r.value === role)?.label || role}</span>
                   <Icon name="chevron-down" size={14} />
                 </div>
@@ -207,9 +216,11 @@ function InviteUserModal({ onClose }) {
                 )}
               </div>
               {error && <div className="um-field__error">{error}</div>}
-              <div className="um-modal__footer">
-                <button type="button" className="um-btn um-btn--secondary" onClick={onClose}>Cancel</button>
-                <button type="submit" className="um-btn um-btn--primary">Send Invite</button>
+              <div className="um-modal__footer" style={{ marginTop: 'auto', paddingTop: '24px' }}>
+                <button type="button" className="um-btn um-btn--secondary" onClick={onClose} disabled={saving}>Cancel</button>
+                <button type="submit" className="um-btn um-btn--primary" disabled={saving}>
+                  {saving ? 'Sending...' : 'Send Invite'}
+                </button>
               </div>
             </form>
           )}
@@ -357,9 +368,13 @@ export default function UserManagement({ user: currentUser }) {
                     <span className={`um-badge ${ROLE_COLORS[u.role] || ''}`}>{u.role}</span>
                   </td>
                   <td className="um-td">
-                    <span className={`um-badge ${u.isActive ? 'um-badge--active' : 'um-badge--inactive'}`}>
-                      {u.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                    {u.status === 'PENDING' ? (
+                      <span className="um-badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' }}>Pending Verify</span>
+                    ) : (
+                      <span className={`um-badge ${u.isActive ? 'um-badge--active' : 'um-badge--inactive'}`}>
+                        {u.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    )}
                   </td>
                   <td className="um-td um-td--muted">
                     {new Date(u.createdAt).toLocaleDateString('en-IN')}

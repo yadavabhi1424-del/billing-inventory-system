@@ -3,6 +3,7 @@ import {
   signup, verifyEmail, resendOtp, login, googleAuth,
   forgotPassword, verifyResetOtp, resetPassword,
   refreshToken, logout, getMe, changePassword,
+  verifyMember, getInviteDetails, acceptInvite
 } from "./auth.controller.js";
 import { protect } from "../../middleware/auth.js";
 
@@ -18,6 +19,10 @@ router.post("/forgot-password",  forgotPassword);
 router.post("/verify-reset-otp", verifyResetOtp);
 router.post("/reset-password",   resetPassword);
 router.post("/refresh-token",    refreshToken);
+
+router.post("/verify-member",    verifyMember);
+router.get("/invite/:token",     getInviteDetails);
+router.post("/accept-invite",    acceptInvite);
 
 // Protected
 router.post("/logout",          protect, logout);

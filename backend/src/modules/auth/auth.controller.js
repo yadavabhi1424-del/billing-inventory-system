@@ -43,6 +43,19 @@ async function resolveDb(email) {
   return { db: null, tenantRow: null, dbName: null };
 }
 
+// ── Helper: resolve DB from Token (Invitations & Verification) 
+async function resolveDbFromToken(token) {
+  if (token && token.includes('::')) {
+    const dbName = token.split('::')[0];
+    try {
+      return await getTenantPool(dbName);
+    } catch {
+      return pool;
+    }
+  }
+  return pool;
+}
+
 // ══════════════════════════════════════════════════════════════
 //  SIGNUP  →  create pending user in default DB + send OTP
 //  (no tenant DB created here)
@@ -272,8 +285,9 @@ const login = async (req, res, next) => {
       return next(new AppError("Email and password are required.", 400));
 
     const { db, tenantRow, dbName } = await resolveDb(email);
+    const targetDb = db || pool;
 
-    const [rows] = await db.execute("SELECT * FROM users WHERE email = ?", [email]);
+    const [rows] = await targetDb.execute("SELECT * FROM users WHERE email = ?", [email]);
 
     if (rows.length === 0)
       return next(new AppError("Account not found. Please sign up.", 404));
@@ -300,7 +314,7 @@ const login = async (req, res, next) => {
 
     const tokens = generateTokenPair({ ...user, dbName });
 
-    await db.execute(
+    await targetDb.execute(
       "UPDATE users SET refreshToken = ? WHERE user_id = ?",
       [tokens.refreshToken, user.user_id]
     );
@@ -652,8 +666,93 @@ const resetPassword = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+/* ══════════════════════════════════════════════════════════════
+//  VERIFY MEMBER  →  POST { token }
+// ══════════════════════════════════════════════════════════════ */
+const verifyMember = async (req, res, next) => {
+  try {
+    const { token } = req.body;
+    if (!token) return next(new AppError("Verification token is required.", 400));
+
+    const targetDb = await resolveDbFromToken(token);
+    const [users] = await targetDb.execute(
+      "SELECT user_id, emailVerified, verifyTokenExpiry FROM users WHERE verifyToken = ?",
+      [token]
+    );
+
+    if (users.length === 0) return next(new AppError("Invalid verification link.", 400));
+    if (users[0].emailVerified) return next(new AppError("Email is already verified.", 400));
+    if (new Date() > new Date(users[0].verifyTokenExpiry)) return next(new AppError("Verification link has expired.", 400));
+
+    await targetDb.execute(
+      "UPDATE users SET emailVerified = TRUE, status = 'APPROVED', verifyToken = NULL WHERE user_id = ?",
+      [users[0].user_id]
+    );
+
+    res.json({ success: true, message: "Email verified successfully. You can now log in." });
+  } catch (error) { next(error); }
+};
+
+/* ══════════════════════════════════════════════════════════════
+//  GET INVITE DETAILS  →  GET /invite/:token
+// ══════════════════════════════════════════════════════════════ */
+const getInviteDetails = async (req, res, next) => {
+  try {
+    const { token } = req.params;
+    const targetDb = await resolveDbFromToken(token);
+    const [invitations] = await targetDb.execute(
+      "SELECT email, role, status, expires_at FROM invitations WHERE token = ?",
+      [token]
+    );
+
+    if (invitations.length === 0) return next(new AppError("Invitation not found.", 404));
+    const invite = invitations[0];
+    
+    if (invite.status === 'ACCEPTED') return next(new AppError("Invitation has already been accepted.", 400));
+    if (new Date() > new Date(invite.expires_at) || invite.status === 'EXPIRED') return next(new AppError("Invitation has expired.", 400));
+
+    res.json({ success: true, data: { email: invite.email, role: invite.role } });
+  } catch (error) { next(error); }
+};
+
+/* ══════════════════════════════════════════════════════════════
+//  ACCEPT INVITE  →  POST { token, name, password, phone }
+// ══════════════════════════════════════════════════════════════ */
+const acceptInvite = async (req, res, next) => {
+  try {
+    const { token, name, password, phone } = req.body;
+    if (!token || !name || !password) return next(new AppError("Missing required fields.", 400));
+    if (password.length < 6) return next(new AppError("Password must be at least 6 characters.", 400));
+
+    const targetDb = await resolveDbFromToken(token);
+    const [invitations] = await targetDb.execute("SELECT invite_id, email, role, status, expires_at FROM invitations WHERE token = ?", [token]);
+    if (invitations.length === 0) return next(new AppError("Invalid invitation token.", 400));
+    
+    const invite = invitations[0];
+    if (invite.status === 'ACCEPTED') return next(new AppError("Invitation has already been accepted.", 400));
+    if (new Date() > new Date(invite.expires_at)) return next(new AppError("Invitation has expired.", 400));
+
+    const [existing] = await targetDb.execute("SELECT user_id FROM users WHERE email = ?", [invite.email]);
+    if (existing.length > 0) return next(new AppError("Email is already registered.", 409));
+
+    const hashed = await bcrypt.hash(password, 12);
+    const userId = uuidv4();
+
+    await targetDb.execute(
+      `INSERT INTO users (user_id, name, email, password, role, phone, status, emailVerified, isActive)
+       VALUES (?, ?, ?, ?, ?, ?, 'APPROVED', TRUE, TRUE)`,
+      [userId, name, invite.email, hashed, invite.role, phone || null]
+    );
+
+    await targetDb.execute("UPDATE invitations SET status = 'ACCEPTED' WHERE invite_id = ?", [invite.invite_id]);
+
+    res.status(201).json({ success: true, message: "Account created successfully. You can now log in." });
+  } catch (error) { next(error); }
+};
+
 export {
   signup, verifyEmail, resendOtp, login, googleAuth,
   forgotPassword, verifyResetOtp, resetPassword,
   refreshToken, logout, getMe, changePassword,
+  verifyMember, getInviteDetails, acceptInvite
 };

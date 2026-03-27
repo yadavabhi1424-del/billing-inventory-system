@@ -60,6 +60,28 @@ const sendApprovalEmail = async (toEmail, name, role) => {
   });
 };
 
+const sendInvitationEmail = async (toEmail, inviterName, role, token) => {
+  const inviteUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
+  await transporter.sendMail({
+    from:    process.env.EMAIL_FROM,
+    to:      toEmail,
+    subject: `You're invited to join StockSense Pro`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:500px;margin:auto;padding:30px;border:1px solid #eee;border-radius:8px">
+        <h2 style="color:#6366f1">StockSense Pro</h2>
+        <p>Hi there,</p>
+        <p><strong>${inviterName}</strong> has invited you to join their team on StockSense Pro as a <strong>${role}</strong>.</p>
+        <p>Click the button below to accept the invitation and set up your account.</p>
+        <a href="${inviteUrl}"
+           style="display:inline-block;padding:12px 24px;background:#6366f1;color:#fff;text-decoration:none;border-radius:6px;margin:20px 0">
+          Accept Invitation
+        </a>
+        <p style="color:#888;font-size:13px">This invitation expires in <strong>7 days</strong>.</p>
+      </div>
+    `,
+  });
+};
+
 const sendRejectionEmail = async (toEmail, name) => {
   await transporter.sendMail({
     from:    process.env.EMAIL_FROM,
@@ -118,6 +140,7 @@ export {
   verifyEmailConnection,
   sendVerificationEmail,
   sendApprovalEmail,
+  sendInvitationEmail,
   sendRejectionEmail,
   sendOtpEmail,
   sendPasswordResetEmail,

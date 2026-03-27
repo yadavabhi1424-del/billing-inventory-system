@@ -137,6 +137,18 @@ export async function googleLogin(data) {
   return res;
 }
 
+export async function verifyMemberEmail(data) {
+  return await api.post('/auth/verify-member', data); // { token }
+}
+
+export async function getInviteDetails(token) {
+  return await api.get(`/auth/invite/${token}`);
+}
+
+export async function acceptInvite(data) {
+  return await api.post('/auth/accept-invite', data); // { token, name, password, phone }
+}
+
 // ============================================================
 //  DASHBOARD
 // ============================================================
@@ -355,6 +367,10 @@ export async function getUsers(params = {}) {
 
 export async function createUser(data) {
   return await api.post('/users', data);
+}
+
+export async function inviteUser(data) {
+  return await api.post('/users/invite', data);
 }
 
 export async function updateUser(id, data) {

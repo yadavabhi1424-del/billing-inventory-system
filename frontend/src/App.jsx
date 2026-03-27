@@ -21,6 +21,8 @@ import Settings from './modules/Settings/Settings';
 import * as authAPI from './services/api';
 import SetupWizard    from './pages/SetupWizard';
 import { getShopProfile } from './services/api';
+import VerifyEmail from './pages/VerifyEmail';
+import AcceptInvite from './pages/AcceptInvite';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
@@ -230,6 +232,8 @@ export default function App() {
               onLoginRedirect={() => window.location.href = '/'}
             />
           } />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/accept-invite" element={<AcceptInvite onLoginRedirect={() => window.location.href = '/'} />} />
           <Route path="*" element={
             <LoginPage 
               onLogin={login} 

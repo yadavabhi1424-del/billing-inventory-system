@@ -1,6 +1,8 @@
 import bcrypt            from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
+import crypto            from "crypto";
 import { AppError }      from "../../middleware/errorHandler.js";
+import { sendVerificationEmail, sendInvitationEmail } from "../../config/email.js";
 
 const getAllUsers = async (req, res, next) => {
   try {
@@ -62,17 +64,21 @@ const createUser = async (req, res, next) => {
 
     const hashed = await bcrypt.hash(password, 12);
     const userId = uuidv4();
+    let dbMarker = req.tenant ? `${req.tenant.db_name}::` : '';
+    const token = dbMarker + crypto.randomBytes(32).toString('hex');
 
     await req.db.execute(
       `INSERT INTO users
-        (user_id, name, email, password, role, phone, status, emailVerified, isActive)
-       VALUES (?, ?, ?, ?, ?, ?, 'APPROVED', TRUE, TRUE)`,
-      [userId, name, email, hashed, role || "CASHIER", phone || null]
+        (user_id, name, email, password, role, phone, status, emailVerified, isActive, verifyToken, verifyTokenExpiry)
+       VALUES (?, ?, ?, ?, ?, ?, 'PENDING', FALSE, TRUE, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))`,
+      [userId, name, email, hashed, role || "CASHIER", phone || null, token]
     );
 
+    await sendVerificationEmail(email, name, token);
+
     res.status(201).json({
-      success: true, message: "User created successfully.",
-      data: { user_id: userId, name, email, role: role || "CASHIER" },
+      success: true, message: "User created successfully. Verification email sent.",
+      data: { user_id: userId, name, email, role: role || "CASHIER", status: 'PENDING' },
     });
   } catch (error) { next(error); }
 };
@@ -138,4 +144,33 @@ const updateMyProfile = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-export { getAllUsers, getUserById, createUser, updateUser, deleteUser, updateMyProfile };
+const inviteUser = async (req, res, next) => {
+  try {
+    const { email, role } = req.body;
+    if (!email || !role) return next(new AppError("Email and role are required.", 400));
+
+    const [existingUser] = await req.db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
+    if (existingUser.length > 0) return next(new AppError("User is already registered.", 409));
+
+    await req.db.execute("DELETE FROM invitations WHERE email = ?", [email]);
+
+    let dbMarker = req.tenant ? `${req.tenant.db_name}::` : '';
+    const token = dbMarker + crypto.randomBytes(32).toString('hex');
+    const inviteId = uuidv4();
+
+    await req.db.execute(
+      `INSERT INTO invitations
+        (invite_id, email, role, token, invited_by, status, expires_at)
+       VALUES (?, ?, ?, ?, ?, 'PENDING', DATE_ADD(NOW(), INTERVAL 7 DAY))`,
+      [inviteId, email, role, token, req.user.user_id]
+    );
+
+    await sendInvitationEmail(email, req.user.name, role, token);
+
+    res.status(201).json({
+      success: true, message: "Invitation sent successfully."
+    });
+  } catch (error) { next(error); }
+};
+
+export { getAllUsers, getUserById, createUser, updateUser, deleteUser, updateMyProfile, inviteUser };

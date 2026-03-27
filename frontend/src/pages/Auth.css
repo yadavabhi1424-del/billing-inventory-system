@@ -7,6 +7,19 @@
 
 /* ── Page ────────────────────────────────────────────────── */
 .auth-page {
+  /* Force permanent Dark Mode Tokens for Auth */
+  --color-bg-base:       #0b0f1a;
+  --color-bg-elevated:   #0f172a;
+  --color-bg-surface:    #1e293b;
+  --color-bg-overlay:    #263145;
+  --color-bg-input:      #111827;
+  --color-text-primary:  #f1f5f9;
+  --color-text-secondary:#94a3b8;
+  --color-text-muted:    #64748b;
+  --color-text-disabled: #475569;
+  --color-border:        rgba(148, 163, 184, 0.10);
+  --color-border-strong: rgba(148, 163, 184, 0.20);
+
   display: flex;
   min-height: 100vh;
   background-color: #0d0f1a;
