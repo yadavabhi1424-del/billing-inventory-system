@@ -150,6 +150,22 @@ export async function acceptInvite(data) {
 }
 
 // ============================================================
+//  SHOP PROFILE
+// ============================================================
+
+export async function getShopProfile() {
+  return await api.get('/shop/profile');
+}
+
+export async function saveShopProfile(data) {
+  return await api.post('/shop/profile', data);
+}
+
+export async function getShopTypes() {
+  return await api.get('/shop/shop-types');
+}
+
+// ============================================================
 //  DASHBOARD
 // ============================================================
 
@@ -405,20 +421,6 @@ export async function getAIHealth() {
   return await api.get('/ai/health');
 }
 
-// ============================================================
-//  SHOP PROFILE
-// ============================================================
-export async function getShopTypes() {
-  return await api.get('/shop/shop-types');
-}
-
-export async function getShopProfile() {
-  return await api.get('/shop/profile');
-}
-
-export async function saveShopProfile(data) {
-  return await api.post('/shop/profile', data);
-}
 
 export async function registerTenant(data) {
   return await api.post('/tenants/register', data);

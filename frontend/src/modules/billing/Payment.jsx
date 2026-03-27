@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
-import { getProducts, createTransaction } from '../../services/api';
+import { getProducts, createTransaction, getShopProfile, getMe } from '../../services/api';
 import { STORE_INFO } from './paymentData';
 import './Payment.css';
 
@@ -25,7 +25,7 @@ function getGSTBreakdown(taxableAmount, rate) {
 // ══════════════════════════════════════════════════════════
 //  INVOICE MODAL
 // ══════════════════════════════════════════════════════════
-function InvoiceModal({ invoice, onClose }) {
+function InvoiceModal({ invoice, onClose, shopInfo }) {
   return (
     <div className="invoice-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="invoice-modal">
@@ -47,11 +47,11 @@ function InvoiceModal({ invoice, onClose }) {
         <div className="invoice">
           <div className="invoice__header">
             <div>
-              <div className="invoice__store-name">{STORE_INFO.name}</div>
+              <div className="invoice__store-name">{shopInfo?.name}</div>
               <div className="invoice__store-details">
-                {STORE_INFO.address}<br />
-                Ph: {STORE_INFO.phone} · {STORE_INFO.email}<br />
-                GSTIN: {STORE_INFO.gstin}
+                {shopInfo?.address}<br />
+                {shopInfo?.phone && <>Ph: {shopInfo.phone} · </>}{shopInfo?.email}<br />
+                {shopInfo?.gstin && <>GSTIN: {shopInfo.gstin}</>}
               </div>
             </div>
             <div className="invoice__meta">
@@ -180,13 +180,33 @@ export default function Payment({ user }) {
   const [scanToast,     setScanToast]     = useState(null);
   const [submitting,    setSubmitting]    = useState(false);
   const [invoiceNo,     setInvoiceNo]     = useState('INV-...');
+  const [shopInfo,      setShopInfo]      = useState(STORE_INFO);
 
   const searchInputRef = useRef(null);
 
   // ── Load popular products on mount ─────────────────────────
   useEffect(() => {
     loadProducts();
+    loadShopProfile();
   }, []);
+
+  const loadShopProfile = async () => {
+    try {
+      const [profileRes, meRes] = await Promise.all([getShopProfile(), getMe()]);
+      console.log('[Payment] shopProfile response:', profileRes);
+      const p = profileRes?.data || {};
+      const u = meRes?.data || {};
+      setShopInfo({
+        name:    p.shop_name || STORE_INFO.name,
+        address: p.address   || STORE_INFO.address,
+        gstin:   p.gstin     || STORE_INFO.gstin,
+        phone:   u.phone     || STORE_INFO.phone,
+        email:   u.email     || STORE_INFO.email,
+      });
+    } catch (err) {
+      console.error('[Payment] shopProfile error:', err.message);
+    }
+  };
 
   const loadProducts = async () => {
     try {
@@ -644,7 +664,7 @@ export default function Payment({ user }) {
       {scanToast && <ScanToast product={scanToast} onClose={() => setScanToast(null)} />}
 
       {/* Invoice modal */}
-      {invoice && <InvoiceModal invoice={invoice} onClose={handleNewBill} />}
+      {invoice && <InvoiceModal invoice={invoice} onClose={handleNewBill} shopInfo={shopInfo} />}
 
     </div>
   );

@@ -208,7 +208,8 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   z-index: var(--z-dropdown);
-  max-height: 240px; /* ~4 results */
+  max-height: 240px;
+  /* ~4 results */
   overflow-y: auto;
 }
 
@@ -747,7 +748,7 @@
   background: #fff;
   border-radius: var(--radius-lg);
   width: 100%;
-  max-width: 520px;
+  max-width: 680px;
   max-height: 90vh;
   overflow-y: auto;
   color: #1e293b;
@@ -803,6 +804,7 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 2rem;
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-5);
   border-bottom: 2px solid #6366f1;
@@ -963,36 +965,72 @@
    ══════════════════════════════════════════════════════════ */
 @media print {
 
-  /* Hide everything except invoice */
+  @page {
+    margin: 10mm;
+    size: A4;
+  }
+
+  /* Hide everything on the page */
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
 
-  .invoice-modal-backdrop,
+  /*
+    Make ONLY the modal and invoice contents visible.
+    NOTE: the backdrop itself stays hidden — this prevents
+    the browser from rendering it twice (once at its fixed
+    top-0 position AND once at its DOM flow position).
+  */
   .invoice-modal,
-  .invoice,
-  .invoice * {
-    visibility: visible;
+  .invoice-modal * {
+    visibility: visible !important;
   }
 
+  /*
+    Reposition the backdrop so the modal lands at the very
+    top-left corner of the printed page. Even though the
+    backdrop is visibility:hidden, its children are visible
+    and inherit this positioning.
+  */
   .invoice-modal-backdrop {
-    position: static;
-    background: none;
-    padding: 0;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: none !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
   }
 
+  /* Strip modal chrome */
   .invoice-modal {
-    box-shadow: none;
-    max-height: none;
-    max-width: none;
+    box-shadow: none !important;
+    max-height: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
   }
 
+  /* Hide action buttons */
   .invoice-modal__actions {
-    display: none;
+    display: none !important;
   }
 
+  /* Invoice content padding */
   .invoice {
-    padding: 20px;
+    padding: 8mm 12mm !important;
+  }
+
+  /* Keep table rows from splitting across pages */
+  .invoice__table tr {
+    page-break-inside: avoid;
   }
 }
 
