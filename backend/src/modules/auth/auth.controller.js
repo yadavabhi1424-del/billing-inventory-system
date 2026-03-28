@@ -554,24 +554,44 @@ const acceptInvite = async (req, res, next) => {
     const invite = invitations[0];
     if (invite.status === 'ACCEPTED') return next(new AppError("Invitation has already been accepted.", 400));
     if (new Date() > new Date(invite.expires_at)) return next(new AppError("Invitation has expired.", 400));
-    const [existing] = await targetDb.execute("SELECT user_id FROM users WHERE email = ?", [invite.email]);
-    if (existing.length > 0) return next(new AppError("Email is already registered.", 409));
+    const [existingRows] = await targetDb.execute("SELECT user_id, status FROM users WHERE email = ?", [invite.email]);
+    if (existingRows.length > 0 && existingRows[0].status !== 'DELETED')
+      return next(new AppError("Email is already registered.", 409));
+
     const hashed = await bcrypt.hash(password, 12);
-    const userId = uuidv4();
-    await targetDb.execute(
-      `INSERT INTO users (user_id, name, email, password, role, phone, status, emailVerified, isActive)
-       VALUES (?, ?, ?, ?, ?, ?, 'APPROVED', TRUE, TRUE)`,
-      [userId, name, invite.email, hashed, invite.role, phone || null]
-    );
+    
+    if (existingRows.length > 0 && existingRows[0].status === 'DELETED') {
+      // Restore soft-deleted user
+      await targetDb.execute(
+        `UPDATE users SET name = ?, password = ?, role = ?, phone = ?, status = 'APPROVED', emailVerified = TRUE, isActive = TRUE WHERE user_id = ?`,
+        [name, hashed, invite.role, phone || null, existingRows[0].user_id]
+      );
+    } else {
+      // Insert new user
+      const userId = uuidv4();
+      await targetDb.execute(
+        `INSERT INTO users (user_id, name, email, password, role, phone, status, emailVerified, isActive)
+         VALUES (?, ?, ?, ?, ?, ?, 'APPROVED', TRUE, TRUE)`,
+        [userId, name, invite.email, hashed, invite.role, phone || null]
+      );
+    }
 
-    const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    const dbName = tokenPayload.dbName;
-    const userType = tokenPayload.userType || 'shop';
+    // Get dbName from token format (db_name::hex)
+    let dbName = null;
+    if (token.includes('::')) {
+      dbName = token.split('::')[0];
+    } else {
+      const [tenants] = await masterPool.execute("SELECT db_name FROM tenants WHERE owner_email = ?", [invite.email]);
+      if (tenants.length > 0) dbName = tenants[0].db_name;
+    }
 
-    await masterPool.execute(
-      `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
-      [invite.email, dbName, userType]
-    );
+    if (dbName) {
+      const userType = dbName.startsWith('supplier_') ? 'supplier' : 'shop';
+      await masterPool.execute(
+        `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
+        [invite.email, dbName, userType]
+      );
+    }
 
     await targetDb.execute("UPDATE invitations SET status = 'ACCEPTED' WHERE invite_id = ?", [invite.invite_id]);
     res.status(201).json({ success: true, message: "Account created successfully. You can now log in." });

@@ -47,8 +47,11 @@ export async function tenantMiddleware(req, res, next) {
       req.headers['x-tenant-slug'] ||
       req.hostname.split('.')[0];
 
+    req.masterPool = masterPool;
+
     if (!tenantSlug || tenantSlug === 'localhost') {
       req.db = (await import('../config/database.js')).pool;
+      req.dbName = process.env.DB_NAME;
       return next();
     }
 
@@ -67,6 +70,7 @@ export async function tenantMiddleware(req, res, next) {
       const tenant = shopRows[0];
       req.tenant   = tenant;
       req.userType = 'shop';
+      req.dbName   = tenant.db_name;
       req.db       = await getTenantPool(tenant.db_name);
       return next();
     }
@@ -81,6 +85,7 @@ export async function tenantMiddleware(req, res, next) {
     if (supRows.length > 0) {
       req.tenant   = supRows[0];
       req.userType = 'supplier';
+      req.dbName   = supRows[0].db_name;
       req.db       = await getTenantPool(supRows[0].db_name);
       return next();
     }

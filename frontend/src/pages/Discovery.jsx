@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDiscovery } from '../services/api';
+import { getDiscovery, getConnections, sendConnectionRequest } from '../services/api';
 import './Discovery.css';
 
 const TYPES    = ['All', 'shop', 'supplier'];
@@ -15,21 +15,46 @@ export default function DiscoveryPage({ user }) {
   const [page,    setPage]    = useState(1);
   const [total,   setTotal]   = useState(0);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [connections, setConnections] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    getDiscovery({ ...filters, page, limit: 24 })
-      .then(res => {
-        if (!cancelled) {
-          setItems(res.data);
-          setTotal(res.pagination?.total || 0);
+    const fetchDiscoveryData = async () => {
+      setLoading(true);
+      try {
+        const [discRes, connRes] = await Promise.all([
+          getDiscovery({ type: filters.type, city: filters.city, business_type: filters.business_type, search: filters.search, page, limit: 24 }),
+          getConnections()
+        ]);
+        if (!cancelled && discRes.success) {
+          setItems(discRes.data);
+          setTotal(discRes.pagination.total);
         }
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
+        if (!cancelled && connRes.success) {
+          setConnections(connRes.data);
+        }
+      } catch (err) {
+        // Handle error silently or via state
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchDiscoveryData();
     return () => { cancelled = true; };
   }, [filters, page]);
+
+  const handleConnect = async (partnerId) => {
+    try {
+      const res = await sendConnectionRequest(partnerId);
+      if (res.success) {
+        // instantly update local state to reflect Pending status
+        setConnections(prev => [...prev, { partner_id: partnerId, status: 'PENDING', initiated_by: user?.userType || 'shop' }]);
+        alert("Connection request sent successfully!");
+      }
+    } catch (err) {
+      alert(err.message || "Failed to send connect request.");
+    }
+  };
 
   const set = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPage(1); };
 
@@ -144,7 +169,30 @@ export default function DiscoveryPage({ user }) {
               </div>
               
               <div className="discovery-modal__actions">
-                <button className="discovery-btn-connect">Connect Request</button>
+                {(() => {
+                  const conn = connections.find(c => c.partner_id === selectedItem.entity_id);
+                  if (!conn) {
+                    return (
+                      <button className="discovery-btn-connect" onClick={() => handleConnect(selectedItem.entity_id)}>
+                        Connect Request
+                      </button>
+                    );
+                  }
+                  if (conn.status === 'PENDING') {
+                    if (conn.initiated_by !== (user?.userType || 'shop') && conn.initiated_by !== user?.userType?.toUpperCase()) {
+                      return <button className="discovery-btn-connect" style={{background: '#f59e0b'}}>Review pending request in CRM</button>;
+                    }
+                    return <button className="discovery-btn-connect" disabled style={{opacity: 0.6}}>Request Pending</button>;
+                  }
+                  if (conn.status === 'ACCEPTED') {
+                    return <button className="discovery-btn-connect" disabled style={{background: '#22c55e', opacity: 1}}>Network Connected ✓</button>;
+                  }
+                  return (
+                    <button className="discovery-btn-connect" onClick={() => handleConnect(selectedItem.entity_id)}>
+                      Connect Again
+                    </button>
+                  );
+                })()}
                 <button className="discovery-btn-message">Send Message</button>
               </div>
             </div>

@@ -17,6 +17,7 @@ const protect = async (req, res, next) => {
     let db;
     if (decoded.dbName) {
       db = await getTenantPool(decoded.dbName);
+      req.dbName = decoded.dbName;
     } else {
       // Fallback — find tenant by email from master
       const [tenantRows] = await masterPool.execute(
@@ -24,9 +25,13 @@ const protect = async (req, res, next) => {
          WHERE t.owner_email = ? AND t.status != 'SUSPENDED'`,
         [decoded.email]
       );
-      db = tenantRows.length > 0
-        ? await getTenantPool(tenantRows[0].db_name)
-        : pool;
+      if (tenantRows.length > 0) {
+        req.dbName = tenantRows[0].db_name;
+        db = await getTenantPool(tenantRows[0].db_name);
+      } else {
+        req.dbName = process.env.DB_NAME;
+        db = pool;
+      }
     }
 
     const [rows] = await db.execute(
@@ -46,7 +51,8 @@ const protect = async (req, res, next) => {
     req.user          = user;
     req.user.userType = decoded.userType || 'shop';
     req.db            = db;
-    req.dbName        = decoded.dbName;
+    // req.dbName is already set in the if/else block above
+    req.masterPool    = masterPool;
     next();
   } catch (error) {
     if (error.name === "TokenExpiredError")

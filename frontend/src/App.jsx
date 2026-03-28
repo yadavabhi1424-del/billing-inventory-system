@@ -18,6 +18,7 @@ import Reports   from './modules/Reports/Reports';
 import Suppliers from './modules/Suppliers/Suppliers';
 import UserManagement from './modules/Users/UserManagement';
 import Settings from './modules/Settings/Settings';
+import B2BStore from './modules/B2B/B2BStore';
 import * as authAPI from './services/api';
 import SetupWizard    from './pages/SetupWizard';
 import { getShopProfile } from './services/api';
@@ -27,8 +28,8 @@ import DiscoveryPage from './pages/Discovery';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
-  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery'],
+  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
+  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
   cashier: ['dashboard', 'billing', 'discovery'],
 };
 
@@ -215,6 +216,11 @@ if (!setupDone) {
         <Route path="/discovery" element={
           <ProtectedRoute page="discovery" user={user}>
             <DiscoveryPage user={user} />
+          </ProtectedRoute>
+        } />
+        <Route path="/b2b-store" element={
+          <ProtectedRoute page="b2b-store" user={user}>
+            <B2BStore user={user} />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

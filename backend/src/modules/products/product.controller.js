@@ -9,6 +9,12 @@ async function syncSupplierProduct(req, isUpdate, productData) {
     if (!supRows.length) return;
     const supplier_id = supRows[0].supplier_id;
 
+    // A product is only active in the master catalog if it's both active in the tenant AND explicitly marked public
+    let masterActive = 1;
+    if (productData.isActive === false || productData.is_public === false || productData.is_public === 0) {
+      masterActive = 0;
+    }
+
     if (isUpdate) {
       const updates = [];
       const values  = [];
@@ -16,21 +22,37 @@ async function syncSupplierProduct(req, isUpdate, productData) {
       if (productData.description !== undefined) { updates.push("description = ?"); values.push(productData.description); }
       if (productData.unit !== undefined) { updates.push("unit = ?"); values.push(productData.unit); }
       if (productData.sellingPrice !== undefined) { updates.push("price = ?"); values.push(productData.sellingPrice); }
-      if (productData.isActive !== undefined) { updates.push("is_active = ?"); values.push(productData.isActive ? 1 : 0); }
       
+      // We always evaluate masterActive in case public status changed
+      updates.push("is_active = ?"); 
+      values.push(masterActive);
+
       if (updates.length > 0) {
         values.push(supplier_id, productData.product_id);
         await masterPool.execute(`UPDATE supplier_products SET ${updates.join(', ')} WHERE supplier_id = ? AND product_id = ?`, values);
+        
+        // Ensure it's inserted if they flipped it to public for the first time
+        if (masterActive === 1) {
+           await masterPool.execute(
+            `INSERT IGNORE INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [uuidv4(), supplier_id, productData.product_id, productData.name, productData.sku,
+             productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
+             productData.image || null, 1]
+           );
+        }
       }
     } else {
-      await masterPool.execute(
-        `INSERT INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), is_active=VALUES(is_active)`,
-        [uuidv4(), supplier_id, productData.product_id, productData.name, productData.sku,
-         productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
-         productData.image || null, 1]
-      );
+      if (masterActive === 1) {
+        await masterPool.execute(
+          `INSERT INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), is_active=VALUES(is_active)`,
+          [uuidv4(), supplier_id, productData.product_id, productData.name, productData.sku,
+           productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
+           productData.image || null, 1]
+        );
+      }
     }
   } catch (err) {
     console.error("Master DB sync failed:", err.message);
@@ -167,8 +189,8 @@ const createProduct = async (req, res, next) => {
         `INSERT INTO products
           (product_id, name, sku, barcode, description, category_id, supplier_id,
            unit, costPrice, sellingPrice, mrp, taxRate, taxType, stock,
-           minStockLevel, maxStockLevel, location, image, expiryDate)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           minStockLevel, maxStockLevel, location, image, expiryDate, is_public)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [productId, name, tempSku, barcode || null, description || null,
          categoryId, supplierId || null, unit || "pcs",
          parseFloat(costPrice) || 0, parseFloat(sellingPrice),
@@ -176,7 +198,7 @@ const createProduct = async (req, res, next) => {
          parseFloat(taxRate) || 0, taxType || "GST",
          initialStock, parseInt(minStockLevel) || 10,
          maxStockLevel ? parseInt(maxStockLevel) : null,
-         location || null, image, expiryDate || null]
+         location || null, image, expiryDate || null, req.body.is_public ? 1 : 0]
       );
 
       // result.insertId contains the generated product_seq
@@ -206,7 +228,8 @@ const createProduct = async (req, res, next) => {
     // Phase 5: Sync to Master DB
     await syncSupplierProduct(req, false, {
       product_id: productId, name, sku: finalSku, description,
-      unit: unit || "pcs", sellingPrice: parseFloat(sellingPrice), image
+      unit: unit || "pcs", sellingPrice: parseFloat(sellingPrice), image,
+      is_public: req.body.is_public
     });
 
     res.status(201).json({
@@ -223,7 +246,7 @@ const updateProduct = async (req, res, next) => {
       supplierId, unit, costPrice, sellingPrice,
       mrp, taxRate, taxType, minStockLevel,
       maxStockLevel, location, isActive,
-      expiryDate, stock,
+      expiryDate, stock, is_public,
     } = req.body;
 
     const [existing] = await req.db.execute(
@@ -272,6 +295,7 @@ const updateProduct = async (req, res, next) => {
         location      = COALESCE(?, location),
         isActive      = COALESCE(?, isActive),
         expiryDate    = COALESCE(?, expiryDate),
+        is_public     = COALESCE(?, is_public),
         stock         = ?
        WHERE product_id = ?`,
       [
@@ -287,6 +311,7 @@ const updateProduct = async (req, res, next) => {
         location      || null,
         isActive      !== undefined ? isActive    : null,
         expiryDate    || null,
+        is_public     !== undefined ? is_public   : null,
         newStock,
         req.params.id,
       ]
@@ -309,9 +334,10 @@ const updateProduct = async (req, res, next) => {
 
     // Phase 5: Sync to Master DB
     await syncSupplierProduct(req, true, {
-      product_id: req.params.id, name, description, unit,
+      product_id: req.params.id, name, description, unit, sku: rows && rows[0] ? rows[0].sku : null,
       sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : undefined,
-      isActive: isActive !== undefined ? isActive : undefined
+      isActive: isActive !== undefined ? isActive : undefined,
+      is_public: is_public !== undefined ? is_public : undefined
     });
 
     res.json({ success: true, message: "Product updated successfully." });

@@ -14,9 +14,12 @@ async function runTenantMigrations() {
     const [tenants] = await masterPool.execute(
       "SELECT db_name FROM tenants WHERE status != 'SUSPENDED'"
     );
+    const [suppliers] = await masterPool.execute(
+      "SELECT db_name FROM suppliers WHERE status != 'SUSPENDED'"
+    );
 
-    // Default DB where pending users are staged must also get the migrations!
-    const allDbs = [{ db_name: process.env.DB_NAME }, ...tenants];
+    // Default DB where pending users are staged, plus all tenants and suppliers
+    const allDbs = [{ db_name: process.env.DB_NAME }, ...tenants, ...suppliers];
 
     const conn = await mysql.createConnection({
       host:               process.env.DB_HOST,
@@ -27,6 +30,7 @@ async function runTenantMigrations() {
     });
 
     for (const { db_name } of allDbs) {
+      if (!db_name) continue;
       try {
         await conn.query(`USE \`${db_name}\``);
         // Create email_otps if not exists
@@ -45,16 +49,23 @@ async function runTenantMigrations() {
           ALTER TABLE users
             MODIFY COLUMN password VARCHAR(255) NULL,
             ADD COLUMN IF NOT EXISTS provider ENUM('local','google') DEFAULT 'local' AFTER password
-        `).catch(() => { /* column may already exist in newer DBs */ });
+        `).catch(() => {});
+
+        // Update status ENUM to include DELETED
+        await conn.query(`
+          ALTER TABLE users 
+          MODIFY COLUMN status ENUM('PENDING','APPROVED','REJECTED','DELETED') DEFAULT 'PENDING'
+        `).catch(() => {});
+
         console.log(`  ✅ Migration OK: ${db_name}`);
       } catch (e) {
         console.warn(`  ⚠️  Migration skipped for ${db_name}: ${e.message}`);
       }
     }
     await conn.end();
-    console.log("🔄 Tenant migrations complete.");
+    console.log("🔄 All migrations complete (Tenants & Suppliers).");
   } catch (err) {
-    console.warn("⚠️  Tenant migrations failed (non-fatal):", err.message);
+    console.warn("⚠️  Migrations failed (non-fatal):", err.message);
   }
 }
 

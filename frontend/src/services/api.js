@@ -475,4 +475,16 @@ export async function updateConnectionStatus(mapId, status) {
   return await api.patch(`/network/connections/${mapId}`, { status });
 }
 
+export async function getB2BProducts(params = {}) {
+  return await api.get('/network/b2b-products', { params });
+}
+
+export async function placeB2BOrder(data) {
+  return await api.post('/b2b/orders', data);
+}
+
+export async function getB2BOrders() {
+  return await api.get('/b2b/orders');
+}
+
 export { api, API_URL };

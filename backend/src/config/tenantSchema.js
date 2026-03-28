@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   role                ENUM('OWNER','ADMIN','MANAGER','CASHIER','STAFF') DEFAULT 'CASHIER',
   phone               VARCHAR(20),
   avatar              VARCHAR(255),
-  status              ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+  status              ENUM('PENDING','APPROVED','REJECTED','DELETED') DEFAULT 'PENDING',
   isActive            BOOL     DEFAULT TRUE,
   emailVerified       BOOL     DEFAULT FALSE,
   verifyToken         VARCHAR(100),
@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS products (
   lead_time_days INT           DEFAULT 1,
   min_order_qty  INT           DEFAULT 1,
   industry_tags  JSON,
+  is_public      BOOL          DEFAULT FALSE,
   isActive       BOOL          DEFAULT TRUE,
   createdAt      DATETIME      DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (category_id) REFERENCES categories(category_id)

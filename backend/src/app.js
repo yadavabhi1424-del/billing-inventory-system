@@ -27,6 +27,7 @@ import shopProfileRoutes   from "./modules/tenants/shopProfile.routes.js";
 import notificationRoutes  from "./modules/notifications/notifications.routes.js";
 import discoveryRoutes     from "./modules/discovery/discovery.routes.js";
 import networkRoutes       from "./modules/network/network.routes.js";
+import b2bRoutes           from "./modules/b2b/b2b.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = dirname(__filename);
@@ -85,6 +86,7 @@ app.use("/api/shop",            shopProfileRoutes);
 app.use("/api/notifications",   notificationRoutes);
 app.use("/api/discovery",       discoveryRoutes);
 app.use("/api/network",         networkRoutes);
+app.use("/api/b2b",             b2bRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

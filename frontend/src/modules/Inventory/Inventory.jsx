@@ -21,6 +21,8 @@ const getStatus = (stock, min) =>
 // ══════════════════════════════════════════════════════════
 function ProductFormModal({ title, product = null, categories = [], suppliers = [], onClose, onSave, onCategoriesUpdate }) {
   const isEdit = !!product;
+  const user = JSON.parse(localStorage.getItem('stocksense_user') || '{}');
+  const isSupplier = user?.userType === 'supplier';
 
   const [form, setForm] = useState({
     name: product?.name || '',
@@ -35,6 +37,7 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
     supplierId: product?.supplier_id || '',
     barcode: product?.barcode || '',
     expiryDate: product?.expiryDate?.split('T')[0] || '',
+    is_public: product?.is_public === 1 || product?.is_public === true || false,
     image: null,
   });
 
@@ -171,7 +174,13 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
       // Use FormData for image upload
       const data = new FormData();
       Object.entries(form).forEach(([k, v]) => {
-        if (v !== null && v !== '') data.append(k, v);
+        if (v !== null && v !== '') {
+          if (k === 'is_public') {
+            data.append(k, v ? 'true' : 'false');
+          } else {
+            data.append(k, v);
+          }
+        }
       });
       if (!isEdit) {
         data.append('skuPrefix', localStorage.getItem('ss_skuPrefix') || 'SKU');
@@ -456,6 +465,36 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
                 <span className="product-form__hint">For perishable items</span>
               </div>
 
+              {/* Public Toggle (Suppliers Only) */}
+              {isSupplier && (
+                <div className="product-form__field product-form__field--full" style={{ background: 'var(--color-bg-tertiary)', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid var(--color-border)' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: 'white', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Icon name="link" size={16} /> List Publicly in B2B Network
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                      Allow connected shops to view and order this product from your catalog.
+                    </div>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', position: 'relative' }}>
+                    <input type="checkbox" style={{ opacity: 0, position: 'absolute' }} 
+                           checked={form.is_public} 
+                           onChange={e => set('is_public', e.target.checked)} />
+                    <div style={{
+                      width: '48px', height: '24px', borderRadius: '12px',
+                      background: form.is_public ? 'var(--color-success)' : 'var(--color-border)',
+                      transition: 'background 0.3s', position: 'relative'
+                    }}>
+                      <div style={{
+                        width: '20px', height: '20px', borderRadius: '50%', background: 'white',
+                        position: 'absolute', top: '2px', left: form.is_public ? '26px' : '2px',
+                        transition: 'left 0.3s'
+                      }} />
+                    </div>
+                  </label>
+                </div>
+              )}
+
             </div>
           </div>
 
@@ -527,6 +566,7 @@ export default function Inventory() {
         supplierId: formData.get('supplierId'),
         barcode: formData.get('barcode'),
         expiryDate: formData.get('expiryDate'),
+        is_public: formData.get('is_public') === 'true'
       };
 
       const res = await updateProduct(selected.product_id, payload);

@@ -8,6 +8,7 @@ import Icon from '../../components/Icon';
 import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
+  getConnections, updateConnectionStatus // new B2B networking APIs
 } from '../../services/api';
 import './Suppliers.css';
 
@@ -146,13 +147,19 @@ export default function Suppliers({ user }) {
   const entityNamePlural = isSupplier ? 'Customers' : 'Suppliers';
 
   const [suppliers, setSuppliers] = useState([]);
-  const [loading,   setLoading]   = useState(true);
   const [search,    setSearch]    = useState('');
   const [selected,  setSelected]  = useState(null);
   const [showAdd,   setShowAdd]   = useState(false);
   const [showEdit,  setShowEdit]  = useState(false);
+  
+  // Tabs: 'crm' | 'requests'
+  const [activeTab, setActiveTab] = useState('crm');
+  const [requests,  setRequests]  = useState([]);
 
-  useEffect(() => { fetchSuppliers(); }, []);
+  useEffect(() => { 
+    fetchSuppliers(); 
+    fetchRequests();
+  }, []);
 
   const fetchSuppliers = async () => {
     try {
@@ -161,6 +168,18 @@ export default function Suppliers({ user }) {
       if (res.success) setSuppliers(res.data);
     } catch (err) {
       console.error(`${entityNamePlural} fetch error:`, err.message);
+    } finally {
+      if (activeTab === 'crm') setLoading(false);
+    }
+  };
+
+  const fetchRequests = async () => {
+    try {
+      if (activeTab === 'requests') setLoading(true);
+      const res = await getConnections({ status: 'PENDING' });
+      if (res.success) setRequests(res.data);
+    } catch (err) {
+      console.error("Requests fetch error:", err.message);
     } finally {
       setLoading(false);
     }
@@ -188,10 +207,30 @@ export default function Suppliers({ user }) {
     fetchSuppliers();
   };
 
+  const handleRequestStatus = async (mapId, status) => {
+    try {
+      setLoading(true);
+      const res = await updateConnectionStatus(mapId, status);
+      if (res.success) {
+        alert(`Request ${status.toLowerCase()} correctly. CRM has been automatically synchronized!`);
+        await fetchRequests();
+        await fetchSuppliers(); // refresh CRM table to show the new connection
+      }
+    } catch (err) {
+      alert("Failed to update status: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filtered = suppliers.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.contactPerson || '').toLowerCase().includes(search.toLowerCase()) ||
     (s.phone || '').includes(search)
+  );
+
+  const filteredRequests = requests.filter(r => 
+    (r.name || r.business_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
   const activeCount    = suppliers.filter(s => s.isActive).length;
@@ -226,75 +265,162 @@ export default function Suppliers({ user }) {
         ))}
       </div>
 
-      {/* Toolbar */}
-      <div className="suppliers-toolbar">
-        <div className="suppliers-search">
-          <Icon name="search" size={16} />
-          <input className="suppliers-search__input"
-            placeholder={`Search ${entityNamePlural.toLowerCase()}...`}
-            value={search} onChange={e => setSearch(e.target.value)} />
+      {/* Toolbar with Tabs */}
+      <div className="suppliers-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className={`suppliers-tab ${activeTab === 'crm' ? 'active' : ''}`}
+            onClick={() => setActiveTab('crm')}
+            style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'crm' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'crm' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
+          >
+            My CRM
+          </button>
+          <button 
+            className={`suppliers-tab ${activeTab === 'requests' ? 'active' : ''}`}
+            onClick={() => setActiveTab('requests')}
+            style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'requests' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'requests' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center' }}
+          >
+            Network Requests
+            {requests.length > 0 && (
+              <span style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>{requests.length}</span>
+            )}
+          </button>
         </div>
-        <button className="suppliers-add-btn" onClick={() => setShowAdd(true)}>
-          <Icon name="manufacturers" size={16} /> Add {entityName}
-        </button>
+
+        <div style={{ display: 'flex', gap: '16px' }}>
+          <div className="suppliers-search">
+            <Icon name="search" size={16} />
+            <input className="suppliers-search__input"
+              placeholder={`Search ${activeTab === 'crm' ? entityNamePlural.toLowerCase() : 'requests'}...`}
+              value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+          {activeTab === 'crm' && (
+            <button className="suppliers-add-btn" onClick={() => setShowAdd(true)}>
+              <Icon name="manufacturers" size={16} /> Add {entityName}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="suppliers-table-wrapper">
-        <table className="suppliers-table">
-          <thead>
-            <tr>
-              <th>{entityName} Name</th>
-              <th>Contact Person</th>
-              <th>Phone</th>
-              <th>Products</th>
-              <th>Orders</th>
-              <th>Payment Terms</th>
-              <th>Status</th>
-              <th style={{ width: 100 }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
+      {/* CRM Table */}
+      {activeTab === 'crm' && (
+        <div className="suppliers-table-wrapper">
+          <table className="suppliers-table">
+            <thead>
               <tr>
-                <td colSpan="8" className="suppliers-empty">
-                  <Icon name="manufacturers" size={48} />
-                  <p>{suppliers.length === 0 ? `No ${entityNamePlural.toLowerCase()} yet. Add your first ${entityName.toLowerCase()}!` : `No ${entityNamePlural.toLowerCase()} found`}</p>
-                </td>
+                <th>{entityName} Name</th>
+                <th>Contact Person</th>
+                <th>Phone</th>
+                <th>Products</th>
+                <th>Orders</th>
+                <th>Payment Terms</th>
+                <th>Status</th>
+                <th style={{ width: 100 }}>Action</th>
               </tr>
-            ) : filtered.map(s => (
-              <tr key={s.supplier_id || s.customer_id} className="suppliers-row" onClick={() => setSelected(s)}>
-                <td>
-                  <div className="suppliers-name">{s.name}</div>
-                  {s.city && <div className="suppliers-company">{s.city}</div>}
-                </td>
-                <td><span className="suppliers-contact">{s.contactPerson || '—'}</span></td>
-                <td><span className="suppliers-phone">{s.phone}</span></td>
-                <td><span className="suppliers-products">{s.productCount || 0}</span></td>
-                <td><span className="suppliers-products">{s.orderCount || 0}</span></td>
-                <td><span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>{s.paymentTerms || '—'}</span></td>
-                <td>
-                  <span className={`suppliers-status-badge suppliers-status-badge--${s.isActive ? 'active' : 'inactive'}`}>
-                    {s.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td onClick={e => e.stopPropagation()}>
-                  <div className="suppliers-actions">
-                    <button className="suppliers-action-btn" title="Edit"
-                      onClick={e => { e.stopPropagation(); setSelected(s); setShowEdit(true); }}>
-                      <Icon name="settings" size={14} />
-                    </button>
-                    <button className="suppliers-action-btn suppliers-action-btn--danger"
-                      title="Delete" onClick={e => handleDelete(e, s)}>
-                      <Icon name="x" size={14} />
-                    </button>
-                  </div>
-                </td>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="suppliers-empty">
+                    <Icon name="manufacturers" size={48} />
+                    <p>{suppliers.length === 0 ? `No ${entityNamePlural.toLowerCase()} yet. Add your first ${entityName.toLowerCase()}!` : `No ${entityNamePlural.toLowerCase()} found`}</p>
+                  </td>
+                </tr>
+              ) : filtered.map(s => (
+                <tr key={s.supplier_id || s.customer_id} className="suppliers-row" onClick={() => setSelected(s)}>
+                  <td>
+                    <div className="suppliers-name">{s.name}</div>
+                    {s.city && <div className="suppliers-company">{s.city}</div>}
+                  </td>
+                  <td><span className="suppliers-contact">{s.contactPerson || '—'}</span></td>
+                  <td><span className="suppliers-phone">{s.phone}</span></td>
+                  <td><span className="suppliers-products">{s.productCount || 0}</span></td>
+                  <td><span className="suppliers-products">{s.orderCount || 0}</span></td>
+                  <td><span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>{s.paymentTerms || '—'}</span></td>
+                  <td>
+                    <span className={`suppliers-status-badge suppliers-status-badge--${s.isActive ? 'active' : 'inactive'}`}>
+                      {s.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <div className="suppliers-actions">
+                      <button className="suppliers-action-btn" title="Edit"
+                        onClick={e => { e.stopPropagation(); setSelected(s); setShowEdit(true); }}>
+                        <Icon name="settings" size={14} />
+                      </button>
+                      <button className="suppliers-action-btn suppliers-action-btn--danger"
+                        title="Delete" onClick={e => handleDelete(e, s)}>
+                        <Icon name="x" size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Network Requests Table */}
+      {activeTab === 'requests' && (
+        <div className="suppliers-table-wrapper">
+          <table className="suppliers-table">
+            <thead>
+              <tr>
+                <th>Business Name</th>
+                <th>Location</th>
+                <th>Initiated By</th>
+                <th>Date</th>
+                <th style={{ width: 190 }}>Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {filteredRequests.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="suppliers-empty">
+                    <p>No pending requests.</p>
+                  </td>
+                </tr>
+              ) : filteredRequests.map(r => (
+                <tr key={r.map_id} className="suppliers-row">
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      {r.logo ? <img src={r.logo} alt="" style={{width: 32, height: 32, borderRadius: 6, objectFit:'cover'}} />
+                              : <div style={{width: 32, height: 32, borderRadius: 6, background: 'rgba(255,255,255,0.1)', display:'flex', alignItems:'center', justifyContent:'center'}}>🏢</div>}
+                      <span className="suppliers-name">{r.name || r.business_name}</span>
+                    </div>
+                  </td>
+                  <td>{r.city || '—'}</td>
+                  <td>
+                    <span style={{ textTransform: 'capitalize', fontSize: '0.85rem' }}>
+                      {r.initiated_by} {r.initiated_by === user?.userType ? '(You)' : ''}
+                    </span>
+                  </td>
+                  <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {(r.initiated_by === user?.userType) ? (
+                      <span style={{ color: '#f59e0b', fontSize: '0.85rem' }}>Awaiting Acceptance</span>
+                    ) : (
+                      <div className="suppliers-actions">
+                        <button className="suppliers-action-btn" title="Accept"
+                          style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '6px 12px', width: 'auto', borderRadius: '6px' }}
+                          onClick={() => handleRequestStatus(r.map_id, 'ACCEPTED')}>
+                          Accept
+                        </button>
+                        <button className="suppliers-action-btn" title="Reject"
+                          style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '6px 12px', width: 'auto', borderRadius: '6px' }}
+                          onClick={() => handleRequestStatus(r.map_id, 'REJECTED')}>
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Side Panel */}
       {selected && !showEdit && (

@@ -8,7 +8,7 @@ const getAllUsers = async (req, res, next) => {
   try {
     const { page = 1, limit = 20, role, status, search } = req.query;
     const offset     = (parseInt(page) - 1) * parseInt(limit);
-    const conditions = ["1=1"];
+    const conditions = ["status != 'DELETED'"];
     const params     = [];
 
     if (role)   { conditions.push("role = ?");                                        params.push(role); }
@@ -116,16 +116,39 @@ const deleteUser = async (req, res, next) => {
 
     // Prevent deleting OWNER
     const [rows] = await req.db.execute(
-      "SELECT role FROM users WHERE user_id = ?", [req.params.id]
+      "SELECT email, role FROM users WHERE user_id = ?", [req.params.id]
     );
     if (rows.length === 0)
       return next(new AppError("User not found.", 404));
-    if (rows[0].role === 'OWNER')
+    
+    const userToDelete = rows[0];
+    if (userToDelete.role === 'OWNER')
       return next(new AppError("Cannot delete the shop owner.", 400));
 
-    await req.db.execute(
-      "DELETE FROM users WHERE user_id = ?", [req.params.id]
+    // Remove from global mapping to stop routing to this DB
+    for (const pool of [req.db, req.masterPool].filter(Boolean)) {
+       // Just being safe, usually req.dbName is what we need
+    }
+    await req.masterPool.execute(
+      "DELETE FROM global_users WHERE email = ? AND db_name = ?",
+      [userToDelete.email, req.dbName]
     );
+
+    try {
+      await req.db.execute(
+        "DELETE FROM users WHERE user_id = ?", [req.params.id]
+      );
+    } catch (err) {
+      if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+        // If user has history (foreign key constraint), soft delete instead
+        await req.db.execute(
+          "UPDATE users SET status = 'DELETED', isActive = FALSE WHERE user_id = ?",
+          [req.params.id]
+        );
+      } else {
+        throw err;
+      }
+    }
     res.json({ success: true, message: "User deleted successfully." });
   } catch (error) { next(error); }
 };
@@ -149,7 +172,7 @@ const inviteUser = async (req, res, next) => {
     const { email, role } = req.body;
     if (!email || !role) return next(new AppError("Email and role are required.", 400));
 
-    const [existingUser] = await req.db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
+    const [existingUser] = await req.db.execute("SELECT user_id FROM users WHERE email = ? AND status != 'DELETED'", [email]);
     if (existingUser.length > 0) return next(new AppError("User is already registered.", 409));
 
     await req.db.execute("DELETE FROM invitations WHERE email = ?", [email]);
