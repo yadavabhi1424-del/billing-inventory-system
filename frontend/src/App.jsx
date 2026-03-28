@@ -23,12 +23,13 @@ import SetupWizard    from './pages/SetupWizard';
 import { getShopProfile } from './services/api';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
+import DiscoveryPage from './pages/Discovery';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict'],
-  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict'],
-  cashier: ['dashboard', 'billing'],
+  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
+  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery'],
+  cashier: ['dashboard', 'billing', 'discovery'],
 };
 
 function canAccess(role, page) {
@@ -209,6 +210,11 @@ if (!setupDone) {
         <Route path="/settings" element={
           <ProtectedRoute page="settings" user={user}>
             <Settings user={user} />
+          </ProtectedRoute>
+        } />
+        <Route path="/discovery" element={
+          <ProtectedRoute page="discovery" user={user}>
+            <DiscoveryPage user={user} />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

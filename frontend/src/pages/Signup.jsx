@@ -2,62 +2,68 @@ import { useState, useEffect, useRef } from 'react';
 import './Auth.css';
 import * as authAPI from '../services/api';
 
-const STEPS = [
-  { num: '01', title: 'Register your shop',    desc: 'Create your account in seconds.' },
-  { num: '02', title: 'Set up your profile',   desc: 'Tell us about your business type.' },
-  { num: '03', title: 'Start managing stock',  desc: 'Add products and start billing instantly.' },
+const SHOP_STEPS = [
+  { num: '01', title: 'Register your shop',   desc: 'Create your account in seconds.' },
+  { num: '02', title: 'Set up your profile',  desc: 'Tell us about your business type.' },
+  { num: '03', title: 'Start managing stock', desc: 'Add products and start billing instantly.' },
+];
+
+const SUPPLIER_STEPS = [
+  { num: '01', title: 'Register as supplier', desc: 'Create your supplier account in seconds.' },
+  { num: '02', title: 'Set up your catalog',  desc: 'List your products for shops to discover.' },
+  { num: '03', title: 'Accept orders',        desc: 'Receive and manage orders from shops.' },
 ];
 
 function getPasswordStrength(password) {
   if (!password) return { level: 0, label: '', key: '' };
   let score = 0;
-  if (password.length >= 8)           score++;
-  if (/[A-Z]/.test(password))         score++;
-  if (/[0-9]/.test(password))         score++;
-  if (/[^A-Za-z0-9]/.test(password))  score++;
-  if (score <= 1) return { level: 1, label: 'Weak',   key: 'weak'   };
+  if (password.length >= 8) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+  if (score <= 1) return { level: 1, label: 'Weak', key: 'weak' };
   if (score <= 2) return { level: 2, label: 'Medium', key: 'medium' };
-  return           { level: 3, label: 'Strong', key: 'strong' };
+  return { level: 3, label: 'Strong', key: 'strong' };
 }
 
 // Icons
 const BoxIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-    <line x1="12" y1="22.08" x2="12" y2="12"/>
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+    <line x1="12" y1="22.08" x2="12" y2="12" />
   </svg>
 );
 const UserIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
   </svg>
 );
 const MailIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+    <rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
   </svg>
 );
 const LockIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
   </svg>
 );
 const EyeIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
   </svg>
 );
 const EyeOffIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-    <line x1="1" y1="1" x2="23" y2="23"/>
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+    <line x1="1" y1="1" x2="23" y2="23" />
   </svg>
 );
 const AlertIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );
 
@@ -67,7 +73,7 @@ function PasswordStrength({ password }) {
   return (
     <div className="auth-strength">
       <div className="auth-strength__bars">
-        {[1,2,3].map(i => (
+        {[1, 2, 3].map(i => (
           <div key={i} className={`auth-strength__bar ${i <= level ? `auth-strength__bar--${key}` : ''}`} />
         ))}
       </div>
@@ -79,11 +85,11 @@ function PasswordStrength({ password }) {
 // ── OTP Verification Step ──────────────────────────────
 function OtpStep({ email, onVerified, onLoginRedirect }) {
   const OTP_LENGTH = 6;
-  const [digits,       setDigits]       = useState(Array(OTP_LENGTH).fill(''));
-  const [loading,      setLoading]      = useState(false);
-  const [resending,    setResending]    = useState(false);
-  const [error,        setError]        = useState('');
-  const [countdown,    setCountdown]    = useState(60); // resend cooldown
+  const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [error, setError] = useState('');
+  const [countdown, setCountdown] = useState(60); // resend cooldown
   const inputRefs = useRef([]);
 
   // Countdown timer
@@ -225,7 +231,8 @@ function OtpStep({ email, onVerified, onLoginRedirect }) {
 }
 
 // ── Right panel ────────────────────────────────────────
-function SignupRightPanel() {
+function SignupRightPanel({ userType = 'shop' }) {
+  const steps = userType === 'supplier' ? SUPPLIER_STEPS : SHOP_STEPS;
   return (
     <div className="auth-brand auth-brand--signup">
       <div className="auth-brand__glow-1" aria-hidden="true" />
@@ -238,16 +245,21 @@ function SignupRightPanel() {
         </div>
 
         <h2 className="auth-brand__headline">
-          Your store,<br /><span>fully automated</span>
+          {userType === 'supplier' ? (
+            <>Your catalog,<br /><span>fully managed</span></>
+          ) : (
+            <>Your store,<br /><span>fully automated</span></>
+          )}
         </h2>
 
         <p className="auth-brand__subtext">
-          Set up once and StockSense handles billing, stock alerts,
-          sales reports, and AI-powered demand forecasting.
+          {userType === 'supplier'
+            ? 'List products, accept orders from shops, and grow your distribution network with AI-powered forecasting.'
+            : 'Set up once and StockSense handles billing, stock alerts, sales reports, and AI-powered demand forecasting.'}
         </p>
 
         <div className="auth-brand__steps">
-          {STEPS.map(step => (
+          {steps.map(step => (
             <div className="auth-step" key={step.num}>
               <div className="auth-step__num">{step.num}</div>
               <div className="auth-step__text">
@@ -287,27 +299,28 @@ const COUNTRY_CODES = [
 ];
 
 // ── Signup form ────────────────────────────────────────
-function SignupForm({ onLoginRedirect, onOtpRequired }) {
-  const [fullName,    setFullName]    = useState('');
-  const [email,       setEmail]       = useState('');
-  const [phone,       setPhone]       = useState('');
-  
+function SignupForm({ onLoginRedirect, onOtpRequired, onUserTypeChange }) {
+  const [userType,  setUserType]  = useState('shop');
+  const [fullName,  setFullName]  = useState('');
+  const [email,     setEmail]     = useState('');
+  const [phone,     setPhone]     = useState('');
+
   // Phone selection state
   const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
-  const [prefixInput, setPrefixInput]         = useState(COUNTRY_CODES[0].dial);
-  const [showPrefixDrop, setShowPrefixDrop]   = useState(false);
-  const [prefixSearch, setPrefixSearch]       = useState('');
+  const [prefixInput, setPrefixInput] = useState(COUNTRY_CODES[0].dial);
+  const [showPrefixDrop, setShowPrefixDrop] = useState(false);
+  const [prefixSearch, setPrefixSearch] = useState('');
   const prefixDropRef = useRef(null);
 
-  const [password,    setPassword]    = useState('');
+  const [password, setPassword] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
-  const [showPass,    setShowPass]    = useState(false);
+  const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [agreed,      setAgreed]      = useState(false);
-  const [loading,     setLoading]     = useState(false);
-  const [error,       setError]       = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const passwordsMatch   = confirmPass.length > 0 && password === confirmPass;
+  const passwordsMatch = confirmPass.length > 0 && password === confirmPass;
   const passwordMismatch = confirmPass.length > 0 && password !== confirmPass;
   const { level: passStrength } = getPasswordStrength(password);
 
@@ -326,12 +339,12 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
     const val = e.target.value;
     setPrefixInput(val);
     setShowPrefixDrop(true);
-    
+
     // Auto-detect country from exact dial code typed
     // Filter by elements that have exactly this dial code. Use US as default for +1 over CA initially
     const exactMatch = COUNTRY_CODES.find(c => c.dial === val);
     if (exactMatch) setSelectedCountry(exactMatch);
-    
+
     setPrefixSearch(val.replace('+', '')); // auto-search the list too
   };
 
@@ -361,13 +374,13 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!fullName.trim())  return setError('Please enter your full name.');
-    if (!email.trim())     return setError('Please enter a valid email address.');
-    if (!phone.trim())     return setError('Please enter your phone number.');
+    if (!fullName.trim()) return setError('Please enter your full name.');
+    if (!email.trim()) return setError('Please enter a valid email address.');
+    if (!phone.trim()) return setError('Please enter your phone number.');
     if (phone.length < 10) return setError('Phone number must be at least 10 digits.');
-    if (passStrength < 2)  return setError('Please use a stronger password.');
-    if (!passwordsMatch)   return setError('Passwords do not match.');
-    if (!agreed)           return setError('Please agree to the Terms of Service.');
+    if (passStrength < 2) return setError('Please use a stronger password.');
+    if (!passwordsMatch) return setError('Passwords do not match.');
+    if (!agreed) return setError('Please agree to the Terms of Service.');
 
     // Ensure valid prefix
     let finalPrefix = prefixInput;
@@ -379,13 +392,11 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
       const res = await authAPI.signup({
         fullName,
         email,
-        phone:    `${finalPrefix}${phone}`,
+        phone: `${finalPrefix}${phone}`,
         password,
+        userType,
       });
-
-      if (res.success) {
-        onOtpRequired(email);
-      }
+      if (res.success) onOtpRequired(email);
     } catch (err) {
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
@@ -393,9 +404,9 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
     }
   };
 
-  const filteredCountries = COUNTRY_CODES.filter(c => 
-    c.name.toLowerCase().includes(prefixSearch.toLowerCase()) || 
-    c.dial.includes(prefixSearch) || 
+  const filteredCountries = COUNTRY_CODES.filter(c =>
+    c.name.toLowerCase().includes(prefixSearch.toLowerCase()) ||
+    c.dial.includes(prefixSearch) ||
     c.code.toLowerCase().includes(prefixSearch.toLowerCase())
   );
 
@@ -409,6 +420,26 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
             <span className="auth-form__logo-name">StockSense</span>
             <span className="auth-form__logo-version">Pro · v2.0</span>
           </div>
+        </div>
+
+        {/* ── User Type Toggle ─────────────────────────────── */}
+        <div className="auth-usertype-toggle">
+          <button
+            type="button"
+            className={`auth-usertype-btn ${userType === 'shop' ? 'auth-usertype-btn--active' : ''}`}
+            onClick={() => { setUserType('shop'); onUserTypeChange?.('shop'); }}
+            disabled={loading}
+          >
+            🏪 I'm a Shop
+          </button>
+          <button
+            type="button"
+            className={`auth-usertype-btn ${userType === 'supplier' ? 'auth-usertype-btn--active' : ''}`}
+            onClick={() => { setUserType('supplier'); onUserTypeChange?.('supplier'); }}
+            disabled={loading}
+          >
+            🏭 I'm a Supplier
+          </button>
         </div>
 
         <div className="auth-form__header">
@@ -440,17 +471,17 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
                 <span className="auth-field__icon"><UserIcon /></span>
               </div>
             </div>
-            
+
             <div className="auth-field">
               <label className="auth-field__label" htmlFor="signup-phone">Phone Number</label>
               <div className="auth-field__phone-wrap">
-                
+
                 {/* Custom Prefix Dropdown */}
                 <div className="auth-prefix-selector" ref={prefixDropRef}>
                   <div className="auth-prefix-trigger">
                     <span className="auth-prefix-flag">{selectedCountry?.flag || '🌍'}</span>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       className="auth-prefix-input"
                       value={prefixInput}
                       onChange={handlePrefixInputChange}
@@ -459,13 +490,13 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
                       disabled={loading}
                     />
                   </div>
-                  
+
                   {showPrefixDrop && (
                     <div className="auth-prefix-dropdown">
                       <div className="auth-prefix-search">
-                        <input 
-                          type="text" 
-                          placeholder="Search country..." 
+                        <input
+                          type="text"
+                          placeholder="Search country..."
                           value={prefixSearch}
                           onChange={(e) => setPrefixSearch(e.target.value)}
                           autoFocus
@@ -473,8 +504,8 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
                       </div>
                       <div className="auth-prefix-list">
                         {filteredCountries.map(c => (
-                          <div 
-                            key={c.code} 
+                          <div
+                            key={c.code}
                             className={`auth-prefix-item ${selectedCountry.code === c.code ? 'active' : ''}`}
                             onClick={() => selectCountry(c)}
                           >
@@ -531,9 +562,8 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
               <label className="auth-field__label" htmlFor="signup-confirm">Confirm Password</label>
               <div className="auth-field__input-wrap">
                 <input id="signup-confirm" type={showConfirm ? 'text' : 'password'}
-                  className={`auth-field__input auth-field__input--password ${
-                    passwordsMatch ? 'auth-field__input--success' :
-                    passwordMismatch ? 'auth-field__input--error' : ''}`}
+                  className={`auth-field__input auth-field__input--password ${passwordsMatch ? 'auth-field__input--success' :
+                      passwordMismatch ? 'auth-field__input--error' : ''}`}
                   placeholder="Re-enter password" value={confirmPass}
                   onChange={e => setConfirmPass(e.target.value)}
                   autoComplete="new-password" disabled={loading} required />
@@ -544,7 +574,7 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
                 </button>
               </div>
               {passwordMismatch && <p className="auth-field__hint auth-field__hint--error">Passwords don't match</p>}
-              {passwordsMatch   && <p className="auth-field__hint auth-field__hint--success">✓ Passwords match</p>}
+              {passwordsMatch && <p className="auth-field__hint auth-field__hint--success">✓ Passwords match</p>}
             </div>
           </div>
 
@@ -568,18 +598,16 @@ function SignupForm({ onLoginRedirect, onOtpRequired }) {
 
 // ── Page root ──────────────────────────────────────────
 export default function SignupPage({ onLoginRedirect }) {
-  const [step,  setStep]  = useState('form'); // 'form' | 'otp'
-  const [email, setEmail] = useState('');
+  const [step,     setStep]     = useState('form');
+  const [email,    setEmail]    = useState('');
+  const [userType, setUserType] = useState('shop');
 
   const handleOtpRequired = (registeredEmail) => {
     setEmail(registeredEmail);
     setStep('otp');
   };
 
-  const handleVerified = () => {
-    // Redirect to login after verification
-    onLoginRedirect?.();
-  };
+  const handleVerified = () => { onLoginRedirect?.(); };
 
   return (
     <div className="auth-page">
@@ -587,6 +615,7 @@ export default function SignupPage({ onLoginRedirect }) {
         <SignupForm
           onLoginRedirect={onLoginRedirect}
           onOtpRequired={handleOtpRequired}
+          onUserTypeChange={setUserType}
         />
       ) : (
         <OtpStep
@@ -595,7 +624,7 @@ export default function SignupPage({ onLoginRedirect }) {
           onLoginRedirect={onLoginRedirect}
         />
       )}
-      <SignupRightPanel />
+      <SignupRightPanel userType={userType} />
     </div>
   );
 }

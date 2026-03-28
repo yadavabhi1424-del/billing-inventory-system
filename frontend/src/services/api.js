@@ -75,9 +75,11 @@ api.interceptors.response.use(
 export async function login(credentials) {
   const res = await api.post('/auth/login', credentials);
   if (res.success) {
-    localStorage.setItem('accessToken',    res.data.accessToken);
-    localStorage.setItem('refreshToken',   res.data.refreshToken);
-    localStorage.setItem('stocksense_user', JSON.stringify(res.data.user));
+    localStorage.setItem('accessToken',  res.data.accessToken);
+    localStorage.setItem('refreshToken', res.data.refreshToken);
+    // Merge userType into user object before persisting
+    const userObj = { ...res.data.user, userType: res.data.userType || 'shop' };
+    localStorage.setItem('stocksense_user', JSON.stringify(userObj));
   }
   return res;
 }
@@ -87,8 +89,9 @@ export async function signup(userData) {
     name:     userData.fullName,
     email:    userData.email,
     password: userData.password,
-    role:     userData.role?.toUpperCase() || 'CASHIER',
     phone:    userData.phone,
+    userType: userData.userType || 'shop',
+    shopType: userData.shopType || 'other',
   });
 }
 
@@ -128,11 +131,12 @@ export async function resetPassword(data) {
 }
 
 export async function googleLogin(data) {
-  const res = await api.post('/auth/google', data); // { idToken }
+  const res = await api.post('/auth/google', data); // { idToken, userType? }
   if (res.success) {
-    localStorage.setItem('accessToken',    res.data.accessToken);
-    localStorage.setItem('refreshToken',   res.data.refreshToken);
-    localStorage.setItem('stocksense_user', JSON.stringify(res.data.user));
+    localStorage.setItem('accessToken',  res.data.accessToken);
+    localStorage.setItem('refreshToken', res.data.refreshToken);
+    const userObj = { ...res.data.user, userType: res.data.userType || 'shop' };
+    localStorage.setItem('stocksense_user', JSON.stringify(userObj));
   }
   return res;
 }
@@ -429,7 +433,6 @@ export async function getAIHealth() {
   return await api.get('/ai/health');
 }
 
-
 export async function registerTenant(data) {
   return await api.post('/tenants/register', data);
 }
@@ -437,4 +440,39 @@ export async function registerTenant(data) {
 export async function updateMyProfile(data) {
   return await api.put('/users/me', data);
 }
+
+// ============================================================
+//  DISCOVERY (Phase 4 — Master DB only)
+// ============================================================
+export async function getDiscovery(params = {}) {
+  return await api.get('/discovery', { params });
+}
+
+export async function getDiscoveryProfile(slug) {
+  return await api.get(`/discovery/${slug}`);
+}
+
+export async function upsertDiscoveryProfile(data) {
+  return await api.post('/discovery/profile', data);
+}
+
+// ============================================================
+//  NETWORK / B2B (Phase 5 & 6)
+// ============================================================
+export async function getSupplierCatalog(supplierId, params = {}) {
+  return await api.get(`/network/supplier/${supplierId}/catalog`, { params });
+}
+
+export async function getConnections(params = {}) {
+  return await api.get('/network/connections', { params });
+}
+
+export async function sendConnectionRequest(partnerId) {
+  return await api.post('/network/connections', { partner_id: partnerId });
+}
+
+export async function updateConnectionStatus(mapId, status) {
+  return await api.patch(`/network/connections/${mapId}`, { status });
+}
+
 export { api, API_URL };

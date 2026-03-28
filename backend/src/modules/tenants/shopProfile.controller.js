@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { AppError }     from "../../middleware/errorHandler.js";
+import { masterPool }   from "../../config/masterDatabase.js";
 
 export const getShopTypes = async (req, res, next) => {
   try {
@@ -78,6 +79,30 @@ export const saveShopProfile = async (req, res, next) => {
         ]
       );
     }
+
+    // --- NEW: Sync to Public Discovery (Master DB) ---
+    try {
+      const slug = (shop_name || 'shop')
+        .toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40)
+        + '_' + req.dbName.slice(-6);
+
+      await masterPool.execute(
+        `INSERT INTO profiles
+           (profile_id, entity_id, entity_type, business_name, slug, description,
+            city, state, pincode, business_type, is_public)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           business_name = VALUES(business_name),
+           description   = VALUES(description),
+           business_type = VALUES(business_type),
+           is_public     = VALUES(is_public)`,
+        [uuidv4(), req.dbName, req.userType || 'shop', shop_name, slug, shop_description || null,
+         null, null, null, shop_type || 'general', 1]
+      );
+    } catch (discoveryErr) {
+      console.error("Warning: Could not sync to master discovery:", discoveryErr.message);
+    }
+    // -------------------------------------------------
 
     res.json({ success: true, message: "Shop profile saved." });
   } catch (error) { next(error); }

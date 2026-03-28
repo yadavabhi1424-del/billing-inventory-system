@@ -43,9 +43,10 @@ const protect = async (req, res, next) => {
     if (user.status !== "APPROVED")
       return next(new AppError("Your account is not approved yet.", 403));
 
-    req.user   = user;
-    req.db     = db;
-    req.dbName = decoded.dbName;
+    req.user          = user;
+    req.user.userType = decoded.userType || 'shop';
+    req.db            = db;
+    req.dbName        = decoded.dbName;
     next();
   } catch (error) {
     if (error.name === "TokenExpiredError")

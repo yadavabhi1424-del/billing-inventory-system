@@ -3,23 +3,25 @@ import { v4 as uuidv4 } from "uuid";
 import { OAuth2Client } from "google-auth-library";
 import { pool } from "../../config/database.js";
 import { masterPool } from "../../config/masterDatabase.js";
-import { getTenantPool, provisionTenant } from "../../middleware/tenant.middleware.js";
+import {
+  getTenantPool,
+  provisionTenant,
+  provisionSupplierTenant,
+} from "../../middleware/tenant.middleware.js";
 import { generateTokenPair, verifyRefreshToken } from "../../config/jwt.js";
 import { sendOtpEmail, sendPasswordResetEmail } from "../../config/email.js";
 import { AppError } from "../../middleware/errorHandler.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// ── Helper: generate 6-digit numeric OTP ──────────────────────
 function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-// ── Helper: upsert OTP (delete old + insert new) ──────────────
 async function saveOtp(db, userId) {
   await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-  const code = generateOtp();
-  const expiry = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+  const code   = generateOtp();
+  const expiry = new Date(Date.now() + 5 * 60 * 1000);
   await db.execute(
     "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
     [uuidv4(), userId, code, expiry]
@@ -27,112 +29,104 @@ async function saveOtp(db, userId) {
   return code;
 }
 
-// ── Helper: resolve DB for a given owner email ─────────────────
-async function resolveDb(email) {
-  const [rows] = await masterPool.execute(
-    `SELECT t.tenant_id, t.db_name, t.status
-     FROM tenants t WHERE t.owner_email = ?`,
-    [email]
-  );
-  if (rows.length > 0) {
-    if (rows[0].status === "SUSPENDED")
-      throw new AppError("Your shop has been suspended.", 403);
-    const db = await getTenantPool(rows[0].db_name);
-    return { db, tenantRow: rows[0], dbName: rows[0].db_name };
-  }
-  return { db: null, tenantRow: null, dbName: null };
+function buildSlug(name, id) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40) + '_' + id.slice(0, 6);
 }
 
-// ── Helper: resolve DB from Token (Invitations & Verification) 
+async function resolveDb(email) {
+  // 1. Check Owners
+  const [shopRows] = await masterPool.execute(
+    `SELECT tenant_id AS id, db_name, status FROM tenants WHERE owner_email = ?`, [email]
+  );
+  if (shopRows.length > 0) {
+    if (shopRows[0].status === "SUSPENDED") throw new AppError("Your shop has been suspended.", 403);
+    const db = await getTenantPool(shopRows[0].db_name);
+    return { db, row: shopRows[0], dbName: shopRows[0].db_name, userType: 'shop' };
+  }
+
+  const [supRows] = await masterPool.execute(
+    `SELECT supplier_id AS id, db_name, status FROM suppliers WHERE owner_email = ?`, [email]
+  );
+  if (supRows.length > 0) {
+    if (supRows[0].status === "SUSPENDED") throw new AppError("Your account has been suspended.", 403);
+    const db = await getTenantPool(supRows[0].db_name);
+    return { db, row: supRows[0], dbName: supRows[0].db_name, userType: 'supplier' };
+  }
+
+  // 2. Check Global Invited Users (Admin, Cashier, Staff)
+  const [globalRows] = await masterPool.execute(
+    `SELECT db_name, user_type FROM global_users WHERE email = ?`, [email]
+  );
+  if (globalRows.length > 0) {
+    const { db_name, user_type } = globalRows[0];
+    const db = await getTenantPool(db_name);
+    return { db, row: null, dbName: db_name, userType: user_type };
+  }
+
+  return { db: null, row: null, dbName: null, userType: null };
+}
+
 async function resolveDbFromToken(token) {
   if (token && token.includes('::')) {
     const dbName = token.split('::')[0];
-    try {
-      return await getTenantPool(dbName);
-    } catch {
-      return pool;
-    }
+    try { return await getTenantPool(dbName); } catch { return pool; }
   }
   return pool;
 }
 
-// ══════════════════════════════════════════════════════════════
-//  SIGNUP  →  create pending user in default DB + send OTP
-//  (no tenant DB created here)
-// ══════════════════════════════════════════════════════════════
+// SIGNUP
 const signup = async (req, res, next) => {
   try {
-    // ── Cleanup abandoned signups (older than 24 hours) from the staging pool
     try {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       await pool.execute("DELETE FROM users WHERE emailVerified = FALSE AND createdAt < ?", [oneDayAgo]);
       await pool.execute("DELETE FROM email_otps WHERE createdAt < ?", [oneDayAgo]);
-    } catch (cleanupErr) {
-      console.warn("Cleanup error:", cleanupErr.message);
-    }
+    } catch (e) { console.warn("Cleanup error:", e.message); }
 
-    const { name, email, password, phone, shopName, shopType = 'other' } = req.body;
+    const { name, email, password, phone, shopType = 'other', userType = 'shop' } = req.body;
 
     if (!name || !email || !password)
       return next(new AppError("Name, email, and password are required.", 400));
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email))
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return next(new AppError("Please enter a valid email address.", 400));
-
     if (password.length < 6)
       return next(new AppError("Password must be at least 6 characters.", 400));
 
-    // Check if tenant already exists for this email (fully registered)
     const [tenantCheck] = await masterPool.execute(
-      "SELECT tenant_id FROM tenants WHERE owner_email = ?", [email]
+      "SELECT tenant_id AS id FROM tenants WHERE owner_email = ?", [email]
     );
-    if (tenantCheck.length > 0)
+    const [supplierCheck] = await masterPool.execute(
+      "SELECT supplier_id AS id FROM suppliers WHERE owner_email = ?", [email]
+    );
+    if (tenantCheck.length > 0 || supplierCheck.length > 0)
       return next(new AppError("Email already registered.", 409));
 
-    // Check if a pending (unverified) user already exists in the staging pool
     const [existing] = await pool.execute(
       "SELECT user_id, emailVerified FROM users WHERE email = ?", [email]
     );
-
     if (existing.length > 0) {
-      if (existing[0].emailVerified)
-        return next(new AppError("Email already registered.", 409));
-      // Unverified — resend a fresh OTP
+      if (existing[0].emailVerified) return next(new AppError("Email already registered.", 409));
       const code = await saveOtp(pool, existing[0].user_id);
       try { await sendOtpEmail(email, name, code); } catch { }
-      return res.status(200).json({
-        success: true,
-        message: "A new verification code has been sent to your email.",
-      });
+      return res.status(200).json({ success: true, message: "A new verification code has been sent to your email." });
     }
 
-    // Create a new pending user in the default (staging) pool
     const hashedPassword = await bcrypt.hash(password, 12);
     const userId = uuidv4();
 
     await pool.execute(
-      `INSERT INTO users
-        (user_id, name, email, password, provider, role, phone, status, emailVerified, isActive)
+      `INSERT INTO users (user_id, name, email, password, provider, role, phone, status, emailVerified, isActive)
        VALUES (?, ?, ?, ?, 'local', 'OWNER', ?, 'PENDING', FALSE, FALSE)`,
       [userId, name, email, hashedPassword, phone || null]
     );
 
-    // Store shopName and shopType for use after OTP verification
-    // We store them in a temp column or alongside OTP — simplest: store in OTP table as metadata
-    // Instead we save to a JSON column on the user record by updating a notes/meta column
-    // Simplest clean approach: store shopName in the users table verifyToken field temporarily
     await pool.execute(
       "UPDATE users SET verifyToken = ? WHERE user_id = ?",
-      [JSON.stringify({ shopName: shopName || `${name}'s Shop`, shopType }), userId]
+      [JSON.stringify({ shopType, userType }), userId]
     );
 
     const code = await saveOtp(pool, userId);
-    try {
-      await sendOtpEmail(email, name, code);
-    } catch (emailError) {
-      console.warn("OTP email failed:", emailError.message);
-    }
+    try { await sendOtpEmail(email, name, code); } catch (e) { console.warn("OTP email failed:", e.message); }
 
     res.status(201).json({
       success: true,
@@ -141,611 +135,445 @@ const signup = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  VERIFY EMAIL  →  POST { email, code }
-//  OTP check  →  provision tenant DB  →  create real user
-// ══════════════════════════════════════════════════════════════
+// VERIFY EMAIL
 const verifyEmail = async (req, res, next) => {
   try {
     const { email, code } = req.body;
-    if (!email || !code)
-      return next(new AppError("Email and verification code are required.", 400));
+    if (!email || !code) return next(new AppError("Email and verification code are required.", 400));
 
-    // ── Step 1: find the pending (staging) user ───────────────
     const [userRows] = await pool.execute(
       "SELECT user_id, name, email, password, phone, verifyToken FROM users WHERE email = ? AND emailVerified = FALSE",
       [email]
     );
-    if (userRows.length === 0)
-      return next(new AppError("Account not found or already verified.", 404));
+    if (userRows.length === 0) return next(new AppError("Account not found or already verified.", 404));
 
     const stagingUser = userRows[0];
 
-    // ── Step 2: validate OTP ──────────────────────────────────
     const [otpRows] = await pool.execute(
       "SELECT id, expiry FROM email_otps WHERE user_id = ? AND code = ? ORDER BY createdAt DESC LIMIT 1",
       [stagingUser.user_id, code]
     );
-
-    if (otpRows.length === 0)
-      return next(new AppError("Invalid verification code.", 400));
-
+    if (otpRows.length === 0) return next(new AppError("Invalid verification code.", 400));
     if (new Date() > new Date(otpRows[0].expiry))
       return next(new AppError("Verification code has expired. Please request a new one.", 400));
 
-    // ── Step 3: provision tenant (idempotent) ─────────────────
-    const [existingTenant] = await masterPool.execute(
-      "SELECT tenant_id, db_name FROM tenants WHERE owner_email = ?", [email]
-    );
+    let shopType = 'other';
+    let userType = 'shop';
+    try {
+      const meta = JSON.parse(stagingUser.verifyToken || '{}');
+      if (meta.shopType) shopType = meta.shopType;
+      if (meta.userType) userType = meta.userType;
+    } catch { }
 
-    let tenantId, dbName;
+    const displayName = userType === 'supplier'
+      ? `${stagingUser.name}'s Business`
+      : `${stagingUser.name}'s Shop`;
 
-    if (existingTenant.length > 0) {
-      // Already provisioned (edge case: verify called twice)
-      tenantId = existingTenant[0].tenant_id;
-      dbName = existingTenant[0].db_name;
+    let dbName;
+    let tenantId = uuidv4();
+
+    if (userType === 'supplier') {
+      const [existingSupplier] = await masterPool.execute(
+        "SELECT supplier_id, db_name FROM suppliers WHERE owner_email = ?", [email]
+      );
+      if (existingSupplier.length > 0) {
+        tenantId = existingSupplier[0].supplier_id;
+        dbName   = existingSupplier[0].db_name;
+      } else {
+        const slug = buildSlug(displayName, tenantId);
+        dbName = `${process.env.SUPPLIER_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
+        await masterPool.execute(
+          `INSERT INTO suppliers (supplier_id, business_name, slug, owner_name, owner_email, owner_phone, db_name, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'TRIAL')`,
+          [tenantId, displayName, slug, stagingUser.name, email, stagingUser.phone || null, dbName]
+        );
+        await provisionSupplierTenant(tenantId, dbName);
+      }
     } else {
-      // Parse shop metadata stored in verifyToken during signup
-      let shopName = stagingUser.name + "'s Shop";
-      let shopType = 'other';
-      try {
-        const meta = JSON.parse(stagingUser.verifyToken || '{}');
-        if (meta.shopName) shopName = meta.shopName;
-        if (meta.shopType) shopType = meta.shopType;
-      } catch { }
-
-      tenantId = uuidv4();
-      const shopSlug = shopName.toLowerCase()
-        .replace(/[^a-z0-9]/g, '_').slice(0, 40) + '_' + tenantId.slice(0, 6);
-      dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
-
-      // Insert tenant record in master DB
-      await masterPool.execute(
-        `INSERT INTO tenants
-          (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'TRIAL')`,
-        [tenantId, shopName, shopSlug, stagingUser.name, email, stagingUser.phone || null, dbName]
+      const [existingTenant] = await masterPool.execute(
+        "SELECT tenant_id, db_name FROM tenants WHERE owner_email = ?", [email]
       );
-
-      // Attach a FREE subscription
-      await masterPool.execute(
-        `INSERT INTO subscriptions
-          (sub_id, tenant_id, plan, status, max_users, max_products, ai_enabled, reports_enabled, expires_at)
-         SELECT ?, ?, plan_name, 'ACTIVE', max_users, max_products, ai_enabled, reports_enabled,
-                DATE_ADD(NOW(), INTERVAL 30 DAY)
-         FROM plans WHERE plan_name = 'FREE'`,
-        [uuidv4(), tenantId]
-      );
-
-      // Create the tenant's MySQL database and run all schema migrations
-      await provisionTenant(tenantId, dbName, shopType);
+      if (existingTenant.length > 0) {
+        tenantId = existingTenant[0].tenant_id;
+        dbName   = existingTenant[0].db_name;
+      } else {
+        const slug = buildSlug(displayName, tenantId);
+        dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
+        await masterPool.execute(
+          `INSERT INTO tenants (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'TRIAL')`,
+          [tenantId, displayName, slug, stagingUser.name, email, stagingUser.phone || null, dbName]
+        );
+        await masterPool.execute(
+          `INSERT INTO subscriptions (sub_id, tenant_id, plan, status, max_users, max_products, ai_enabled, reports_enabled, expires_at)
+           SELECT ?, ?, plan_name, 'ACTIVE', max_users, max_products, ai_enabled, reports_enabled, DATE_ADD(NOW(), INTERVAL 30 DAY)
+           FROM plans WHERE plan_name = 'FREE'`,
+          [uuidv4(), tenantId]
+        );
+        await provisionTenant(tenantId, dbName, shopType);
+      }
     }
 
-    // ── Step 4: create the verified user in the tenant DB ─────
     const tenantDb = await getTenantPool(dbName);
-
-    const [existingUser] = await tenantDb.execute(
-      "SELECT user_id FROM users WHERE email = ?", [email]
-    );
-
+    const [existingUser] = await tenantDb.execute("SELECT user_id FROM users WHERE email = ?", [email]);
     if (existingUser.length === 0) {
       await tenantDb.execute(
-        `INSERT INTO users
-          (user_id, name, email, password, provider, role, phone, status, emailVerified, isActive)
+        `INSERT INTO users (user_id, name, email, password, provider, role, phone, status, emailVerified, isActive)
          VALUES (?, ?, ?, ?, 'local', 'OWNER', ?, 'APPROVED', TRUE, TRUE)`,
         [stagingUser.user_id, stagingUser.name, email, stagingUser.password, stagingUser.phone || null]
       );
+      await masterPool.execute(
+        `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
+        [email, dbName, userType]
+      );
     }
 
-    // ── Step 5: clean up staging records ─────────────────────
     await pool.execute("DELETE FROM email_otps WHERE user_id = ?", [stagingUser.user_id]);
     await pool.execute("DELETE FROM users WHERE user_id = ? AND emailVerified = FALSE", [stagingUser.user_id]);
 
-    res.json({
-      success: true,
-      message: "Email verified! Your shop is ready. You can now sign in.",
-    });
+    const label = userType === 'supplier' ? 'Your supplier account is ready.' : 'Your shop is ready.';
+    res.json({ success: true, message: `Email verified! ${label} You can now sign in.` });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  RESEND OTP  →  POST { email }
-// ══════════════════════════════════════════════════════════════
+// RESEND OTP
 const resendOtp = async (req, res, next) => {
   try {
     const { email } = req.body;
     if (!email) return next(new AppError("Email is required.", 400));
-
-    // Pending users live in the default pool until verified
     const [rows] = await pool.execute(
-      "SELECT user_id, name, emailVerified FROM users WHERE email = ? AND emailVerified = FALSE",
-      [email]
+      "SELECT user_id, name FROM users WHERE email = ? AND emailVerified = FALSE", [email]
     );
-    if (rows.length === 0)
-      return next(new AppError("Account not found or already verified.", 404));
-
+    if (rows.length === 0) return next(new AppError("Account not found or already verified.", 404));
     const code = await saveOtp(pool, rows[0].user_id);
-    try {
-      await sendOtpEmail(email, rows[0].name, code);
-    } catch (emailError) {
-      console.warn("OTP email failed:", emailError.message);
-    }
-
+    try { await sendOtpEmail(email, rows[0].name, code); } catch (e) { console.warn("OTP email failed:", e.message); }
     res.json({ success: true, message: "A new verification code has been sent." });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  LOGIN  →  email + password
-// ══════════════════════════════════════════════════════════════
+// LOGIN
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password)
-      return next(new AppError("Email and password are required.", 400));
+    if (!email || !password) return next(new AppError("Email and password are required.", 400));
 
-    const { db, tenantRow, dbName } = await resolveDb(email);
+    const { db, row, dbName, userType } = await resolveDb(email);
     const targetDb = db || pool;
 
     const [rows] = await targetDb.execute("SELECT * FROM users WHERE email = ?", [email]);
-
-    if (rows.length === 0)
-      return next(new AppError("Account not found. Please sign up.", 404));
-
+    if (rows.length === 0) return next(new AppError("Account not found. Please sign up.", 404));
     const user = rows[0];
 
-    // Google-only account trying to use password login
     if (user.provider === "google" && !user.password)
       return next(new AppError("This account uses Google Sign-In. Please sign in with Google.", 400));
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid)
+    if (!await bcrypt.compare(password, user.password))
       return next(new AppError("Incorrect password.", 401));
-
     if (!user.emailVerified)
-      return next(new AppError("Email not verified. Please check your inbox for the verification code.", 403));
+      return next(new AppError("Email not verified. Please check your inbox.", 403));
+    if (user.status === "PENDING")  return next(new AppError("Your account is pending approval.", 403));
+    if (user.status === "REJECTED") return next(new AppError("Your account was rejected.", 403));
+    if (!user.isActive)             return next(new AppError("Your account has been deactivated.", 403));
 
-    if (user.status === "PENDING")
-      return next(new AppError("Your account is pending approval.", 403));
-    if (user.status === "REJECTED")
-      return next(new AppError("Your account was rejected. Contact your administrator.", 403));
-    if (!user.isActive)
-      return next(new AppError("Your account has been deactivated.", 403));
-
-    const tokens = generateTokenPair({ ...user, dbName });
-
-    await targetDb.execute(
-      "UPDATE users SET refreshToken = ? WHERE user_id = ?",
-      [tokens.refreshToken, user.user_id]
-    );
+    const tokens = generateTokenPair({ ...user, dbName, userType: userType || 'shop' });
+    await targetDb.execute("UPDATE users SET refreshToken = ? WHERE user_id = ?", [tokens.refreshToken, user.user_id]);
 
     const { password: _, refreshToken: __, verifyToken: ___, ...safeUser } = user;
-    safeUser.role = safeUser.role.toLowerCase();
+    safeUser.role     = safeUser.role.toLowerCase();
+    safeUser.userType = userType || 'shop';
 
     res.json({
-      success: true,
-      message: "Login successful.",
-      data: {
-        user: safeUser,
-        ...tokens,
-        tenant: tenantRow ? { tenantId: tenantRow.tenant_id, dbName: tenantRow.db_name } : null,
-      },
+      success: true, message: "Login successful.",
+      data: { user: safeUser, ...tokens, userType: userType || 'shop', tenant: row ? { tenantId: row.id, dbName } : null },
     });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  GOOGLE AUTH  →  POST { idToken, accessToken }
-// ══════════════════════════════════════════════════════════════
+// GOOGLE AUTH
 const googleAuth = async (req, res, next) => {
   try {
-    const { idToken, accessToken } = req.body;
+    const { idToken, accessToken, userType: reqUserType } = req.body;
     if (!idToken && !accessToken) return next(new AppError("Google token is required.", 400));
 
     let email, name, picture;
-
     if (idToken) {
-      // Cryptographically verify the ID token signature, audience, and expiry
-      const ticket = await googleClient.verifyIdToken({
-        idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
-      const payload = ticket.getPayload();
-      email = payload.email;
-      name = payload.name;
-      picture = payload.picture;
+      const ticket = await googleClient.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID });
+      const p = ticket.getPayload();
+      email = p.email; name = p.name; picture = p.picture;
     } else {
-      // Fetch user info from Google using access token (for custom UI buttons via initTokenClient)
       const resp = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       if (!resp.ok) return next(new AppError("Failed to fetch user info from Google.", 400));
-      const payload = await resp.json();
-      email = payload.email;
-      name = payload.name;
-      picture = payload.picture;
+      const p = await resp.json();
+      email = p.email; name = p.name; picture = p.picture;
     }
-
     if (!email) return next(new AppError("Could not retrieve email from Google.", 400));
 
-    // Try to find the tenant for this email
-    const [tenantRows] = await masterPool.execute(
-      "SELECT tenant_id, db_name, status FROM tenants WHERE owner_email = ?",
-      [email]
-    );
+    const { db: existingDb, row: existingRow, dbName: existingDbName, userType: existingUserType } = await resolveDb(email);
+    let db, dbName, row, userType;
 
-    let db = pool;
-    let dbName = null;
-    let tenantRow = null;
-
-    if (tenantRows.length > 0) {
-      if (tenantRows[0].status === "SUSPENDED")
-        return next(new AppError("Your shop has been suspended.", 403));
-      dbName = tenantRows[0].db_name;
-      tenantRow = tenantRows[0];
-      db = await getTenantPool(dbName);
-    }
-    console.log("Using DB:", dbName);
-
-    const [rows] = await db.execute(
-      "SELECT * FROM users WHERE email = ?", [email]
-    );
-
-    let user;
-    if (rows.length > 0) {
-      user = rows[0];
-      if (picture && user.avatar !== picture) {
-        await db.execute("UPDATE users SET avatar = ? WHERE user_id = ?", [picture, user.user_id]);
-        user.avatar = picture;
-      }
+    if (existingRow) {
+      db = existingDb; dbName = existingDbName; row = existingRow; userType = existingUserType;
     } else {
-      // New Google user - Must provision a tenant DB, not use the fallback pool
-      const userId = uuidv4();
+      userType = reqUserType === 'supplier' ? 'supplier' : 'shop';
+      const newId    = uuidv4();
       const userName = name || email.split("@")[0];
-      const tenantId = uuidv4();
-      
-      let shopName = userName + "'s Shop";
-      const shopSlug = shopName.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40) + '_' + tenantId.slice(0, 6);
-      dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
 
-      // Insert tenant record in master DB
-      await masterPool.execute(
-        `INSERT INTO tenants
-          (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)
-         VALUES (?, ?, ?, ?, ?, NULL, ?, 'TRIAL')`,
-        [tenantId, shopName, shopSlug, userName, email, dbName]
-      );
+      if (userType === 'supplier') {
+        const businessName = `${userName}'s Business`;
+        const slug = buildSlug(businessName, newId);
+        dbName = `${process.env.SUPPLIER_DB_PREFIX}${newId.replace(/-/g, '').slice(0, 16)}`;
+        await masterPool.execute(
+          `INSERT INTO suppliers (supplier_id, business_name, slug, owner_name, owner_email, owner_phone, db_name, status)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, 'TRIAL')`,
+          [newId, businessName, slug, userName, email, dbName]
+        );
+        await provisionSupplierTenant(newId, dbName);
+      } else {
+        const shopName = `${userName}'s Shop`;
+        const slug = buildSlug(shopName, newId);
+        dbName = `${process.env.TENANT_DB_PREFIX}${newId.replace(/-/g, '').slice(0, 16)}`;
+        await masterPool.execute(
+          `INSERT INTO tenants (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, 'TRIAL')`,
+          [newId, shopName, slug, userName, email, dbName]
+        );
+        await masterPool.execute(
+          `INSERT INTO subscriptions (sub_id, tenant_id, plan, status, max_users, max_products, ai_enabled, reports_enabled, expires_at)
+           SELECT ?, ?, plan_name, 'ACTIVE', max_users, max_products, ai_enabled, reports_enabled, DATE_ADD(NOW(), INTERVAL 30 DAY)
+           FROM plans WHERE plan_name = 'FREE'`,
+          [uuidv4(), newId]
+        );
+        await provisionTenant(newId, dbName, 'other');
+      }
 
-      // Attach a FREE subscription
-      await masterPool.execute(
-        `INSERT INTO subscriptions
-          (sub_id, tenant_id, plan, status, max_users, max_products, ai_enabled, reports_enabled, expires_at)
-         SELECT ?, ?, plan_name, 'ACTIVE', max_users, max_products, ai_enabled, reports_enabled,
-                DATE_ADD(NOW(), INTERVAL 30 DAY)
-         FROM plans WHERE plan_name = 'FREE'`,
-        [uuidv4(), tenantId]
-      );
-
-      // Create the tenant's MySQL database and run all schema migrations
-      await provisionTenant(tenantId, dbName, 'other');
-
-      // Now set db to the newly provisioned tenant's db
-      db = await getTenantPool(dbName);
-      tenantRow = { tenant_id: tenantId, db_name: dbName };
-
+      db  = await getTenantPool(dbName);
+      row = { id: newId, db_name: dbName };
       await db.execute(
-        `INSERT INTO users
-          (user_id, name, email, password, provider, role, avatar, status, isActive, emailVerified)
+        `INSERT INTO users (user_id, name, email, password, provider, role, avatar, status, isActive, emailVerified)
          VALUES (?, ?, ?, NULL, 'google', 'OWNER', ?, 'APPROVED', TRUE, TRUE)`,
-        [userId, userName, email, picture || null]
+        [uuidv4(), userName, email, picture || null]
       );
-      const [newRows] = await db.execute("SELECT * FROM users WHERE user_id = ?", [userId]);
-      user = newRows[0];
+      await masterPool.execute(
+        `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
+        [email, dbName, userType]
+      );
     }
 
-    if (!user.isActive)
-      return next(new AppError("Your account has been deactivated.", 403));
+    const [rows] = await db.execute("SELECT * FROM users WHERE email = ?", [email]);
+    if (rows.length === 0) return next(new AppError("User not found after provisioning.", 500));
+    let user = rows[0];
+    if (picture && user.avatar !== picture) {
+      await db.execute("UPDATE users SET avatar = ? WHERE user_id = ?", [picture, user.user_id]);
+      user.avatar = picture;
+    }
+    if (!user.isActive) return next(new AppError("Your account has been deactivated.", 403));
 
-    const tokens = generateTokenPair({ ...user, dbName });
-    await db.execute(
-      "UPDATE users SET refreshToken = ? WHERE user_id = ?",
-      [tokens.refreshToken, user.user_id]
-    );
+    const tokens = generateTokenPair({ ...user, dbName, userType });
+    await db.execute("UPDATE users SET refreshToken = ? WHERE user_id = ?", [tokens.refreshToken, user.user_id]);
 
     const { password: _, refreshToken: __, verifyToken: ___, ...safeUser } = user;
-    safeUser.role = safeUser.role.toLowerCase();
+    safeUser.role     = safeUser.role.toLowerCase();
+    safeUser.userType = userType;
 
     res.json({
-      success: true,
-      message: "Google sign-in successful.",
-      data: {
-        user: safeUser,
-        ...tokens,
-        tenant: tenantRow ? { tenantId: tenantRow.tenant_id, dbName: tenantRow.db_name } : null,
-      },
+      success: true, message: "Google sign-in successful.",
+      data: { user: safeUser, ...tokens, userType, tenant: row ? { tenantId: row.id, dbName } : null },
     });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  REFRESH TOKEN
-// ══════════════════════════════════════════════════════════════
+// REFRESH TOKEN
 const refreshToken = async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
-    if (!refreshToken)
-      return next(new AppError("Refresh token is required.", 400));
-
+    if (!refreshToken) return next(new AppError("Refresh token is required.", 400));
     const decoded = verifyRefreshToken(refreshToken);
-
-    const [tenantRows] = await masterPool.execute(
-      "SELECT db_name FROM tenants WHERE owner_email = ?", [decoded.email]
+    const { db, dbName, userType } = await resolveDb(decoded.email);
+    const targetDb = db || pool;
+    const [rows] = await targetDb.execute(
+      "SELECT user_id, name, email, role, refreshToken FROM users WHERE user_id = ?", [decoded.id]
     );
-    const dbName = tenantRows.length > 0 ? tenantRows[0].db_name : null;
-    const db = dbName ? await getTenantPool(dbName) : pool;
-
-    const [rows] = await db.execute(
-      "SELECT user_id, name, email, role, refreshToken FROM users WHERE user_id = ?",
-      [decoded.id]
-    );
-
     if (rows.length === 0 || rows[0].refreshToken !== refreshToken)
       return next(new AppError("Invalid refresh token.", 401));
-
-    const tokens = generateTokenPair({ ...rows[0], dbName });
-    await db.execute(
-      "UPDATE users SET refreshToken = ? WHERE user_id = ?",
-      [tokens.refreshToken, rows[0].user_id]
-    );
-
+    const tokens = generateTokenPair({ ...rows[0], dbName, userType: userType || 'shop' });
+    await targetDb.execute("UPDATE users SET refreshToken = ? WHERE user_id = ?", [tokens.refreshToken, rows[0].user_id]);
     res.json({ success: true, message: "Token refreshed.", data: tokens });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  LOGOUT
-// ══════════════════════════════════════════════════════════════
+// LOGOUT
 const logout = async (req, res, next) => {
   try {
-    await req.db.execute(
-      "UPDATE users SET refreshToken = NULL WHERE user_id = ?",
-      [req.user.user_id]
-    );
+    await req.db.execute("UPDATE users SET refreshToken = NULL WHERE user_id = ?", [req.user.user_id]);
     res.json({ success: true, message: "Logged out successfully." });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  GET ME
-// ══════════════════════════════════════════════════════════════
+// GET ME
 const getMe = async (req, res, next) => {
   try {
     const [rows] = await req.db.execute(
-      `SELECT user_id, name, email, role, phone, avatar, provider,
-              isActive, status, createdAt
-       FROM users WHERE user_id = ?`,
-      [req.user.user_id]
+      `SELECT user_id, name, email, role, phone, avatar, provider, isActive, status, createdAt
+       FROM users WHERE user_id = ?`, [req.user.user_id]
     );
-    res.json({ success: true, data: rows[0] });
+    res.json({ success: true, data: { ...rows[0], userType: req.user.userType || 'shop' } });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  CHANGE PASSWORD
-// ══════════════════════════════════════════════════════════════
+// CHANGE PASSWORD
 const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword)
-      return next(new AppError("Both passwords are required.", 400));
-    if (newPassword.length < 6)
-      return next(new AppError("New password must be at least 6 characters.", 400));
-
-    const [rows] = await req.db.execute(
-      "SELECT password, provider FROM users WHERE user_id = ?", [req.user.user_id]
-    );
-
+    if (!currentPassword || !newPassword) return next(new AppError("Both passwords are required.", 400));
+    if (newPassword.length < 6) return next(new AppError("New password must be at least 6 characters.", 400));
+    const [rows] = await req.db.execute("SELECT password, provider FROM users WHERE user_id = ?", [req.user.user_id]);
     if (rows[0].provider === "google" && !rows[0].password)
       return next(new AppError("Google accounts cannot change password here.", 400));
-
-    const isValid = await bcrypt.compare(currentPassword, rows[0].password);
-    if (!isValid)
+    if (!await bcrypt.compare(currentPassword, rows[0].password))
       return next(new AppError("Current password is incorrect.", 400));
-
     const hashed = await bcrypt.hash(newPassword, 12);
-    await req.db.execute(
-      "UPDATE users SET password = ? WHERE user_id = ?",
-      [hashed, req.user.user_id]
-    );
-
+    await req.db.execute("UPDATE users SET password = ? WHERE user_id = ?", [hashed, req.user.user_id]);
     res.json({ success: true, message: "Password changed successfully." });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  FORGOT PASSWORD  →  POST { email }
-// ══════════════════════════════════════════════════════════════
+// FORGOT PASSWORD
 const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
     if (!email) return next(new AppError("Email is required.", 400));
-
-    // Resolve tenant DB
-    const { db, tenantRow } = await resolveDb(email);
-
-    if (!tenantRow) {
-      return next(new AppError("Account not found.", 404));
-    }
-
-    const [rows] = await db.execute(
-      "SELECT user_id, name, provider FROM users WHERE email = ?", [email]
-    );
-
-    if (rows.length === 0) {
-      return next(new AppError("Account not found.", 404));
-    }
-    if (rows[0].provider === "google") {
+    const { db, row } = await resolveDb(email);
+    if (!row) return next(new AppError("Account not found.", 404));
+    const [rows] = await db.execute("SELECT user_id, name, provider FROM users WHERE email = ?", [email]);
+    if (rows.length === 0) return next(new AppError("Account not found.", 404));
+    if (rows[0].provider === "google")
       return next(new AppError("Google accounts cannot reset password here. Please sign in with Google.", 400));
-    }
-
     const userId = rows[0].user_id;
-    // Generate new OTP with slightly longer expiry (10 mins)
     await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-    const code = generateOtp();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-    await db.execute(
-      "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
-      [uuidv4(), userId, code, expiry]
-    );
+    const code   = generateOtp();
+    const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    await db.execute("INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)", [uuidv4(), userId, code, expiry]);
     sendPasswordResetEmail(email, rows[0].name, code).catch(e => console.warn(e));
-
-    res.json({
-      success: true,
-      message: "Password reset code sent to your email.",
-    });
+    res.json({ success: true, message: "Password reset code sent to your email." });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  VERIFY RESET OTP  →  POST { email, code }
-// ══════════════════════════════════════════════════════════════
+// VERIFY RESET OTP
 const verifyResetOtp = async (req, res, next) => {
   try {
     const { email, code } = req.body;
     if (!email || !code) return next(new AppError("Email and code are required.", 400));
-
-    const { db, tenantRow } = await resolveDb(email);
-    if (!tenantRow) return next(new AppError("Invalid or expired OTP.", 400));
-
+    const { db, row } = await resolveDb(email);
+    if (!row) return next(new AppError("Invalid or expired OTP.", 400));
     const [userRows] = await db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
     if (!userRows.length) return next(new AppError("Invalid or expired OTP.", 400));
-
     const [otpRows] = await db.execute(
       "SELECT id, expiry FROM email_otps WHERE user_id = ? AND code = ? ORDER BY createdAt DESC LIMIT 1",
       [userRows[0].user_id, code]
     );
-
     if (!otpRows.length || new Date() > new Date(otpRows[0].expiry))
       return next(new AppError("Invalid or expired OTP.", 400));
-
     res.json({ success: true, message: "OTP verified." });
   } catch (error) { next(error); }
 };
 
-// ══════════════════════════════════════════════════════════════
-//  RESET PASSWORD  →  POST { email, code, newPassword }
-// ══════════════════════════════════════════════════════════════
+// RESET PASSWORD
 const resetPassword = async (req, res, next) => {
   try {
     const { email, code, newPassword } = req.body;
     if (!email || !code || !newPassword)
       return next(new AppError("Email, code, and new password are required.", 400));
-    if (newPassword.length < 6)
-      return next(new AppError("Password must be at least 6 characters.", 400));
-
-    const { db, tenantRow } = await resolveDb(email);
-    if (!tenantRow) return next(new AppError("Invalid or expired OTP.", 400));
-
+    if (newPassword.length < 6) return next(new AppError("Password must be at least 6 characters.", 400));
+    const { db, row } = await resolveDb(email);
+    if (!row) return next(new AppError("Invalid or expired OTP.", 400));
     const [userRows] = await db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
     if (!userRows.length) return next(new AppError("Invalid or expired OTP.", 400));
-
     const userId = userRows[0].user_id;
     const [otpRows] = await db.execute(
       "SELECT id, expiry FROM email_otps WHERE user_id = ? AND code = ? ORDER BY createdAt DESC LIMIT 1",
       [userId, code]
     );
-
     if (!otpRows.length || new Date() > new Date(otpRows[0].expiry))
       return next(new AppError("Invalid or expired OTP.", 400));
-
     const hashed = await bcrypt.hash(newPassword, 12);
     await db.execute("UPDATE users SET password = ? WHERE user_id = ?", [hashed, userId]);
     await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-
     res.json({ success: true, message: "Password reset successfully. You can now sign in." });
   } catch (error) { next(error); }
 };
 
-/* ══════════════════════════════════════════════════════════════
-//  VERIFY MEMBER  →  POST { token }
-// ══════════════════════════════════════════════════════════════ */
+// VERIFY MEMBER
 const verifyMember = async (req, res, next) => {
   try {
     const { token } = req.body;
     if (!token) return next(new AppError("Verification token is required.", 400));
-
     const targetDb = await resolveDbFromToken(token);
     const [users] = await targetDb.execute(
-      "SELECT user_id, emailVerified, verifyTokenExpiry FROM users WHERE verifyToken = ?",
-      [token]
+      "SELECT user_id, emailVerified, verifyTokenExpiry FROM users WHERE verifyToken = ?", [token]
     );
-
     if (users.length === 0) return next(new AppError("Invalid verification link.", 400));
     if (users[0].emailVerified) return next(new AppError("Email is already verified.", 400));
     if (new Date() > new Date(users[0].verifyTokenExpiry)) return next(new AppError("Verification link has expired.", 400));
-
     await targetDb.execute(
       "UPDATE users SET emailVerified = TRUE, status = 'APPROVED', verifyToken = NULL WHERE user_id = ?",
       [users[0].user_id]
     );
-
     res.json({ success: true, message: "Email verified successfully. You can now log in." });
   } catch (error) { next(error); }
 };
 
-/* ══════════════════════════════════════════════════════════════
-//  GET INVITE DETAILS  →  GET /invite/:token
-// ══════════════════════════════════════════════════════════════ */
+// GET INVITE DETAILS
 const getInviteDetails = async (req, res, next) => {
   try {
     const { token } = req.params;
     const targetDb = await resolveDbFromToken(token);
     const [invitations] = await targetDb.execute(
-      "SELECT email, role, status, expires_at FROM invitations WHERE token = ?",
-      [token]
+      "SELECT email, role, status, expires_at FROM invitations WHERE token = ?", [token]
     );
-
     if (invitations.length === 0) return next(new AppError("Invitation not found.", 404));
     const invite = invitations[0];
-    
     if (invite.status === 'ACCEPTED') return next(new AppError("Invitation has already been accepted.", 400));
-    if (new Date() > new Date(invite.expires_at) || invite.status === 'EXPIRED') return next(new AppError("Invitation has expired.", 400));
-
+    if (new Date() > new Date(invite.expires_at) || invite.status === 'EXPIRED')
+      return next(new AppError("Invitation has expired.", 400));
     res.json({ success: true, data: { email: invite.email, role: invite.role } });
   } catch (error) { next(error); }
 };
 
-/* ══════════════════════════════════════════════════════════════
-//  ACCEPT INVITE  →  POST { token, name, password, phone }
-// ══════════════════════════════════════════════════════════════ */
+// ACCEPT INVITE
 const acceptInvite = async (req, res, next) => {
   try {
     const { token, name, password, phone } = req.body;
     if (!token || !name || !password) return next(new AppError("Missing required fields.", 400));
     if (password.length < 6) return next(new AppError("Password must be at least 6 characters.", 400));
-
     const targetDb = await resolveDbFromToken(token);
-    const [invitations] = await targetDb.execute("SELECT invite_id, email, role, status, expires_at FROM invitations WHERE token = ?", [token]);
+    const [invitations] = await targetDb.execute(
+      "SELECT invite_id, email, role, status, expires_at FROM invitations WHERE token = ?", [token]
+    );
     if (invitations.length === 0) return next(new AppError("Invalid invitation token.", 400));
-    
     const invite = invitations[0];
     if (invite.status === 'ACCEPTED') return next(new AppError("Invitation has already been accepted.", 400));
     if (new Date() > new Date(invite.expires_at)) return next(new AppError("Invitation has expired.", 400));
-
     const [existing] = await targetDb.execute("SELECT user_id FROM users WHERE email = ?", [invite.email]);
     if (existing.length > 0) return next(new AppError("Email is already registered.", 409));
-
     const hashed = await bcrypt.hash(password, 12);
     const userId = uuidv4();
-
     await targetDb.execute(
       `INSERT INTO users (user_id, name, email, password, role, phone, status, emailVerified, isActive)
        VALUES (?, ?, ?, ?, ?, ?, 'APPROVED', TRUE, TRUE)`,
       [userId, name, invite.email, hashed, invite.role, phone || null]
     );
 
-    await targetDb.execute("UPDATE invitations SET status = 'ACCEPTED' WHERE invite_id = ?", [invite.invite_id]);
+    const tokenPayload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    const dbName = tokenPayload.dbName;
+    const userType = tokenPayload.userType || 'shop';
 
+    await masterPool.execute(
+      `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
+      [invite.email, dbName, userType]
+    );
+
+    await targetDb.execute("UPDATE invitations SET status = 'ACCEPTED' WHERE invite_id = ?", [invite.invite_id]);
     res.status(201).json({ success: true, message: "Account created successfully. You can now log in." });
   } catch (error) { next(error); }
 };

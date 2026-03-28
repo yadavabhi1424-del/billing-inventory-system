@@ -12,10 +12,12 @@ const verifyRefreshToken   = (token)   => jwt.verify(token, JWT_REFRESH_SECRET);
 
 const generateTokenPair = (user) => {
   const payload = {
-    id:    user.user_id,
-    email: user.email,
-    role:  user.role.toLowerCase(),
-    name:  user.name,
+    id:       user.user_id,
+    email:    user.email,
+    role:     user.role.toLowerCase(),
+    name:     user.name,
+    dbName:   user.dbName   || null,
+    userType: user.userType || 'shop',
   };
   return {
     accessToken:  generateAccessToken(payload),

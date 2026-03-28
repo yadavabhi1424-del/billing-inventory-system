@@ -1,5 +1,41 @@
 import { v4 as uuidv4 } from "uuid";
 import { AppError }      from "../../middleware/errorHandler.js";
+import { masterPool }    from "../../config/masterDatabase.js";
+
+async function syncSupplierProduct(req, isUpdate, productData) {
+  if (req.user.userType !== 'supplier' || !req.dbName) return;
+  try {
+    const [supRows] = await masterPool.execute("SELECT supplier_id FROM suppliers WHERE db_name = ?", [req.dbName]);
+    if (!supRows.length) return;
+    const supplier_id = supRows[0].supplier_id;
+
+    if (isUpdate) {
+      const updates = [];
+      const values  = [];
+      if (productData.name !== undefined) { updates.push("name = ?"); values.push(productData.name); }
+      if (productData.description !== undefined) { updates.push("description = ?"); values.push(productData.description); }
+      if (productData.unit !== undefined) { updates.push("unit = ?"); values.push(productData.unit); }
+      if (productData.sellingPrice !== undefined) { updates.push("price = ?"); values.push(productData.sellingPrice); }
+      if (productData.isActive !== undefined) { updates.push("is_active = ?"); values.push(productData.isActive ? 1 : 0); }
+      
+      if (updates.length > 0) {
+        values.push(supplier_id, productData.product_id);
+        await masterPool.execute(`UPDATE supplier_products SET ${updates.join(', ')} WHERE supplier_id = ? AND product_id = ?`, values);
+      }
+    } else {
+      await masterPool.execute(
+        `INSERT INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), is_active=VALUES(is_active)`,
+        [uuidv4(), supplier_id, productData.product_id, productData.name, productData.sku,
+         productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
+         productData.image || null, 1]
+      );
+    }
+  } catch (err) {
+    console.error("Master DB sync failed:", err.message);
+  }
+}
 
 const getAllProducts = async (req, res, next) => {
   try {
@@ -167,6 +203,12 @@ const createProduct = async (req, res, next) => {
       conn.release();
     }
 
+    // Phase 5: Sync to Master DB
+    await syncSupplierProduct(req, false, {
+      product_id: productId, name, sku: finalSku, description,
+      unit: unit || "pcs", sellingPrice: parseFloat(sellingPrice), image
+    });
+
     res.status(201).json({
       success: true, message: "Product created successfully.",
       data: { product_id: productId, name, sku: finalSku },
@@ -264,6 +306,13 @@ const updateProduct = async (req, res, next) => {
         ]
       );
     }
+
+    // Phase 5: Sync to Master DB
+    await syncSupplierProduct(req, true, {
+      product_id: req.params.id, name, description, unit,
+      sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : undefined,
+      isActive: isActive !== undefined ? isActive : undefined
+    });
 
     res.json({ success: true, message: "Product updated successfully." });
   } catch (error) {

@@ -4,15 +4,19 @@ import Icon from './Icon';
 import { getNotifications } from '../services/api';
 import './AppLayout.css';
 
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
-  { id: 'billing', label: 'Billing', icon: 'billing', path: '/billing' },
-  { id: 'inventory', label: 'Inventory', icon: 'inventory', path: '/inventory' },
-  { id: 'ai-predict', label: 'AI Predict', icon: 'ai', path: '/ai-predict' },
-  { id: 'reports', label: 'Reports', icon: 'reports', path: '/reports' },
-  { id: 'manufacturers', label: 'Manufacturers', icon: 'manufacturer', path: '/manufacturers' },
-  { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings' },
-];
+const getNavItems = (userType) => {
+  const isSupplier = userType === 'supplier';
+  return [
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
+    { id: 'billing', label: isSupplier ? 'Orders' : 'Billing', icon: 'billing', path: '/billing' },
+    { id: 'inventory', label: 'Inventory', icon: 'inventory', path: '/inventory' },
+    { id: 'ai-predict', label: 'AI Predict', icon: 'ai', path: '/ai-predict' },
+    { id: 'reports', label: 'Reports', icon: 'reports', path: '/reports' },
+    { id: 'manufacturers', label: isSupplier ? 'Customers' : 'Suppliers', icon: 'manufacturer', path: '/manufacturers' },
+    { id: 'discovery', label: 'Network', icon: 'globe', path: '/discovery' },
+    { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings' },
+  ];
+};
 
 function useTheme() {
   const [theme, setTheme] = useState(() =>
@@ -49,7 +53,7 @@ function Sidebar({ collapsed, onToggle, user, allowedRoutes, activePath, onNavig
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.filter(item => allowedRoutes.includes(item.id)).map(item => (
+        {getNavItems(user?.userType).filter(item => allowedRoutes.includes(item.id)).map(item => (
           <a key={item.id}
             className={`sidebar-nav__item ${activePath === item.path ? 'sidebar-nav__item--active' : ''}`}
             onClick={e => { e.preventDefault(); onNavigate(item.path); onCloseMobile(); }}
@@ -166,7 +170,8 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const currentPage = NAV_ITEMS.find(item => item.path === location.pathname)?.label || 'Dashboard';
+  const navItems = getNavItems(user?.userType);
+  const currentPage = navItems.find(item => item.path === location.pathname)?.label || 'Dashboard';
   const unreadCount = notifications.filter(n => !n.read).length;
 
   // ── localStorage helpers ─────────────────────────────────

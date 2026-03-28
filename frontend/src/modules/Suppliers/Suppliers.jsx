@@ -6,8 +6,8 @@
 import { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
 import {
-  getSuppliers, createSupplier,
-  updateSupplier, deleteSupplier,
+  getSuppliers, createSupplier, updateSupplier, deleteSupplier,
+  getCustomers, createCustomer, updateCustomer, deleteCustomer,
 } from '../../services/api';
 import './Suppliers.css';
 
@@ -34,7 +34,7 @@ function SupplierField({ label, field, placeholder, type = 'text', required, ful
   );
 }
 
-function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
+function SupplierFormModal({ title, supplier = null, onClose, onSave, entityName }) {
   const isEdit = !!supplier;
   const [form, setForm] = useState({
     name:         supplier?.name          || '',
@@ -95,7 +95,7 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
         <form className="supplier-form" onSubmit={handleSubmit}>
           <div className="supplier-form__content">
             <div className="supplier-form__grid">
-              <SupplierField label="Supplier Name"   field="name"          placeholder="ABC Foods"          required {...f} />
+              <SupplierField label={`${entityName} Name`}   field="name"          placeholder="ABC Foods"          required {...f} />
               <SupplierField label="Contact Person"  field="contactPerson" placeholder="Rajesh Kumar"              {...f} />
               <SupplierField label="Phone"           field="phone"         placeholder="9876543210" type="tel" required {...f} />
               <SupplierField label="Email"           field="email"         placeholder="contact@abc.com" type="email" {...f} />
@@ -127,7 +127,7 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
             </button>
             <button type="submit" className="supplier-form__btn supplier-form__btn--primary" disabled={saving}>
               <Icon name="check" size={16} />
-              {saving ? 'Saving...' : isEdit ? 'Update Supplier' : 'Add Supplier'}
+              {saving ? 'Saving...' : isEdit ? `Update ${entityName}` : `Add ${entityName}`}
             </button>
           </div>
         </form>
@@ -140,7 +140,11 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave }) {
 // ══════════════════════════════════════════════════════════
 //  MAIN SUPPLIERS
 // ══════════════════════════════════════════════════════════
-export default function Suppliers() {
+export default function Suppliers({ user }) {
+  const isSupplier = user?.userType === 'supplier';
+  const entityName = isSupplier ? 'Customer' : 'Supplier';
+  const entityNamePlural = isSupplier ? 'Customers' : 'Suppliers';
+
   const [suppliers, setSuppliers] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [search,    setSearch]    = useState('');
@@ -153,23 +157,24 @@ export default function Suppliers() {
   const fetchSuppliers = async () => {
     try {
       setLoading(true);
-      const res = await getSuppliers({ limit: 100 });
+      const res = isSupplier ? await getCustomers({ limit: 100 }) : await getSuppliers({ limit: 100 });
       if (res.success) setSuppliers(res.data);
     } catch (err) {
-      console.error('Suppliers fetch error:', err.message);
+      console.error(`${entityNamePlural} fetch error:`, err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAdd = async (form) => {
-    await createSupplier(form);
+    isSupplier ? await createCustomer(form) : await createSupplier(form);
     setShowAdd(false);
     fetchSuppliers();
   };
 
   const handleEdit = async (form) => {
-    await updateSupplier(selected.supplier_id, form);
+    const id = isSupplier ? selected.customer_id : selected.supplier_id;
+    isSupplier ? await updateCustomer(id, form) : await updateSupplier(id, form);
     setShowEdit(false);
     setSelected(null);
     fetchSuppliers();
@@ -177,8 +182,9 @@ export default function Suppliers() {
 
   const handleDelete = async (e, supplier) => {
     e.stopPropagation();
-    if (!confirm(`Delete supplier "${supplier.name}"?`)) return;
-    await deleteSupplier(supplier.supplier_id);
+    if (!confirm(`Delete ${entityName.toLowerCase()} "${supplier.name}"?`)) return;
+    const id = isSupplier ? supplier.customer_id : supplier.supplier_id;
+    isSupplier ? await deleteCustomer(id) : await deleteSupplier(id);
     fetchSuppliers();
   };
 
@@ -203,8 +209,8 @@ export default function Suppliers() {
       {/* Stats */}
       <div className="suppliers-stats">
         {[
-          { label: 'Total Suppliers',  value: suppliers.length, icon: 'manufacturers', bg: 'var(--color-accent-soft)',  color: 'var(--color-accent-primary)' },
-          { label: 'Active Suppliers', value: activeCount,      icon: 'check',         bg: 'var(--color-success-soft)', color: 'var(--color-success)'        },
+          { label: `Total ${entityNamePlural}`,  value: suppliers.length, icon: 'manufacturers', bg: 'var(--color-accent-soft)',  color: 'var(--color-accent-primary)' },
+          { label: `Active ${entityNamePlural}`, value: activeCount,      icon: 'check',         bg: 'var(--color-success-soft)', color: 'var(--color-success)'        },
           { label: 'Total Products',   value: totalProducts,    icon: 'box',           bg: 'var(--color-violet-soft)',  color: 'var(--color-violet)'         },
           { label: 'Order Count',      value: suppliers.reduce((s, sup) => s + (sup.orderCount || 0), 0), icon: 'billing', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)' },
         ].map(s => (
@@ -225,11 +231,11 @@ export default function Suppliers() {
         <div className="suppliers-search">
           <Icon name="search" size={16} />
           <input className="suppliers-search__input"
-            placeholder="Search suppliers..."
+            placeholder={`Search ${entityNamePlural.toLowerCase()}...`}
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <button className="suppliers-add-btn" onClick={() => setShowAdd(true)}>
-          <Icon name="manufacturers" size={16} /> Add Supplier
+          <Icon name="manufacturers" size={16} /> Add {entityName}
         </button>
       </div>
 
@@ -238,7 +244,7 @@ export default function Suppliers() {
         <table className="suppliers-table">
           <thead>
             <tr>
-              <th>Supplier Name</th>
+              <th>{entityName} Name</th>
               <th>Contact Person</th>
               <th>Phone</th>
               <th>Products</th>
@@ -253,11 +259,11 @@ export default function Suppliers() {
               <tr>
                 <td colSpan="8" className="suppliers-empty">
                   <Icon name="manufacturers" size={48} />
-                  <p>{suppliers.length === 0 ? 'No suppliers yet. Add your first supplier!' : 'No suppliers found'}</p>
+                  <p>{suppliers.length === 0 ? `No ${entityNamePlural.toLowerCase()} yet. Add your first ${entityName.toLowerCase()}!` : `No ${entityNamePlural.toLowerCase()} found`}</p>
                 </td>
               </tr>
             ) : filtered.map(s => (
-              <tr key={s.supplier_id} className="suppliers-row" onClick={() => setSelected(s)}>
+              <tr key={s.supplier_id || s.customer_id} className="suppliers-row" onClick={() => setSelected(s)}>
                 <td>
                   <div className="suppliers-name">{s.name}</div>
                   {s.city && <div className="suppliers-company">{s.city}</div>}
@@ -295,7 +301,7 @@ export default function Suppliers() {
         <div className="suppliers-side-panel-backdrop" onClick={() => setSelected(null)}>
           <div className="suppliers-side-panel" onClick={e => e.stopPropagation()}>
             <div className="suppliers-side-panel__header">
-              <h3>Supplier Details</h3>
+              <h3>{entityName} Details</h3>
               <button className="suppliers-side-panel__close" onClick={() => setSelected(null)}>
                 <Icon name="x" size={20} />
               </button>
@@ -342,7 +348,7 @@ export default function Suppliers() {
                 Close
               </button>
               <button className="suppliers-btn suppliers-btn--primary" onClick={() => setShowEdit(true)}>
-                <Icon name="settings" size={16} /> Edit Supplier
+                <Icon name="settings" size={16} /> Edit {entityName}
               </button>
             </div>
           </div>
@@ -351,17 +357,17 @@ export default function Suppliers() {
 
       {/* Add Modal */}
       {showAdd && (
-        <SupplierFormModal title="Add New Supplier"
+        <SupplierFormModal title={`Add New ${entityName}`}
           onClose={() => setShowAdd(false)}
-          onSave={handleAdd} />
+          onSave={handleAdd} entityName={entityName} />
       )}
 
       {/* Edit Modal */}
       {showEdit && selected && (
-        <SupplierFormModal title="Edit Supplier"
+        <SupplierFormModal title={`Edit ${entityName}`}
           supplier={selected}
           onClose={() => { setShowEdit(false); setSelected(null); }}
-          onSave={handleEdit} />
+          onSave={handleEdit} entityName={entityName} />
       )}
     </div>
   );

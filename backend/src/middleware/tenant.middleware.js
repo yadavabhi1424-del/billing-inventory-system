@@ -5,6 +5,11 @@ import {
   CORE_SCHEMA, SALES_SCHEMA, PROCUREMENT_SCHEMA,
   MANUFACTURING_SCHEMA, STOCK_SCHEMA, SHOP_TYPE_SCHEMAS,
 } from '../config/tenantSchema.js';
+import {
+  SUPPLIER_CORE_SCHEMA,
+  SUPPLIER_CATALOG_SCHEMA,
+  SUPPLIER_ORDERS_SCHEMA,
+} from '../config/supplierSchema.js';
 
 const SCHEMA_MAP = {
   CORE:          CORE_SCHEMA,
@@ -38,19 +43,17 @@ async function getTenantPool(dbName) {
 
 export async function tenantMiddleware(req, res, next) {
   try {
-    // Get tenant from subdomain or header or token
     const tenantSlug =
       req.headers['x-tenant-slug'] ||
       req.hostname.split('.')[0];
 
     if (!tenantSlug || tenantSlug === 'localhost') {
-      // Single tenant fallback — use current DB
       req.db = (await import('../config/database.js')).pool;
       return next();
     }
 
-    // Look up tenant in master DB
-    const [rows] = await masterPool.execute(
+    // Check shops first
+    const [shopRows] = await masterPool.execute(
       `SELECT t.tenant_id, t.db_name, t.status,
               s.plan, s.max_users, s.max_products,
               s.ai_enabled, s.reports_enabled
@@ -60,19 +63,35 @@ export async function tenantMiddleware(req, res, next) {
       [tenantSlug]
     );
 
-    if (rows.length === 0) {
-      return next(new AppError("Shop not found or suspended.", 404));
+    if (shopRows.length > 0) {
+      const tenant = shopRows[0];
+      req.tenant   = tenant;
+      req.userType = 'shop';
+      req.db       = await getTenantPool(tenant.db_name);
+      return next();
     }
 
-    const tenant = rows[0];
-    req.tenant   = tenant;
-    req.db       = await getTenantPool(tenant.db_name);
-    next();
+    // Check suppliers
+    const [supRows] = await masterPool.execute(
+      `SELECT supplier_id, db_name, status FROM suppliers
+       WHERE slug = ? AND status != 'SUSPENDED'`,
+      [tenantSlug]
+    );
+
+    if (supRows.length > 0) {
+      req.tenant   = supRows[0];
+      req.userType = 'supplier';
+      req.db       = await getTenantPool(supRows[0].db_name);
+      return next();
+    }
+
+    return next(new AppError("Account not found or suspended.", 404));
   } catch (error) {
     next(error);
   }
 }
 
+// ── Provision a SHOP tenant DB ────────────────────────────────
 export async function provisionTenant(tenantId, dbName, shopType = 'other') {
   const conn = await mysql.createConnection({
     host:     process.env.DB_HOST,
@@ -86,18 +105,42 @@ export async function provisionTenant(tenantId, dbName, shopType = 'other') {
     await conn.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
     await conn.query(`USE \`${dbName}\``);
 
-    // Run only schemas needed for this shop type
     const schemasToRun = SHOP_TYPE_SCHEMAS[shopType] || SHOP_TYPE_SCHEMAS['other'];
-
     for (const schemaKey of schemasToRun) {
       const sql = SCHEMA_MAP[schemaKey];
       if (sql) await conn.query(sql);
     }
 
-    console.log(`✅ Tenant DB provisioned: ${dbName} (${shopType})`);
+    console.log(`✅ Shop tenant DB provisioned: ${dbName} (${shopType})`);
     return true;
   } finally {
     await conn.end();
   }
 }
-export { getTenantPool};
+
+// ── Provision a SUPPLIER tenant DB ───────────────────────────
+export async function provisionSupplierTenant(supplierId, dbName) {
+  const conn = await mysql.createConnection({
+    host:     process.env.DB_HOST,
+    user:     process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    port:     process.env.DB_PORT || 3306,
+    multipleStatements: true,
+  });
+
+  try {
+    await conn.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+    await conn.query(`USE \`${dbName}\``);
+
+    await conn.query(SUPPLIER_CORE_SCHEMA);
+    await conn.query(SUPPLIER_CATALOG_SCHEMA);
+    await conn.query(SUPPLIER_ORDERS_SCHEMA);
+
+    console.log(`✅ Supplier tenant DB provisioned: ${dbName}`);
+    return true;
+  } finally {
+    await conn.end();
+  }
+}
+
+export { getTenantPool };

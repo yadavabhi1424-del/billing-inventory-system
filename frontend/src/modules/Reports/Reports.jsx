@@ -5,6 +5,7 @@ import SupplierReport from './SupplierReport';
 import './Reports.css';
 
 export default function Reports({ user }) {
+  const isSupplier = user?.userType === 'supplier';
   const [activeTab, setActiveTab] = useState('sales');
 
   return (
@@ -21,26 +22,29 @@ export default function Reports({ user }) {
           >
             Sales Report
           </button>
-          <button
-            className={`reports-tab ${activeTab === 'customers' ? 'reports-tab--active' : ''}`}
-            onClick={() => setActiveTab('customers')}
-          >
-            Customer Report
-          </button>
-          <button
-            className={`reports-tab ${activeTab === 'suppliers' ? 'reports-tab--active' : ''}`}
-            onClick={() => setActiveTab('suppliers')}
-          >
-            Supplier Report
-          </button>
+          {isSupplier ? (
+            <button
+              className={`reports-tab ${activeTab === 'customers' ? 'reports-tab--active' : ''}`}
+              onClick={() => setActiveTab('customers')}
+            >
+              Customer Report
+            </button>
+          ) : (
+            <button
+              className={`reports-tab ${activeTab === 'suppliers' ? 'reports-tab--active' : ''}`}
+              onClick={() => setActiveTab('suppliers')}
+            >
+              Supplier Report
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content Area */}
       <div className="reports-content">
         {activeTab === 'sales' && <SalesReport />}
-        {activeTab === 'customers' && <CustomerReport />}
-        {activeTab === 'suppliers' && <SupplierReport />}
+        {activeTab === 'customers' && isSupplier && <CustomerReport />}
+        {activeTab === 'suppliers' && !isSupplier && <SupplierReport />}
       </div>
     </div>
   );

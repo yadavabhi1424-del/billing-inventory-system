@@ -32,7 +32,7 @@ export default function Billing({ user }) {
           onClick={() => setActiveTab('newbill')}
         >
           <span className="billing-new-bill-btn__icon">+</span>
-          New Bill
+          {user?.userType === 'supplier' ? 'New Order' : 'New Bill'}
         </button>
       </div>
 
