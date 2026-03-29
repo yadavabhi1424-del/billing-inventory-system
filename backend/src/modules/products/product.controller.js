@@ -334,7 +334,7 @@ const updateProduct = async (req, res, next) => {
 
     // Phase 5: Sync to Master DB
     await syncSupplierProduct(req, true, {
-      product_id: req.params.id, name, description, unit, sku: rows && rows[0] ? rows[0].sku : null,
+      product_id: req.params.id, name, description, unit, sku: existing && existing[0] ? existing[0].sku : null,
       sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : undefined,
       isActive: isActive !== undefined ? isActive : undefined,
       is_public: is_public !== undefined ? is_public : undefined

@@ -56,15 +56,19 @@ export const getB2BProducts = async (req, res, next) => {
     if (search) params.push(`%${search}%`, `%${search}%`);
 
     const [rows] = await masterPool.execute(
-      `SELECT * FROM supplier_products 
-       WHERE supplier_id IN (${placeholders}) AND is_active = TRUE ${searchQuery}
-       ORDER BY updated_at DESC LIMIT ${Number(limit)} OFFSET ${offset}`,
+      `SELECT sp.*, p.business_name as supplier_name, p.logo as supplier_logo
+       FROM supplier_products sp
+       JOIN profiles p ON p.entity_id = sp.supplier_id
+       WHERE sp.supplier_id IN (${placeholders}) AND sp.is_active = TRUE ${searchQuery}
+       ORDER BY sp.updated_at DESC LIMIT ${Number(limit)} OFFSET ${offset}`,
       params
     );
 
     const [[{ total }]] = await masterPool.execute(
-      `SELECT COUNT(*) as total FROM supplier_products 
-       WHERE supplier_id IN (${placeholders}) AND is_active = TRUE ${searchQuery}`,
+      `SELECT COUNT(*) as total 
+       FROM supplier_products sp
+       JOIN profiles p ON p.entity_id = sp.supplier_id
+       WHERE sp.supplier_id IN (${placeholders}) AND sp.is_active = TRUE ${searchQuery}`,
       params
     );
 
@@ -170,27 +174,37 @@ export const updateConnectionStatus = async (req, res, next) => {
       if (map.length > 0) {
         const { shop_id: shopDb, supplier_id: supplierDb } = map[0];
 
-        // Fetch profiles
-        const [shopProfile] = await masterPool.execute("SELECT business_name, email, phone, city, address FROM profiles WHERE entity_id=?", [shopDb]);
-        const [supProfile]  = await masterPool.execute("SELECT business_name, email, phone, city, address FROM profiles WHERE entity_id=?", [supplierDb]);
+        // 1. Fetch profiles (Primary Source)
+        const [shopProfile] = await masterPool.execute("SELECT business_name as name, email, phone, city, address FROM profiles WHERE entity_id=?", [shopDb]);
+        const [supProfile]  = await masterPool.execute("SELECT business_name as name, email, phone, city, address FROM profiles WHERE entity_id=?", [supplierDb]);
         
-        // Insert Shop into Supplier's Customers Table
-        if (shopProfile.length > 0) {
-          const sp = shopProfile[0];
+        let shopData = shopProfile[0];
+        let supData  = supProfile[0];
+
+        // 2. Fallback to Master Records if Profile is missing
+        if (!shopData) {
+          const [t] = await masterPool.execute("SELECT shop_name as name, owner_email as email, owner_phone as phone FROM tenants WHERE db_name=?", [shopDb]);
+          if (t.length > 0) shopData = t[0];
+        }
+        if (!supData) {
+          const [s] = await masterPool.execute("SELECT business_name as name, owner_email as email, owner_phone as phone FROM suppliers WHERE db_name=?", [supplierDb]);
+          if (s.length > 0) supData = s[0];
+        }
+
+        // 3. Sync to Tenant Databases
+        if (shopData) {
           await masterPool.execute(
             `INSERT IGNORE INTO \`${supplierDb}\`.customers (customer_id, name, email, phone, address, city, shop_tenant_id) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-            [shopDb, sp.business_name, sp.email || null, sp.phone || '0000000000', sp.address || null, sp.city || null, shopDb]
+            [shopDb, shopData.name, shopData.email || null, shopData.phone || '0000000000', shopData.address || null, shopData.city || null, shopDb]
           );
         }
 
-        // Insert Supplier into Shop's Suppliers Table
-        if (supProfile.length > 0) {
-          const s = supProfile[0];
+        if (supData) {
           await masterPool.execute(
             `INSERT IGNORE INTO \`${shopDb}\`.suppliers (supplier_id, name, email, phone, address, city) 
              VALUES (?, ?, ?, ?, ?, ?)`, 
-            [supplierDb, s.business_name, s.email || null, s.phone || '0000000000', s.address || null, s.city || null]
+            [supplierDb, supData.name, supData.email || null, supData.phone || '0000000000', supData.address || null, supData.city || null]
           );
         }
       }

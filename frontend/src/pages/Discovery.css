@@ -10,10 +10,55 @@
 
 .discovery__filters {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 30px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+.discovery-filters__main {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.discovery-filters__geo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.discovery-geo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.discovery-geo-radius {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-grow: 1;
+}
+
+.discovery-geo-radius input[type="range"] {
+  flex-grow: 1;
+  max-width: 300px;
+}
+
+.radius-value {
+  font-family: monospace;
+  color: var(--color-accent-primary);
+  font-weight: bold;
+}
+
 .discovery__filters input,
 .discovery__filters select {
   padding: 8px 12px;
@@ -72,7 +117,24 @@
 .discovery-card__desc     { font-size: 0.8rem; opacity: 0.7; margin: 0 0 8px;
                              display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
                              -webkit-box-orient: vertical; overflow: hidden; }
-.discovery-card__type     { font-size: 0.72rem; opacity: 0.5; text-transform: capitalize; }
+.discovery-card__type {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-primary);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.discovery-card__distance {
+  display: inline-block;
+  margin-left: 10px;
+  color: var(--color-success);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
 
 .discovery__pagination {
   display: flex; align-items: center; justify-content: center;
@@ -95,66 +157,104 @@
   padding: 20px;
 }
 .discovery-modal {
-  background: var(--color-surface, #1e293b);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  width: 100%; max-width: 500px;
-  max-height: 90vh; overflow-y: auto;
+  background: #1e1f29;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  border-radius: 24px;
   position: relative;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-  animation: modal-fade-up 0.3s ease;
+  overflow-y: auto;
+  padding: 2.5rem;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.05);
 }
-@keyframes modal-fade-up {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.discovery-modal__close {
-  position: absolute; top: 16px; right: 16px;
-  background: rgba(255,255,255,0.1); border: none;
-  font-size: 1.5rem; color: #fff; border-radius: 50%;
-  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; z-index: 10;
-}
-.discovery-modal__close:hover { background: rgba(255,255,255,0.2); }
 
 .discovery-modal__header {
-  padding: 30px 24px 20px;
-  display: flex; gap: 20px; align-items: flex-start;
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  margin-bottom: 2.5rem;
   border-bottom: 1px solid rgba(255,255,255,0.05);
-  background: rgba(255,255,255,0.02);
+  padding-bottom: 1.5rem;
 }
-.discovery-modal__logo {
-  width: 80px; height: 80px; border-radius: 12px; object-fit: cover;
-}
-.discovery-modal__logo-placeholder {
-  width: 80px; height: 80px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 2.5rem; background: rgba(99,102,241,0.1);
-}
-.discovery-modal__name { font-size: 1.4rem; font-weight: 700; margin: 4px 0; }
-.discovery-modal__type { font-size: 0.85rem; color: #94a3b8; text-transform: capitalize; }
 
-.discovery-modal__body { padding: 24px; }
-.discovery-modal__section { margin-bottom: 24px; }
+.discovery-modal__logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #2a2b38;
+}
+
+.discovery-modal__logo-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
+  background: #2a2b38;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+}
+
+.discovery-modal__name { font-size: 1.8rem; font-weight: 700; margin: 4px 0; }
+.discovery-modal__type { font-size: 0.95rem; color: #94a3b8; text-transform: capitalize; }
+
+.discovery-modal__body { padding: 0.5rem 0; }
+.discovery-modal__section { margin-bottom: 2.5rem; }
+
 .discovery-modal__section h3 {
-  font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
-  color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.05);
-  padding-bottom: 6px; margin-bottom: 12px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #64748b;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  padding-bottom: 0.5rem;
 }
+
 .discovery-modal__section p {
-  font-size: 0.95rem; line-height: 1.6; color: #cbd5e1; margin: 0;
+  color: #cbd5e1;
+  line-height: 1.7;
+  font-size: 1rem;
 }
+
 .discovery-modal__contact-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-  font-size: 0.9rem; color: #cbd5e1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  color: #cbd5e1;
 }
+
+.discovery-modal__contact-grid div {
+  background: rgba(255,255,255,0.03);
+  padding: 1rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .discovery-modal__actions {
-  display: flex; gap: 12px; margin-top: 30px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(255,255,255,0.05);
 }
+
 .discovery-modal__actions button {
-  flex: 1; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 0.95rem;
-  cursor: pointer; transition: 0.2s; border: none;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
 }
+
 .discovery-btn-connect {
   background: #4f46e5; color: white;
 }
@@ -164,3 +264,19 @@
   background: rgba(255,255,255,0.1); color: white;
 }
 .discovery-btn-message:hover { background: rgba(255,255,255,0.15); }
+
+/* Product Tags */
+.discovery-modal__product-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.discovery-modal__tag {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}

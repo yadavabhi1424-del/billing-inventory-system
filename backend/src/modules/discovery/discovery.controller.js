@@ -7,6 +7,7 @@ export const getDiscovery = async (req, res, next) => {
     const {
       type, city, state, business_type,
       search, page = 1, limit = 20,
+      lat, lng, radius, // Geospatial filters
     } = req.query;
 
     const offset  = (Number(page) - 1) * Number(limit);
@@ -19,24 +20,50 @@ export const getDiscovery = async (req, res, next) => {
     if (business_type) { conditions.push("p.business_type = ?");   params.push(business_type); }
     if (search)        { conditions.push("p.business_name LIKE ?"); params.push(`%${search}%`); }
 
+    let distanceSelect = "";
+    let distanceHaving = "";
+    if (lat && lng && radius) {
+      // Use ST_Distance_Sphere (MySQL 5.7.6+) to calculate distance in KM
+      distanceSelect = `, (ST_Distance_Sphere(POINT(?, ?), POINT(p.longitude, p.latitude)) / 1000) AS distance`;
+      params.unshift(Number(lng), Number(lat)); // Add to START of params for the SELECT
+      distanceHaving = `HAVING distance <= ${Number(radius)}`;
+    }
+
     const where = conditions.join(" AND ");
 
-    const [rows] = await masterPool.execute(
+    const [rows] = await req.db.execute(
       `SELECT p.profile_id, p.entity_id, p.entity_type,
               p.business_name, p.slug, p.description,
               p.logo, p.city, p.state, p.pincode,
               p.address, p.email, p.phone,
+              p.latitude, p.longitude,
               p.business_type, p.createdAt
+              ${distanceSelect}
        FROM profiles p
        WHERE ${where}
-       ORDER BY p.createdAt DESC
+       ${distanceHaving}
+       ORDER BY ${distanceSelect ? 'distance ASC' : 'p.createdAt DESC'}
        LIMIT ${Number(limit)} OFFSET ${offset}`,
       params
     );
 
-    const [[{ total }]] = await masterPool.execute(
-      `SELECT COUNT(*) AS total FROM profiles p WHERE ${where}`, params
-    );
+    // For count, we need to respect the HAVING if distance is used
+    let total;
+    if (distanceHaving) {
+      const [countRows] = await req.db.execute(
+        `SELECT COUNT(*) as total FROM (
+           SELECT p.profile_id, (ST_Distance_Sphere(POINT(?, ?), POINT(p.longitude, p.latitude)) / 1000) AS distance
+           FROM profiles p WHERE ${where} HAVING distance <= ${Number(radius)}
+         ) AS subquery`,
+        params.slice(0, conditions.length + 2) // [lng, lat, ...whereParams]
+      );
+      total = countRows[0].total;
+    } else {
+      const [[{ total: t }]] = await req.db.execute(
+        `SELECT COUNT(*) AS total FROM profiles p WHERE ${where}`, params
+      );
+      total = t;
+    }
 
     res.json({
       success: true,

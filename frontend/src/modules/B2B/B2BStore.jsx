@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getB2BProducts, getConnections } from '../../services/api';
+import { getB2BProducts, getConnections, placeB2BOrder } from '../../services/api';
 import './B2BStore.css';
 
 const B2BStore = ({ user }) => {
@@ -77,7 +77,7 @@ const B2BStore = ({ user }) => {
     }));
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.sellingPrice * item.quantity), 0);
+  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   const handlePlaceOrder = async () => {
     if (!confirm(`Place B2B order for ₹${cartTotal.toLocaleString()}?`)) return;
@@ -159,7 +159,7 @@ const B2BStore = ({ user }) => {
                   <h3 className="b2b-card__name">{product.name}</h3>
                   <p className="b2b-card__sku">SKU: {product.sku}</p>
                   <div className="b2b-card__price-row">
-                    <span className="b2b-card__price">₹{parseFloat(product.sellingPrice).toLocaleString()}</span>
+                    <span className="b2b-card__price">₹{parseFloat(product.price).toLocaleString()}</span>
                     <span className="b2b-card__unit">per {product.unit || 'pcs'}</span>
                   </div>
                   <button 
@@ -190,7 +190,7 @@ const B2BStore = ({ user }) => {
               <div key={item.product_id} className="cart-item">
                 <div className="cart-item__info">
                   <h4>{item.name}</h4>
-                  <p>₹{item.sellingPrice} / {item.unit}</p>
+                  <p>₹{item.price} / {item.unit}</p>
                 </div>
                 <div className="cart-item__actions">
                   <div className="qty-picker">

@@ -11,19 +11,36 @@ export default function DiscoveryPage({ user }) {
 
   const [items,   setItems]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ type: oppositeType, city: '', business_type: '', search: '' });
+  const [filters,    setFilters]    = useState({ type: oppositeType, city: '', business_type: '', search: '', radius: 50, nearMe: false });
+  const [userLoc,   setUserLoc]   = useState(null);
   const [page,    setPage]    = useState(1);
   const [total,   setTotal]   = useState(0);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [connections, setConnections] = useState([]);
+  const [itemCatalog,  setItemCatalog]  = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [connections,  setConnections]  = useState([]);
+
+  useEffect(() => {
+    if (filters.nearMe && !userLoc) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => setFilters(f => ({ ...f, nearMe: false }))
+      );
+    }
+  }, [filters.nearMe]);
 
   useEffect(() => {
     let cancelled = false;
     const fetchDiscoveryData = async () => {
       setLoading(true);
       try {
+        const params = { ...filters, page, limit: 24 };
+        if (filters.nearMe && userLoc) {
+          params.lat = userLoc.lat;
+          params.lng = userLoc.lng;
+        }
         const [discRes, connRes] = await Promise.all([
-          getDiscovery({ type: filters.type, city: filters.city, business_type: filters.business_type, search: filters.search, page, limit: 24 }),
+          getDiscovery(params),
           getConnections()
         ]);
         if (!cancelled && discRes.success) {
@@ -41,7 +58,29 @@ export default function DiscoveryPage({ user }) {
     };
     fetchDiscoveryData();
     return () => { cancelled = true; };
-  }, [filters, page]);
+  }, [filters, page, userLoc]);
+
+  useEffect(() => {
+    if (selectedItem && selectedItem.entity_type === 'supplier') {
+      const fetchCatalog = async () => {
+        setCatalogLoading(true);
+        try {
+          // getSupplierCatalog(supplierId, params)
+          const { getSupplierCatalog } = await import('../services/api');
+          const res = await getSupplierCatalog(selectedItem.entity_id, { limit: 6 });
+          if (res.success) setItemCatalog(res.data);
+          else setItemCatalog([]);
+        } catch {
+          setItemCatalog([]);
+        } finally {
+          setCatalogLoading(false);
+        }
+      };
+      fetchCatalog();
+    } else {
+      setItemCatalog([]);
+    }
+  }, [selectedItem]);
 
   const handleConnect = async (partnerId) => {
     try {
@@ -67,21 +106,45 @@ export default function DiscoveryPage({ user }) {
 
       {/* Filters */}
       <div className="discovery__filters">
-        <input
-          className="discovery__search"
-          placeholder="Search by name…"
-          value={filters.search}
-          onChange={e => set('search', e.target.value)}
-        />
-        <select value={filters.business_type} onChange={e => set('business_type', e.target.value === 'All' ? '' : e.target.value)}>
-          {BIZ_TYPES.map(t => <option key={t}>{t}</option>)}
-        </select>
-        <input
-          className="discovery__city"
-          placeholder="City…"
-          value={filters.city}
-          onChange={e => set('city', e.target.value)}
-        />
+        <div className="discovery-filters__main">
+          <input
+            className="discovery__search"
+            placeholder="Search by name…"
+            value={filters.search}
+            onChange={e => setFilters({ ...filters, search: e.target.value })}
+          />
+          <select value={filters.business_type} onChange={e => setFilters({ ...filters, business_type: e.target.value === 'All' ? '' : e.target.value })}>
+            {BIZ_TYPES.map(t => <option key={t}>{t}</option>)}
+          </select>
+          <input
+            className="discovery__city"
+            placeholder="City…"
+            value={filters.city}
+            onChange={e => setFilters({ ...filters, city: e.target.value })}
+          />
+        </div>
+
+        <div className="discovery-filters__geo">
+          <label className="discovery-geo-toggle">
+            <input 
+              type="checkbox" 
+              checked={filters.nearMe} 
+              onChange={e => setFilters({ ...filters, nearMe: e.target.checked })} 
+            />
+            <span>Near me</span>
+          </label>
+          
+          {filters.nearMe && (
+            <div className="discovery-geo-radius">
+              <input 
+                type="range" min="1" max="500" 
+                value={filters.radius} 
+                onChange={e => setFilters({ ...filters, radius: e.target.value })} 
+              />
+              <span className="radius-value">{filters.radius}km</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Results */}
@@ -109,6 +172,7 @@ export default function DiscoveryPage({ user }) {
                   {item.city && <p className="discovery-card__location">📍 {item.city}{item.state ? `, ${item.state}` : ''}</p>}
                   {item.description && <p className="discovery-card__desc">{item.description}</p>}
                   <span className="discovery-card__type">{item.business_type}</span>
+                  {item.distance && <span className="discovery-card__distance">{Number(item.distance).toFixed(1)} km away</span>}
                 </div>
               </div>
             ))}
@@ -151,49 +215,104 @@ export default function DiscoveryPage({ user }) {
                   <p>{selectedItem.description}</p>
                 </div>
               )}
+
+              {selectedItem.entity_type === 'supplier' && (
+                <div className="discovery-modal__section">
+                  <h3>Supplies</h3>
+                  {catalogLoading ? (
+                    <p style={{opacity: 0.5}}>Loading offerings...</p>
+                  ) : itemCatalog.length > 0 ? (
+                    <div className="discovery-modal__product-tags">
+                      {itemCatalog.map(p => (
+                        <span key={p.id} className="discovery-modal__tag">{p.name}</span>
+                      ))}
+                      {itemCatalog.length >= 6 && <span>...and more</span>}
+                    </div>
+                  ) : (
+                    <p style={{opacity: 0.5}}>No products listed yet.</p>
+                  )}
+                </div>
+              )}
               
               <div className="discovery-modal__section">
                 <h3>Contact & Location</h3>
                 <div className="discovery-modal__contact-grid">
-                  {selectedItem.email && <div>📞 {selectedItem.phone || 'Phone not provided'}</div>}
-                  {selectedItem.email && <div>✉️ {selectedItem.email}</div>}
-                  {(selectedItem.address || selectedItem.city) && (
-                    <div style={{gridColumn: '1 / -1'}}>
-                      📍 {selectedItem.address ? selectedItem.address + ', ' : ''} 
-                         {selectedItem.city ? selectedItem.city : ''} 
-                         {selectedItem.state ? ', ' + selectedItem.state : ''} 
-                         {selectedItem.pincode ? ' - ' + selectedItem.pincode : ''}
-                    </div>
-                  )}
+                  <div className="discovery-modal__contact-card">
+                    <Icon name="reports" size={20} style={{color:'var(--color-accent-primary)'}} />
+                    <span>{selectedItem.phone || 'No phone provided'}</span>
+                  </div>
+                  <div className="discovery-modal__contact-card">
+                    <Icon name="inventory" size={20} style={{color:'var(--color-accent-primary)'}} />
+                    <span>{selectedItem.email || 'No email provided'}</span>
+                  </div>
                 </div>
+                {selectedItem.address && (
+                  <p className="discovery-modal__address">📍 {selectedItem.address}, {selectedItem.city}</p>
+                )}
+                
+                {selectedItem.latitude && selectedItem.longitude && (
+                  <div className="discovery-modal__map-box">
+                    <a 
+                      href={`https://www.google.com/maps/search/?api=1&query=${selectedItem.latitude},${selectedItem.longitude}`}
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="discovery-modal__map-link"
+                    >
+                      <Icon name="manufacturers" size={16} />
+                      View on Google Maps
+                    </a>
+                    <span className="discovery-modal__coords">
+                      {Number(selectedItem.latitude).toFixed(4)}, {Number(selectedItem.longitude).toFixed(4)}
+                    </span>
+                  </div>
+                )}
               </div>
               
               <div className="discovery-modal__actions">
                 {(() => {
-                  const conn = connections.find(c => c.partner_id === selectedItem.entity_id);
+                  const partnerId = selectedItem.entity_id;
+                  const conn = (connections || []).find(c => 
+                    partnerId && c.partner_id && 
+                    String(c.partner_id).toLowerCase() === String(partnerId).toLowerCase()
+                  );
+
                   if (!conn) {
                     return (
-                      <button className="discovery-btn-connect" onClick={() => handleConnect(selectedItem.entity_id)}>
+                      <button className="discovery-btn-connect" onClick={() => handleConnect(partnerId)}>
                         Connect Request
                       </button>
                     );
                   }
                   if (conn.status === 'PENDING') {
-                    if (conn.initiated_by !== (user?.userType || 'shop') && conn.initiated_by !== user?.userType?.toUpperCase()) {
+                    const isInitiator = conn.initiated_by === user?.userType;
+                    if (!isInitiator) {
                       return <button className="discovery-btn-connect" style={{background: '#f59e0b'}}>Review pending request in CRM</button>;
                     }
                     return <button className="discovery-btn-connect" disabled style={{opacity: 0.6}}>Request Pending</button>;
                   }
                   if (conn.status === 'ACCEPTED') {
-                    return <button className="discovery-btn-connect" disabled style={{background: '#22c55e', opacity: 1}}>Network Connected ✓</button>;
+                    return (
+                      <button 
+                        className="discovery-btn-connect" 
+                        style={{background: '#22c55e', opacity: 1}}
+                        onClick={() => window.location.href = '/b2b-store'}
+                      >
+                        Marketplace Connected ✓
+                      </button>
+                    );
                   }
                   return (
-                    <button className="discovery-btn-connect" onClick={() => handleConnect(selectedItem.entity_id)}>
+                    <button className="discovery-btn-connect" onClick={() => handleConnect(partnerId)}>
                       Connect Again
                     </button>
                   );
                 })()}
-                <button className="discovery-btn-message">Send Message</button>
+                <button 
+                  className="discovery-btn-message"
+                  onClick={() => alert(`Messaging with ${selectedItem.business_name} is currently in development. You can reach them at ${selectedItem.email || selectedItem.phone || 'their profile contact'}.`)}
+                >
+                  Send Message
+                </button>
               </div>
             </div>
           </div>

@@ -8,7 +8,8 @@ import Icon from '../../components/Icon';
 import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
-  getConnections, updateConnectionStatus // new B2B networking APIs
+  getConnections, updateConnectionStatus, // new B2B networking APIs
+  getB2BOrders, updatePurchaseOrderStatus
 } from '../../services/api';
 import './Suppliers.css';
 
@@ -152,13 +153,16 @@ export default function Suppliers({ user }) {
   const [showAdd,   setShowAdd]   = useState(false);
   const [showEdit,  setShowEdit]  = useState(false);
   
-  // Tabs: 'crm' | 'requests'
+  // Tabs: 'crm' | 'requests' | 'orders'
   const [activeTab, setActiveTab] = useState('crm');
   const [requests,  setRequests]  = useState([]);
+  const [orders,    setOrders]    = useState([]);
+  const [loading,   setLoading]   = useState(false);
 
   useEffect(() => { 
     fetchSuppliers(); 
     fetchRequests();
+    if (!isSupplier) fetchOrders();
   }, []);
 
   const fetchSuppliers = async () => {
@@ -180,6 +184,33 @@ export default function Suppliers({ user }) {
       if (res.success) setRequests(res.data);
     } catch (err) {
       console.error("Requests fetch error:", err.message);
+    } finally {
+      if (activeTab === 'requests') setLoading(false);
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      if (activeTab === 'orders') setLoading(true);
+      const res = await getB2BOrders();
+      if (res.success) setOrders(res.data);
+    } catch (err) {
+      console.error("Orders fetch error:", err.message);
+    } finally {
+      if (activeTab === 'orders') setLoading(false);
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId, status) => {
+    try {
+      setLoading(true);
+      const res = await updatePurchaseOrderStatus(orderId, status);
+      if (res.success) {
+        alert(`Order status updated to ${status}`);
+        fetchOrders();
+      }
+    } catch (err) {
+      alert("Failed to update order: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -285,6 +316,15 @@ export default function Suppliers({ user }) {
               <span style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>{requests.length}</span>
             )}
           </button>
+          {!isSupplier && (
+            <button 
+              className={`suppliers-tab ${activeTab === 'orders' ? 'active' : ''}`}
+              onClick={() => { setActiveTab('orders'); fetchOrders(); }}
+              style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'orders' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'orders' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Purchase Orders
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: '16px' }}>
@@ -413,6 +453,56 @@ export default function Suppliers({ user }) {
                           Reject
                         </button>
                       </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Purchase Orders Table */}
+      {activeTab === 'orders' && (
+        <div className="suppliers-table-wrapper">
+          <table className="suppliers-table">
+            <thead>
+              <tr>
+                <th>Order #</th>
+                <th>Supplier</th>
+                <th>Total Amount</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th style={{ width: 150 }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="suppliers-empty">
+                    <p>No purchase orders found.</p>
+                  </td>
+                </tr>
+              ) : orders.map(o => (
+                <tr key={o.po_id} className="suppliers-row">
+                  <td className="suppliers-name">{o.poNumber}</td>
+                  <td>{o.supplierName || '—'}</td>
+                  <td>{fmt(o.totalAmount)}</td>
+                  <td>
+                    <span className={`suppliers-status-badge suppliers-status-badge--${o.status === 'RECEIVED' ? 'active' : 'pending'}`}>
+                      {o.status}
+                    </span>
+                  </td>
+                  <td>{new Date(o.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    {o.status !== 'RECEIVED' && o.status !== 'CANCELLED' && (
+                      <button 
+                        className="suppliers-action-btn"
+                        style={{ border: '1px solid #22c55e', color: '#22c55e', width: 'auto', padding: '4px 10px', fontSize: '0.75rem' }}
+                        onClick={() => handleUpdateOrderStatus(o.po_id, 'RECEIVED')}
+                      >
+                        Mark Received
+                      </button>
                     )}
                   </td>
                 </tr>

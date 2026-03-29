@@ -226,6 +226,11 @@ const verifyEmail = async (req, res, next) => {
         `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
         [email, dbName, userType]
       );
+      await masterPool.execute(
+        `INSERT IGNORE INTO profiles (profile_id, entity_id, entity_type, business_name, slug, is_public)
+         VALUES (?, ?, ?, ?, ?, TRUE)`,
+        [uuidv4(), dbName, userType, displayName, slug]
+      );
     }
 
     await pool.execute("DELETE FROM email_otps WHERE user_id = ?", [stagingUser.user_id]);
@@ -346,6 +351,14 @@ const googleAuth = async (req, res, next) => {
         );
         await provisionTenant(newId, dbName, 'other');
       }
+
+      // NEW: Create basic Discovery Profile
+      const profileSlug = buildSlug(userType === 'supplier' ? `${userName}'s Business` : `${userName}'s Shop`, newId);
+      await masterPool.execute(
+        `INSERT IGNORE INTO profiles (profile_id, entity_id, entity_type, business_name, slug, is_public)
+         VALUES (?, ?, ?, ?, ?, TRUE)`,
+        [uuidv4(), dbName, userType, userType === 'supplier' ? `${userName}'s Business` : `${userName}'s Shop`, profileSlug]
+      );
 
       db  = await getTenantPool(dbName);
       row = { id: newId, db_name: dbName };

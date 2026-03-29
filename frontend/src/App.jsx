@@ -7,20 +7,20 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
-import LoginPage  from './pages/login';
+import LoginPage from './pages/login';
 import SignupPage from './pages/Signup';
 import MainLayout from './components/AppLayout';
-import Dashboard  from './modules/Dashboard/Dashboard';
-import Billing  from './modules/billing/Billing';
+import Dashboard from './modules/Dashboard/Dashboard';
+import Billing from './modules/billing/Billing';
 import Inventory from './modules/Inventory/Inventory';
 import AIPredictPage from './modules/AI/AI';
-import Reports   from './modules/Reports/Reports';
+import Reports from './modules/Reports/Reports';
 import Suppliers from './modules/Suppliers/Suppliers';
 import UserManagement from './modules/Users/UserManagement';
 import Settings from './modules/Settings/Settings';
 import B2BStore from './modules/B2B/B2BStore';
 import * as authAPI from './services/api';
-import SetupWizard    from './pages/SetupWizard';
+import SetupWizard from './pages/SetupWizard';
 import { getShopProfile } from './services/api';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
@@ -28,8 +28,8 @@ import DiscoveryPage from './pages/Discovery';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
-  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
+  admin: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
+  owner: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
   cashier: ['dashboard', 'billing', 'discovery'],
 };
 
@@ -39,7 +39,7 @@ function canAccess(role, page) {
 
 // ── Simple auth hook ────────────────────────────────────────
 function useAuth() {
-  const [user,    setUser]    = useState(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ function useAuth() {
   const logout = async () => {
     try {
       await authAPI.logout();
-    } catch {}
+    } catch { }
     localStorage.removeItem('stocksense_user');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
@@ -121,7 +121,7 @@ function ProtectedRoute({ page, user, children }) {
           <p className="app-unauthorized__message">
             This page is restricted. Your <strong>{user.role}</strong> role doesn't have permission.
           </p>
-          <button 
+          <button
             className="app-unauthorized__btn-primary"
             onClick={() => window.location.href = '/dashboard'}
           >
@@ -138,30 +138,30 @@ function ProtectedRoute({ page, user, children }) {
 function AuthenticatedApp({ user, logout }) {
   const [setupDone, setSetupDone] = useState(true);
 
-useEffect(() => {
-  getShopProfile()
-    .then(r => {
-      if (!r.data || !r.data.is_setup_done) {
-        setSetupDone(false);
-      }
-    })
-    .catch(() => {
-      // Error means table exists but no profile yet
-      // Only show wizard for non-admin roles
-      if (user.role !== 'admin') setSetupDone(false);
-    });
-}, []);
-if (!setupDone) {
+  useEffect(() => {
+    getShopProfile()
+      .then(r => {
+        if (!r.data || !r.data.is_setup_done) {
+          setSetupDone(false);
+        }
+      })
+      .catch(() => {
+        // Error means table exists but no profile yet
+        // Only show wizard for non-admin roles
+        if (user.role !== 'admin') setSetupDone(false);
+      });
+  }, []);
+  if (!setupDone) {
+    return (
+      <SetupWizard
+        user={user}
+        onComplete={() => setSetupDone(true)}
+      />
+    );
+  }
   return (
-    <SetupWizard
+    <MainLayout
       user={user}
-      onComplete={() => setSetupDone(true)}
-    />
-  );
-}
-  return (
-    <MainLayout 
-      user={user} 
       onLogout={logout}
       allowedRoutes={PERMISSIONS[user.role] || []}
     >
@@ -247,9 +247,9 @@ export default function App() {
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/accept-invite" element={<AcceptInvite onLoginRedirect={() => window.location.href = '/'} />} />
           <Route path="*" element={
-            <LoginPage 
-              onLogin={login} 
-              onSignupRedirect={() => window.location.href = '/signup'} 
+            <LoginPage
+              onLogin={login}
+              onSignupRedirect={() => window.location.href = '/signup'}
             />
           } />
         </Routes>

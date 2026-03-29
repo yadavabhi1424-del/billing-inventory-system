@@ -41,6 +41,8 @@ export async function seedMasterData() {
       city          VARCHAR(60),
       state         VARCHAR(60),
       pincode       VARCHAR(10),
+      latitude      DECIMAL(10, 8),
+      longitude     DECIMAL(11, 8),
       business_type VARCHAR(50)  DEFAULT 'general',
       is_public     BOOL         DEFAULT TRUE,
       createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP,

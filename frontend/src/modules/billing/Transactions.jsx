@@ -154,8 +154,9 @@ export default function Transactions() {
                 <th>Items</th>
                 <th>Payment</th>
                 <th>Amount</th>
+                <th>Status</th>
                 <th>Time</th>
-                <th>Actions</th>
+                <th style={{ width: 60 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -187,6 +188,11 @@ export default function Transactions() {
                   </td>
                   <td>
                     <span className="transactions-amount">{fmt(tx.totalAmount)}</span>
+                  </td>
+                  <td>
+                    <span className={`suppliers-status-badge suppliers-status-badge--${tx.status === 'COMPLETED' ? 'active' : 'pending'}`} style={{ fontSize: '0.65rem' }}>
+                      {tx.status}
+                    </span>
                   </td>
                   <td>
                     <span className="transactions-time">{timeAgo(tx.createdAt)}</span>

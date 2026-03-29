@@ -57,10 +57,32 @@ const createUser = async (req, res, next) => {
       return next(new AppError("Name, email and password are required.", 400));
 
     const [existing] = await req.db.execute(
-      "SELECT user_id FROM users WHERE email = ?", [email]
+      "SELECT user_id, status FROM users WHERE email = ?", [email]
     );
-    if (existing.length > 0)
+    
+    if (existing.length > 0) {
+      const user = existing[0];
+      if (user.status === 'DELETED') {
+        // RESTORE: Update existing record instead of throwing error
+        const hashed = await bcrypt.hash(password, 12);
+        await req.db.execute(
+          `UPDATE users SET name = ?, password = ?, role = ?, phone = ?, status = 'APPROVED', emailVerified = TRUE, isActive = TRUE WHERE user_id = ?`,
+          [name, hashed, role || "CASHIER", phone || null, user.user_id]
+        );
+        
+        // Ensure they are in global mapping
+        await req.masterPool.execute(
+          `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, 'shop')`,
+          [email, req.dbName]
+        );
+
+        return res.status(200).json({
+          success: true, message: "User account restored and updated.",
+          data: { user_id: user.user_id, name, email, role: role || "CASHIER", status: 'APPROVED' }
+        });
+      }
       return next(new AppError("Email already registered.", 409));
+    }
 
     const hashed = await bcrypt.hash(password, 12);
     const userId = uuidv4();
@@ -134,19 +156,30 @@ const deleteUser = async (req, res, next) => {
       [userToDelete.email, req.dbName]
     );
 
-    try {
+    // 2. EXPLICIT CHECK: Check for history in critical tables even if FKs are missing
+    const [movements] = await req.db.execute("SELECT movement_id FROM stock_movements WHERE user_id = ? LIMIT 1", [req.params.id]);
+    const [sales]     = await req.db.execute("SELECT transaction_id FROM transactions WHERE user_id = ? LIMIT 1", [req.params.id]);
+    const [purchases] = await req.db.execute("SELECT po_id FROM purchase_orders WHERE user_id = ? LIMIT 1", [req.params.id]);
+    
+    const hasHistory = movements.length > 0 || sales.length > 0 || purchases.length > 0;
+
+    if (hasHistory) {
       await req.db.execute(
-        "DELETE FROM users WHERE user_id = ?", [req.params.id]
+        "UPDATE users SET status = 'DELETED', isActive = FALSE WHERE user_id = ?",
+        [req.params.id]
       );
-    } catch (err) {
-      if (err.code === 'ER_ROW_IS_REFERENCED_2') {
-        // If user has history (foreign key constraint), soft delete instead
+    } else {
+      try {
         await req.db.execute(
-          "UPDATE users SET status = 'DELETED', isActive = FALSE WHERE user_id = ?",
-          [req.params.id]
+          "DELETE FROM users WHERE user_id = ?", [req.params.id]
         );
-      } else {
-        throw err;
+      } catch (err) {
+        if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+          await req.db.execute(
+            "UPDATE users SET status = 'DELETED', isActive = FALSE WHERE user_id = ?",
+            [req.params.id]
+          );
+        } else { throw err; }
       }
     }
     res.json({ success: true, message: "User deleted successfully." });

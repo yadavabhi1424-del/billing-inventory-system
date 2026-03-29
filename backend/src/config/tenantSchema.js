@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS shop_profile (
   logo            VARCHAR(255),
   address         TEXT,
   gstin           VARCHAR(20),
+  latitude        DECIMAL(10, 8),
+  longitude       DECIMAL(11, 8),
   is_setup_done   BOOL         DEFAULT FALSE,
   createdAt       DATETIME     DEFAULT CURRENT_TIMESTAMP
 );

@@ -12,6 +12,12 @@ const getDateRange = (req) => {
 const getSalesReport = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
+    const userType = req.user.userType || 'shop';
+    
+    // Suppliers include PENDING (B2B orders), Shops only COMPLETED (POS)
+    const statusFilter = userType === 'supplier' 
+      ? "status IN ('COMPLETED', 'PENDING')" 
+      : "status = 'COMPLETED'";
 
     const [[summary]] = await req.db.execute(
       `SELECT COUNT(*) as totalTransactions,
@@ -19,13 +25,13 @@ const getSalesReport = async (req, res, next) => {
               COALESCE(SUM(taxAmount),0)      as totalTax,
               COALESCE(SUM(discountAmount),0) as totalDiscount,
               COALESCE(AVG(totalAmount),0)    as avgOrderValue
-       FROM transactions WHERE createdAt BETWEEN ? AND ? AND status = 'COMPLETED'`,
+       FROM transactions WHERE createdAt BETWEEN ? AND ? AND ${statusFilter}`,
       [start, end]
     );
 
     const [byPaymentMethod] = await req.db.execute(
       `SELECT paymentMethod, COUNT(*) as count, SUM(totalAmount) as total
-       FROM transactions WHERE createdAt BETWEEN ? AND ? AND status = 'COMPLETED'
+       FROM transactions WHERE createdAt BETWEEN ? AND ? AND ${statusFilter}
        GROUP BY paymentMethod`,
       [start, end]
     );
@@ -35,7 +41,7 @@ const getSalesReport = async (req, res, next) => {
               SUM(ti.quantity) as totalQty, SUM(ti.totalAmount) as totalRevenue
        FROM transaction_items ti
        JOIN transactions t ON t.transaction_id = ti.transaction_id
-       WHERE t.createdAt BETWEEN ? AND ? AND t.status = 'COMPLETED'
+       WHERE t.createdAt BETWEEN ? AND ? AND t.${statusFilter}
        GROUP BY ti.product_id, ti.productName
        ORDER BY totalRevenue DESC LIMIT 10`,
       [start, end]
@@ -44,7 +50,7 @@ const getSalesReport = async (req, res, next) => {
     const [dailyBreakdown] = await req.db.execute(
       `SELECT DATE(createdAt) as date, COUNT(*) as transactions,
               SUM(totalAmount) as sales, SUM(taxAmount) as tax, SUM(discountAmount) as discount
-       FROM transactions WHERE createdAt BETWEEN ? AND ? AND status = 'COMPLETED'
+       FROM transactions WHERE createdAt BETWEEN ? AND ? AND ${statusFilter}
        GROUP BY DATE(createdAt) ORDER BY date ASC`,
       [start, end]
     );
@@ -89,21 +95,41 @@ const getInventoryReport = async (req, res, next) => {
 const getCustomerReport = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
+    const userType = req.user.userType || 'shop';
 
-    const [[summary]] = await req.db.execute(
-      `SELECT COUNT(*) as totalCustomers,
-              SUM(CASE WHEN createdAt BETWEEN ? AND ? THEN 1 ELSE 0 END) as newCustomers
-       FROM customers WHERE isActive = TRUE`,
-      [start, end]
-    );
+    let summaryQuery, topCustomersQuery;
 
-    const [topCustomers] = await req.db.execute(
-      `SELECT customer_id, name, phone, totalSpent, loyaltyPoints,
-              (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
-       FROM customers c
-       WHERE isActive = TRUE AND totalSpent > 0
-       ORDER BY totalSpent DESC LIMIT 10`
-    );
+    if (userType === 'supplier') {
+      // For Suppliers: "Customers" are Shops that placed B2B orders
+      summaryQuery = `
+        SELECT COUNT(DISTINCT customer_id) as totalCustomers,
+               COUNT(DISTINCT CASE WHEN createdAt BETWEEN ? AND ? THEN customer_id END) as newCustomers
+        FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NOT NULL`;
+      
+      topCustomersQuery = `
+        SELECT customer_id, name, phone, totalSpent, shop_tenant_id as shopId,
+               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
+        FROM customers c
+        WHERE isActive = TRUE AND shop_tenant_id IS NOT NULL AND totalSpent > 0
+        ORDER BY totalSpent DESC LIMIT 10`;
+    } else {
+      // For Shops: Normal Retail Customers
+      summaryQuery = `
+        SELECT COUNT(*) as totalCustomers,
+               SUM(CASE WHEN createdAt BETWEEN ? AND ? THEN 1 ELSE 0 END) as newCustomers
+        FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NULL`;
+      
+      topCustomersQuery = `
+        SELECT customer_id, name, phone, totalSpent, loyaltyPoints,
+               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
+        FROM customers c
+        WHERE isActive = TRUE AND shop_tenant_id IS NULL AND totalSpent > 0
+        ORDER BY totalSpent DESC LIMIT 10`;
+    }
+
+    const [[summary]] = await req.db.execute(summaryQuery, [start, end]);
+    const [topCustomers] = await req.db.execute(topCustomersQuery);
+
 
     res.json({ success: true, data: { summary, topCustomers } });
   } catch (error) { next(error); }
