@@ -355,6 +355,11 @@ export default function Payment({ user }) {
   const handleGenerateBill = async () => {
     if (!customerName.trim()) return alert('Please enter customer name');
     if (cart.length === 0)    return alert('Please add items to the bill');
+    
+    // Phone validation
+    if (customerPhone && customerPhone.length !== 10) {
+      return alert('Phone number must be exactly 10 digits.');
+    }
 
     try {
       setSubmitting(true);
@@ -507,7 +512,16 @@ export default function Payment({ user }) {
           {/* Customer */}
           <div className="bill-customer">
             <div className="bill-customer__field">
-              <label className="bill-customer__label">Customer *</label>
+              <div className="bill-customer__header">
+                <label className="bill-customer__label">Customer *</label>
+                <button 
+                  className="bill-customer__quick-fill"
+                  onClick={() => setCustomerName('Walk-in')}
+                  title="Quick fill Walk-in"
+                >
+                  <Icon name="check" size={10} /> Walk-in
+                </button>
+              </div>
               <input
                 className="bill-customer__input"
                 placeholder="Walk-in / Name"
@@ -519,7 +533,7 @@ export default function Payment({ user }) {
               <label className="bill-customer__label">Phone (optional)</label>
               <input
                 className="bill-customer__input"
-                placeholder="98765 43210"
+                placeholder="10-digit number"
                 value={customerPhone}
                 onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                 inputMode="numeric"

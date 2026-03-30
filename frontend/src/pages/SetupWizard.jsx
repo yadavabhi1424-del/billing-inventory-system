@@ -44,15 +44,19 @@ export default function SetupWizard({ user, onComplete }) {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await saveShopProfile(form);
-      onComplete(form);
+      const res = await saveShopProfile(form);
+      if (res.success) {
+        // Success! We can now proceed. 
+        // We'll pass the form so the parent can update the user state immediately.
+        onComplete(form);
+      }
     } catch (e) {
-      alert(e.message);
+      alert(e.message || "Failed to save profile.");
     } finally {
       setLoading(false);
     }
   };
-
+ elephant
   const canNext = () => {
     if (step === 1) return form.shop_name.trim().length > 0;
     if (step === 2) return form.shop_type !== '';

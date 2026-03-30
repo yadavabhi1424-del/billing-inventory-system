@@ -271,16 +271,16 @@ CREATE TABLE IF NOT EXISTS bom (
 `;
 
 export const SHOP_TYPE_SCHEMAS = {
-  general_store:  ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  electronics:    ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  textile:        ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
-  pharmacy:       ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  restaurant:     ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  manufacturing:  ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
-  hardware:       ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  auto_parts:     ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  stationery:     ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  jewellery:      ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
-  warehouse:      ['CORE', 'PROCUREMENT', 'STOCK'],
-  other:          ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  general_store: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  electronics: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  textile: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
+  pharmacy: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  restaurant: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  manufacturing: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
+  hardware: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  auto_parts: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  stationery: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
+  jewellery: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
+  warehouse: ['CORE', 'PROCUREMENT', 'STOCK'],
+  other: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
 };

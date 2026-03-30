@@ -334,11 +334,11 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
 
           {userDropdownOpen && (
             <div className="header-user__dropdown">
-              <button className="header-user__dropdown-item">
+              <button className="header-user__dropdown-item" onClick={() => navigate('/settings?tab=account')}>
                 <Icon name="user" size={16} />
                 Profile
               </button>
-              <button className="header-user__dropdown-item">
+              <button className="header-user__dropdown-item" onClick={() => navigate('/settings')}>
                 <Icon name="settings" size={16} />
                 Settings
               </button>

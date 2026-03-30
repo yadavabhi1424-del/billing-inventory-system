@@ -181,8 +181,8 @@ export async function getNotifications() {
 //  DASHBOARD
 // ============================================================
 
-export async function getDashboard() {
-  return await api.get('/dashboard');
+export async function getDashboard(params = {}) {
+  return await api.get('/dashboard', { params });
 }
 
 // ============================================================
@@ -485,6 +485,10 @@ export async function placeB2BOrder(data) {
 
 export async function getB2BOrders() {
   return await api.get('/b2b/orders');
+}
+
+export async function getOwnProfile() {
+  return await api.get('/discovery/own-profile');
 }
 
 export { api, API_URL };

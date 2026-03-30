@@ -256,7 +256,23 @@
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: var(--space-3);
   overflow-y: auto;
+  max-height: 420px; /* Approximately 3 rows of products */
   padding: var(--space-2);
+}
+
+/* Custom scrollbar for product grid */
+.pos-products__grid::-webkit-scrollbar {
+  width: 4px;
+}
+.pos-products__grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+.pos-products__grid::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-full);
+}
+.pos-products__grid::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-primary);
 }
 
 .product-card {
@@ -387,12 +403,40 @@
   gap: var(--space-1);
 }
 
+.bill-customer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .bill-customer__label {
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--color-text-muted);
+}
+
+.bill-customer__quick-fill {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--color-accent-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bill-customer__quick-fill:hover {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent-primary);
 }
 
 .bill-customer__input {

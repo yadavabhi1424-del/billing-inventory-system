@@ -160,6 +160,11 @@ const getSupplierReport = async (req, res, next) => {
 const getProfitLoss = async (req, res, next) => {
   try {
     const { start, end } = getDateRange(req);
+    const userType = req.user.userType || 'shop';
+
+    const statusFilter = userType === 'supplier'
+      ? "status IN ('COMPLETED', 'PENDING')"
+      : "status = 'COMPLETED'";
 
     const [[result]] = await req.db.execute(
       `SELECT COALESCE(SUM(ti.totalAmount), 0)             as totalRevenue,
@@ -169,7 +174,7 @@ const getProfitLoss = async (req, res, next) => {
               COALESCE(SUM(ti.quantity), 0)                as totalItemsSold
        FROM transaction_items ti
        JOIN transactions t ON t.transaction_id = ti.transaction_id
-       WHERE t.createdAt BETWEEN ? AND ? AND t.status = 'COMPLETED'`,
+       WHERE t.createdAt BETWEEN ? AND ? AND t.${statusFilter}`,
       [start, end]
     );
 

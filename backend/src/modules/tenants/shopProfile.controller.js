@@ -1,6 +1,5 @@
-import { v4 as uuidv4 } from "uuid";
-import { AppError }     from "../../middleware/errorHandler.js";
 import { masterPool }   from "../../config/masterDatabase.js";
+import { geocodeAddress } from "../../utils/geocoding.js";
 
 export const getShopTypes = async (req, res, next) => {
   try {
@@ -36,6 +35,18 @@ export const saveShopProfile = async (req, res, next) => {
 
     const db = req.db;
 
+    // --- NEW: Geocoding Logic ---
+    let lat = null;
+    let lng = null;
+    if (address) {
+      const coords = await geocodeAddress(address);
+      if (coords) {
+        lat = coords.lat;
+        lng = coords.lng;
+      }
+    }
+    // ----------------------------
+
     // Check if profile exists
     const [existing] = await db.execute(
       "SELECT profile_id FROM shop_profile LIMIT 1"
@@ -53,6 +64,8 @@ export const saveShopProfile = async (req, res, next) => {
           timezone         = ?,
           address          = ?,
           gstin            = ?,
+          latitude         = ?,
+          longitude        = ?,
           is_setup_done    = TRUE
          WHERE profile_id  = ?`,
         [
@@ -60,28 +73,34 @@ export const saveShopProfile = async (req, res, next) => {
           JSON.stringify(inventory_types),
           currency || 'INR', timezone || 'Asia/Kolkata',
           address || null, gstin || null,
+          lat, lng,
           existing[0].profile_id,
         ]
       );
     } else {
+      const profileId = uuidv4();
       // Insert
       await db.execute(
         `INSERT INTO shop_profile
           (profile_id, shop_name, shop_type, shop_description,
-           inventory_types, currency, timezone, address, gstin, is_setup_done)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
+           inventory_types, currency, timezone, address, gstin, latitude, longitude, is_setup_done)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)`,
         [
-          uuidv4(), shop_name, shop_type,
+          profileId, shop_name, shop_type,
           shop_description || null,
           JSON.stringify(inventory_types),
           currency || 'INR', timezone || 'Asia/Kolkata',
           address || null, gstin || null,
+          lat, lng
         ]
       );
     }
 
     // --- NEW: Sync to Public Discovery (Master DB) ---
+    // Sync to Public Discovery (Master DB)
     try {
+      const profileId = existing.length > 0 ? existing[0].profile_id : (await db.execute("SELECT profile_id FROM shop_profile LIMIT 1"))[0][0].profile_id;
+      
       const slug = (shop_name || 'shop')
         .toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40)
         + '_' + req.dbName.slice(-6);
@@ -89,15 +108,18 @@ export const saveShopProfile = async (req, res, next) => {
       await masterPool.execute(
         `INSERT INTO profiles
            (profile_id, entity_id, entity_type, business_name, slug, description,
-            city, state, pincode, business_type, is_public)
+            address, latitude, longitude, business_type, is_public)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            business_name = VALUES(business_name),
            description   = VALUES(description),
+           address       = VALUES(address),
+           latitude      = VALUES(latitude),
+           longitude     = VALUES(longitude),
            business_type = VALUES(business_type),
            is_public     = VALUES(is_public)`,
-        [uuidv4(), req.dbName, req.userType || 'shop', shop_name, slug, shop_description || null,
-         null, null, null, shop_type || 'general', 1]
+        [profileId, req.dbName, req.userType || 'shop', shop_name, slug, shop_description || null,
+         address || null, lat, lng, shop_type || 'general', 1]
       );
     } catch (discoveryErr) {
       console.error("Warning: Could not sync to master discovery:", discoveryErr.message);

@@ -30,7 +30,7 @@ import DiscoveryPage from './pages/Discovery';
 const PERMISSIONS = {
   admin: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
   owner: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
-  cashier: ['dashboard', 'billing', 'discovery'],
+  cashier: ['dashboard', 'billing', 'discovery', 'settings'],
 };
 
 function canAccess(role, page) {

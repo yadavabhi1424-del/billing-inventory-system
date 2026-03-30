@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import {
   getMe, changePassword, updateMyProfile,
@@ -676,7 +677,26 @@ const TABS = [
 ];
 
 export default function Settings({ user }) {
-  const [activeTab, setActiveTab] = useState('shop');
+  const [searchParams] = useSearchParams();
+  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+
+  const filteredTabs = TABS.filter(t => {
+    if (isAdmin) return true;
+    return ['billing', 'account', 'about'].includes(t.id);
+  });
+
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    if (t && filteredTabs.some(tab => tab.id === t)) return t;
+    return isAdmin ? 'shop' : 'billing';
+  });
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && filteredTabs.some(tab => tab.id === t)) {
+      setActiveTab(t);
+    }
+  }, [searchParams, filteredTabs]);
 
   return (
     <div className="settings-page">
@@ -687,7 +707,7 @@ export default function Settings({ user }) {
 
       <div className="settings-layout">
         <div className="settings-sidebar">
-          {TABS.map(tab => (
+          {filteredTabs.map(tab => (
             <button key={tab.id}
               className={`settings-sidebar__item ${activeTab === tab.id ? 'settings-sidebar__item--active' : ''}`}
               onClick={() => setActiveTab(tab.id)}>

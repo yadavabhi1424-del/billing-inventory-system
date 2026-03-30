@@ -8,19 +8,19 @@ const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 const timeAgo = (dateStr) => {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1)   return 'Just now';
-  if (mins < 60)  return `${mins} min ago`;
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
   if (mins < 1440) return `${Math.floor(mins / 60)} hr ago`;
   return new Date(dateStr).toLocaleDateString('en-IN');
 };
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [search,       setSearch]       = useState('');
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
   const [filterPayment, setFilterPayment] = useState('all');
-  const [filterDate,    setFilterDate]    = useState('today');
-  const [selected,      setSelected]      = useState(null);
+  const [filterDate, setFilterDate] = useState('today');
+  const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
@@ -36,13 +36,13 @@ export default function Transactions() {
 
       if (filterDate === 'today') {
         params.startDate = new Date().toISOString().split('T')[0];
-        params.endDate   = new Date().toISOString().split('T')[0];
+        params.endDate = new Date().toISOString().split('T')[0];
       } else if (filterDate === 'yesterday') {
         const y = new Date();
         y.setDate(y.getDate() - 1);
         const yStr = y.toISOString().split('T')[0];
         params.startDate = yStr;
-        params.endDate   = yStr;
+        params.endDate = yStr;
       } else if (filterDate === 'week') {
         const w = new Date();
         w.setDate(w.getDate() - 7);
@@ -77,7 +77,7 @@ export default function Transactions() {
     }
   };
 
-  const totalAmount       = transactions.reduce((s, t) => s + parseFloat(t.totalAmount), 0);
+  const totalAmount = transactions.reduce((s, t) => s + parseFloat(t.totalAmount), 0);
   const totalTransactions = transactions.length;
 
   return (
@@ -174,10 +174,10 @@ export default function Transactions() {
                   </td>
                   <td>
                     <span className="transactions-customer">
-                      {tx.customerName || 
-                      (tx.notes?.includes('Customer:') 
-                      ? tx.notes.split('Customer:')[1].split('|')[0].trim() 
-                      : 'Walk-in')}
+                      {tx.customerName ||
+                        (tx.notes?.includes('Customer:')
+                          ? tx.notes.split('Customer:')[1].split('|')[0].trim()
+                          : 'Walk-in')}
                     </span>
                   </td>
                   <td>{tx.itemCount || '—'}</td>

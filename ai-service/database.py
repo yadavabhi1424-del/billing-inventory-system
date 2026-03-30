@@ -48,7 +48,11 @@ def fetch_shop_profile():
     }
 
 def fetch_sales_data(product_id=None):
-    """Fetch daily sales per product from transactions"""
+    """Fetch daily sales per product from transactions — role aware"""
+    profile = fetch_shop_profile()
+    is_supplier = profile.get('shop_type') == 'supplier'
+    status_filter = "t.status IN ('COMPLETED', 'PENDING')" if is_supplier else "t.status = 'COMPLETED'"
+
     conn   = get_connection()
     cursor = conn.cursor(dictionary=True)
 
@@ -63,11 +67,11 @@ def fetch_sales_data(product_id=None):
         FROM transaction_items ti
         JOIN transactions t ON t.transaction_id = ti.transaction_id
         JOIN products p     ON p.product_id     = ti.product_id
-        WHERE t.status = 'COMPLETED'
+        WHERE {}
         {}
         GROUP BY ti.product_id, p.name, p.stock, p.minStockLevel, DATE(t.createdAt)
         ORDER BY ti.product_id, sale_date ASC
-    """.format("AND ti.product_id = %s" if product_id else "")
+    """.format(status_filter, "AND ti.product_id = %s" if product_id else "")
 
     cursor.execute(query, (product_id,) if product_id else ())
     rows = cursor.fetchall()
@@ -117,7 +121,11 @@ def fetch_all_products():
     return products
 
 def fetch_day_of_week_patterns(product_id):
-    """Fetch historical day-of-week sales pattern for a product"""
+    """Fetch historical day-of-week sales pattern — role aware"""
+    profile = fetch_shop_profile()
+    is_supplier = profile.get('shop_type') == 'supplier'
+    status_filter = "t.status IN ('COMPLETED', 'PENDING')" if is_supplier else "t.status = 'COMPLETED'"
+
     conn   = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
@@ -126,17 +134,21 @@ def fetch_day_of_week_patterns(product_id):
             AVG(ti.quantity)       as avg_qty
         FROM transaction_items ti
         JOIN transactions t ON t.transaction_id = ti.transaction_id
-        WHERE ti.product_id = %s AND t.status = 'COMPLETED'
+        WHERE ti.product_id = %s AND {}
         GROUP BY DAYOFWEEK(t.createdAt)
         ORDER BY dow
-    """, (product_id,))
+    """.format(status_filter), (product_id,))
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
     return {int(r['dow']): float(r['avg_qty']) for r in rows}
 
 def fetch_monthly_patterns(product_id):
-    """Fetch historical monthly sales pattern for a product"""
+    """Fetch historical monthly sales pattern — role aware"""
+    profile = fetch_shop_profile()
+    is_supplier = profile.get('shop_type') == 'supplier'
+    status_filter = "t.status IN ('COMPLETED', 'PENDING')" if is_supplier else "t.status = 'COMPLETED'"
+
     conn   = get_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
@@ -145,10 +157,10 @@ def fetch_monthly_patterns(product_id):
             AVG(ti.quantity)    as avg_qty
         FROM transaction_items ti
         JOIN transactions t ON t.transaction_id = ti.transaction_id
-        WHERE ti.product_id = %s AND t.status = 'COMPLETED'
+        WHERE ti.product_id = %s AND {}
         GROUP BY MONTH(t.createdAt)
         ORDER BY month
-    """, (product_id,))
+    """.format(status_filter), (product_id,))
     rows = cursor.fetchall()
     cursor.close()
     conn.close()

@@ -151,9 +151,14 @@ def train_product(product, shop_profile=None):
         return False
 
 def train_all():
-    """Train models for all active products"""
+    """Train models for all active products — role aware"""
     shop_profile = fetch_shop_profile()
-    print(f"\n🏪 Shop: {shop_profile['shop_type']} | Types: {shop_profile['inventory_types']}")
+    is_supplier  = shop_profile.get('shop_type') == 'supplier'
+    mode_label   = "Sales Forecasting (B2B Mode)" if is_supplier else "Demand Prediction (Retail Mode)"
+    
+    print(f"\n🏪 Shop: {shop_profile['shop_type']} | Mode: {mode_label}")
+    print(f"📦 Types: {shop_profile['inventory_types']}")
+    
     products = fetch_all_products()
     print(f"🤖 Training {len(products)} products...\n")
     success = 0

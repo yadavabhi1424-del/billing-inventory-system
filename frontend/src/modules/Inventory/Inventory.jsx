@@ -525,6 +525,7 @@ export default function Inventory() {
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [filterType, setFilterType] = useState('all');
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -588,10 +589,21 @@ export default function Inventory() {
     fetchAll();
   };
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = products.filter(p => {
+    const matchesSearch = 
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku.toLowerCase().includes(search.toLowerCase()) ||
+      (p.categoryName || '').toLowerCase().includes(search.toLowerCase());
+
+    if (!matchesSearch) return false;
+
+    if (filterType === 'low') return p.stock > 0 && p.stock <= p.minStockLevel;
+    if (filterType === 'out') return p.stock === 0;
+    if (filterType === 'expiring') {
+      return p.expiryDate && new Date(p.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
+    return true;
+  });
 
   // Stats
   const lowStock = products.filter(p => p.stock > 0 && p.stock <= p.minStockLevel).length;
@@ -616,12 +628,17 @@ export default function Inventory() {
       {/* Stats */}
       <div className="inventory-stats">
         {[
-          { label: 'Total Products', value: products.length, icon: 'box', bg: 'var(--color-accent-soft)', color: 'var(--color-accent-primary)' },
-          { label: 'Low Stock', value: lowStock, icon: 'alert', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)' },
-          { label: 'Expiring Soon', value: expiring, icon: 'alert', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
-          { label: 'Out of Stock', value: outStock, icon: 'x', bg: 'var(--color-danger-soft)', color: 'var(--color-danger)' },
+          { id: 'all', label: 'Total Products', value: products.length, icon: 'box', bg: 'var(--color-accent-soft)', color: 'var(--color-accent-primary)' },
+          { id: 'low', label: 'Low Stock', value: lowStock, icon: 'alert', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)' },
+          { id: 'expiring', label: 'Expiring Soon', value: expiring, icon: 'alert', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' },
+          { id: 'out', label: 'Out of Stock', value: outStock, icon: 'x', bg: 'var(--color-danger-soft)', color: 'var(--color-danger)' },
         ].map(s => (
-          <div key={s.label} className="inventory-stat-card">
+          <div 
+            key={s.label} 
+            className={`inventory-stat-card ${filterType === s.id ? 'is-active' : ''}`}
+            onClick={() => setFilterType(s.id)}
+            style={{ '--stat-color': s.color }}
+          >
             <div className="inventory-stat-card__icon" style={{ background: s.bg, color: s.color }}>
               <Icon name={s.icon} size={24} />
             </div>
@@ -638,7 +655,7 @@ export default function Inventory() {
         <div className="inventory-search">
           <Icon name="search" size={16} />
           <input className="inventory-search__input"
-            placeholder="Search by name or SKU..."
+            placeholder="Search by name, SKU or category..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <button className="inventory-add-btn" onClick={() => setShowAdd(true)}>

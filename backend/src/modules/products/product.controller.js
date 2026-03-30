@@ -309,9 +309,9 @@ const updateProduct = async (req, res, next) => {
         minStockLevel ? parseInt(minStockLevel)   : null,
         maxStockLevel ? parseInt(maxStockLevel)   : null,
         location      || null,
-        isActive      !== undefined ? isActive    : null,
+        isActive      !== undefined ? (isActive ? 1 : 0) : null,
         expiryDate    || null,
-        is_public     !== undefined ? is_public   : null,
+        is_public     !== undefined ? (is_public ? 1 : 0) : null,
         newStock,
         req.params.id,
       ]
