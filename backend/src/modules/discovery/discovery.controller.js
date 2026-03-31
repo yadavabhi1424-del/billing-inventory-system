@@ -10,27 +10,27 @@ export const getDiscovery = async (req, res, next) => {
       match_my_category // Boolean/String
     } = req.query;
 
-    const offset  = (Number(page) - 1) * Number(limit);
-    let conditions = ["p.is_public = TRUE"];
-    let params  = [];
+    const offset = (Number(page) - 1) * Number(limit);
+    const myId = req.dbName;
+    const userType = req.user.userType || 'shop';
+    const searchType = userType === 'shop' ? 'supplier' : 'shop';
 
-    if (type)          { conditions.push("p.entity_type = ?");    params.push(type); }
-    if (city)          { conditions.push("p.city LIKE ?");         params.push(`%${city}%`); }
-    if (state)         { conditions.push("p.state LIKE ?");        params.push(`%${state}%`); }
-    
+    let conditions = ["p.is_public = TRUE", "p.entity_id != ?", "p.entity_type = ?"];
+    let params = [myId, searchType];
+
+    if (city) { conditions.push("p.city LIKE ?"); params.push(`%${city}%`); }
+    if (state) { conditions.push("p.state LIKE ?"); params.push(`%${state}%`); }
+
     // Primary Filter logic: Get the business_type to filter by
     let selectedType = (business_type && business_type !== 'All') ? business_type : null;
-    
+
     // If the user wants to match their own category
-    if (match_my_category === 'true') {
-      // Safety: Only perform lookup if authenticated user context exists
-      if (req.user) {
-        if (!req.user.business_type && req.db) {
-           const [profileRows] = await req.db.execute("SELECT shop_type FROM shop_profile LIMIT 1");
-           if (profileRows.length > 0) req.user.business_type = profileRows[0].shop_type;
-        }
-        if (req.user.business_type) selectedType = req.user.business_type;
+    if (match_my_category === 'true' && req.user) {
+      if (!req.user.business_type && req.db) {
+        const [profileRows] = await req.db.execute("SELECT shop_type as type FROM shop_profile LIMIT 1");
+        if (profileRows.length > 0) req.user.business_type = profileRows[0].type;
       }
+      if (req.user.business_type) selectedType = req.user.business_type;
     }
 
     if (selectedType) {
@@ -77,13 +77,12 @@ export const getDiscovery = async (req, res, next) => {
 
     // Fallback logic: If NO EXACT MATCHES, show general results of the SAME type
     if (rows.length === 0 && (selectedType || search)) {
-        fallback = true;
-        let fbCond = ["p.is_public = TRUE"];
-        let fbParams = [];
-        if (type) { fbCond.push("p.entity_type = ?"); fbParams.push(type); }
+      fallback = true;
+      let fbCond = ["p.is_public = TRUE", "p.entity_id != ?", "p.entity_type = ?"];
+      let fbParams = [myId, searchType];
 
-        const [fbRows] = await masterPool.execute(
-          `SELECT DISTINCT p.profile_id, p.entity_id, p.entity_type,
+      const [fbRows] = await masterPool.execute(
+        `SELECT DISTINCT p.profile_id, p.entity_id, p.entity_type,
                   p.business_name, p.slug, p.description,
                   p.logo, p.city, p.state, p.pincode,
                   p.business_type, p.createdAt
@@ -91,18 +90,17 @@ export const getDiscovery = async (req, res, next) => {
            WHERE ${fbCond.join(" AND ")}
            ORDER BY RAND()
            LIMIT ${Number(limit)}`,
-          fbParams
-        );
-        rows = fbRows;
-        total = rows.length; 
+        fbParams
+      );
+      rows = fbRows;
+      total = rows.length;
     } else {
-        const countWhere = conditions.join(" AND ");
-        const countParams = distanceHaving ? params.slice(0, 2).concat(params.slice(2)) : params; // Adjust if distance param needed
-        const [countRows] = await masterPool.execute(
-          `SELECT COUNT(DISTINCT p.profile_id) as total FROM profiles p ${searchJoin} WHERE ${countWhere}`,
-          distanceHaving ? params.slice(2) : params
-        );
-        total = countRows[0].total;
+      const countWhere = conditions.join(" AND ");
+      const [countRows] = await masterPool.execute(
+        `SELECT COUNT(DISTINCT p.profile_id) as total FROM profiles p ${searchJoin} WHERE ${countWhere}`,
+        distanceHaving ? params.slice(2) : params
+      );
+      total = countRows[0].total;
     }
 
     res.json({
@@ -139,8 +137,8 @@ export const upsertProfile = async (req, res, next) => {
       latitude, longitude, address, email, phone
     } = req.body;
 
-    const userType  = req.user.userType || 'shop';
-    const entityId  = req.dbName;
+    const userType = req.user.userType || 'shop';
+    const entityId = req.dbName;
 
     const slug = (business_name || 'business')
       .toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40)
@@ -166,9 +164,9 @@ export const upsertProfile = async (req, res, next) => {
          email         = VALUES(email),
          phone         = VALUES(phone)`,
       [uuidv4(), entityId, userType, business_name, slug, description || null,
-       logo || null, city || null, state || null, pincode || null,
-       business_type || 'general', is_public ? 1 : 0, 
-       latitude || null, longitude || null, address || null, email || null, phone || null]
+      logo || null, city || null, state || null, pincode || null,
+      business_type || 'general', is_public ? 1 : 0,
+      latitude || null, longitude || null, address || null, email || null, phone || null]
     );
 
     res.json({ success: true, message: "Profile updated." });
@@ -178,15 +176,14 @@ export const upsertProfile = async (req, res, next) => {
 // GET /api/discovery/own-profile — fetch current tenant's saved location (auth required)
 export const getOwnProfile = async (req, res, next) => {
   try {
-    if (!req.db) return res.status(400).json({ success: false, message: "No database context." });
-    
-    // Fetch from shop_profile in tenant DB
+    const userType = req.user.userType || 'shop';
+    // Fetch from relevant profile in tenant DB
     const [rows] = await req.db.execute(
       "SELECT latitude, longitude, address, city, state FROM shop_profile LIMIT 1"
     );
-    
+
     if (rows.length === 0) return res.json({ success: true, data: null });
-    
+
     res.json({ success: true, data: rows[0] });
   } catch (error) { next(error); }
 };

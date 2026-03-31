@@ -1,5 +1,7 @@
+import { v4 as uuidv4 }    from "uuid";
 import { masterPool }   from "../../config/masterDatabase.js";
 import { geocodeAddress } from "../../utils/geocoding.js";
+import { AppError }       from "../../middleware/errorHandler.js";
 
 export const getShopTypes = async (req, res, next) => {
   try {

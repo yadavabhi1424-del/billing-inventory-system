@@ -140,6 +140,7 @@ export const SALES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS customers (
   customer_id   VARCHAR(36)   PRIMARY KEY,
   name          VARCHAR(100)  NOT NULL,
+  slug          VARCHAR(100),
   email         VARCHAR(100),
   phone         VARCHAR(20),
   address       TEXT,
@@ -149,6 +150,7 @@ CREATE TABLE IF NOT EXISTS customers (
   totalSpent    DECIMAL(12,2) DEFAULT 0,
   loyaltyPoints INT           DEFAULT 0,
   isActive      BOOL          DEFAULT TRUE,
+  is_network    BOOL          DEFAULT FALSE,
   createdAt     DATETIME      DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -208,6 +210,7 @@ export const PROCUREMENT_SCHEMA = `
 CREATE TABLE IF NOT EXISTS suppliers (
   supplier_id   VARCHAR(36)  PRIMARY KEY,
   name          VARCHAR(100) NOT NULL,
+  slug          VARCHAR(100),
   contactPerson VARCHAR(100),
   email         VARCHAR(100),
   phone         VARCHAR(20)  NOT NULL,
@@ -222,6 +225,7 @@ CREATE TABLE IF NOT EXISTS suppliers (
   paymentTerms  VARCHAR(50)  DEFAULT '30 days',
   notes         TEXT,
   isActive      BOOL         DEFAULT TRUE,
+  is_network    BOOL         DEFAULT FALSE,
   createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP
 );
 

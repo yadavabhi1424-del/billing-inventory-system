@@ -56,7 +56,6 @@ export default function SetupWizard({ user, onComplete }) {
       setLoading(false);
     }
   };
- elephant
   const canNext = () => {
     if (step === 1) return form.shop_name.trim().length > 0;
     if (step === 2) return form.shop_type !== '';

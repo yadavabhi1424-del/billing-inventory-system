@@ -1,10 +1,11 @@
 import { Router } from "express";
-import { protect }  from "../../middleware/auth.js";
+import { protect } from "../../middleware/auth.js";
 import {
   getSupplierCatalog,
   getConnections,
   sendConnectionRequest,
   updateConnectionStatus,
+  disconnectPartner
 } from "./network.controller.js";
 
 const router = Router();
@@ -20,5 +21,6 @@ router.get("/b2b-products", protect, getB2BProducts);
 router.get("/connections", protect, getConnections);
 router.post("/connections", protect, sendConnectionRequest);
 router.patch("/connections/:map_id", protect, updateConnectionStatus);
+router.delete("/connections/:slug", protect, disconnectPartner);
 
 export default router;

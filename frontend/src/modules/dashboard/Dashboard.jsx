@@ -128,13 +128,36 @@ export default function Dashboard({ user }) {
   const topProducts = data?.charts?.topProducts || [];
   const chartData = chartView === 'weekly' ? (data?.charts?.last7Days || []) : (data?.charts?.last12Months || []);
 
+  // ── Stat Cards Configuration ──────────────────────────────────
+  const isSupplier = user?.userType === 'supplier';
+  
+  const statCards = isSupplier ? [
+    { label: 'Total Revenue',          value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth },
+    { label: 'Total Sales (Completed Orders)', value: stats.transactions || 0,   icon: 'billing',    accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
+    { label: 'Net Profit',             value: fmt(stats.netProfit || 0),        icon: 'payment',    accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
+    { label: 'Sales Growth',           value: (stats.salesGrowth || 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
+    { label: 'TBD (Setting up...)',    value: '--',                             icon: 'inventory',  accent: 'var(--color-cyan)',           accentSoft: 'var(--color-cyan-soft)'     },
+    { label: 'TBD (Setting up...)',    value: '--',                             icon: 'reports',    accent: 'var(--color-indigo)',         accentSoft: 'var(--color-indigo-soft)'   },
+    { label: 'Total Products',         value: stats.totalProducts || 0,          icon: 'inventory',  accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
+    { label: 'Low Stock Items',        value: stats.lowStockCount || 0,          icon: 'alert',      accent: 'var(--color-danger)',         accentSoft: 'var(--color-danger-soft)'   },
+  ] : [
+    { label: 'Total Revenue',          value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth },
+    { label: 'Total Sales',            value: stats.transactions || 0,          icon: 'billing',    accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
+    { label: 'Net Profit',             value: fmt(stats.netProfit || 0),        icon: 'payment',    accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
+    { label: 'Sales Growth',           value: (stats.salesGrowth || 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
+    { label: 'Items Purchased',         value: stats.itemsPurchased || 0,        icon: 'inventory',  accent: 'var(--color-cyan)',           accentSoft: 'var(--color-cyan-soft)'     },
+    { label: 'Procurement Spend',      value: fmt(stats.procurementSpend || 0),  icon: 'reports',    accent: 'var(--color-indigo)',         accentSoft: 'var(--color-indigo-soft)'   },
+    { label: 'Total Products',         value: stats.totalProducts || 0,          icon: 'inventory',  accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
+    { label: 'Low Stock Items',        value: stats.lowStockCount || 0,          icon: 'alert',      accent: 'var(--color-danger)',         accentSoft: 'var(--color-danger-soft)'   },
+  ];
+
   return (
     <div className="dashboard">
 
       {/* ── Header ───────────────────────────────────── */}
       <div className="dashboard-header">
         <div className="dashboard-header__left">
-          <h1>Dashboard</h1>
+          <h1>{isSupplier ? 'Supplier Dashboard' : 'Shop Dashboard'}</h1>
           <p>Welcome back, {user?.name}! Here's what's happening.</p>
         </div>
         <div className="date-filter">
@@ -169,20 +192,11 @@ export default function Dashboard({ user }) {
         <div className="dashboard-section__header">
           <span className="dashboard-section__title">
             <span className="dashboard-section__title-dot" />
-            Sales Overview
+            {isSupplier ? 'Supplier Analytics' : 'Sales Overview'}
           </span>
         </div>
         <div className="stats-grid">
-          {[
-            { label: 'Total Revenue',     value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth },
-            { label: 'Total Sales',       value: stats.transactions || 0,          icon: 'billing',    accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
-            { label: 'Net Profit',        value: fmt(stats.netProfit || 0),        icon: 'payment',    accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
-            { label: 'Sales Growth',      value: (stats.salesGrowth || 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
-            { label: 'Items Purchased',    value: stats.itemsPurchased || 0,        icon: 'inventory',  accent: 'var(--color-cyan)',           accentSoft: 'var(--color-cyan-soft)'     },
-            { label: 'Procurement Spend', value: fmt(stats.procurementSpend || 0),  icon: 'reports',    accent: 'var(--color-indigo)',         accentSoft: 'var(--color-indigo-soft)'   },
-            { label: 'Total Products',    value: stats.totalProducts || 0,          icon: 'inventory',  accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
-            { label: 'Low Stock Items',   value: stats.lowStockCount || 0,          icon: 'alert',      accent: 'var(--color-danger)',         accentSoft: 'var(--color-danger-soft)'   },
-          ].map((card) => (
+          {statCards.map((card) => (
             <StatCard key={card.label} {...card} />
           ))}
         </div>

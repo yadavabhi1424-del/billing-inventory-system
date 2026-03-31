@@ -65,24 +65,78 @@ CREATE TABLE IF NOT EXISTS shop_profile (
 `;
 
 export const SUPPLIER_CATALOG_SCHEMA = `
-CREATE TABLE IF NOT EXISTS products (
-  product_id    VARCHAR(36)   PRIMARY KEY,
-  product_seq   INT           AUTO_INCREMENT UNIQUE,
-  name          VARCHAR(200)  NOT NULL,
-  sku           VARCHAR(100)  UNIQUE NOT NULL,
+CREATE TABLE IF NOT EXISTS categories (
+  category_id   VARCHAR(36)  PRIMARY KEY,
+  name          VARCHAR(100) NOT NULL,
   description   TEXT,
-  unit          VARCHAR(20)   DEFAULT 'pcs',
-  costPrice     DECIMAL(10,2) DEFAULT 0,
-  sellingPrice  DECIMAL(10,2) DEFAULT 0,
-  mrp           DECIMAL(10,2),
-  taxRate       DECIMAL(5,2)  DEFAULT 0,
-  taxType       VARCHAR(20)   DEFAULT 'GST',
-  stock         INT           DEFAULT 0,
-  minStockLevel INT           DEFAULT 10,
-  image         VARCHAR(255),
-  isActive      BOOL          DEFAULT TRUE,
-  synced_at     DATETIME,
-  createdAt     DATETIME      DEFAULT CURRENT_TIMESTAMP
+  color         VARCHAR(20)  DEFAULT '#6366f1',
+  icon          VARCHAR(50),
+  isActive      BOOL         DEFAULT TRUE,
+  createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  supplier_id   VARCHAR(36)  PRIMARY KEY,
+  name          VARCHAR(100) NOT NULL,
+  contactPerson VARCHAR(100),
+  email         VARCHAR(100),
+  phone         VARCHAR(20)  NOT NULL,
+  address       TEXT,
+  city          VARCHAR(50),
+  state         VARCHAR(50),
+  pincode       VARCHAR(10),
+  gstin         VARCHAR(20),
+  bankName      VARCHAR(100),
+  bankAccount   VARCHAR(50),
+  ifscCode      VARCHAR(20),
+  paymentTerms  VARCHAR(50)  DEFAULT '30 days',
+  notes         TEXT,
+  isActive      BOOL         DEFAULT TRUE,
+  createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS products (
+  product_id     VARCHAR(36)   PRIMARY KEY,
+  product_seq    INT           AUTO_INCREMENT UNIQUE,
+  name           VARCHAR(200)  NOT NULL,
+  sku            VARCHAR(100)  UNIQUE NOT NULL,
+  barcode        VARCHAR(100),
+  description    TEXT,
+  category_id    VARCHAR(36),
+  supplier_id    VARCHAR(36),
+  unit           VARCHAR(20)   DEFAULT 'pcs',
+  costPrice      DECIMAL(10,2) DEFAULT 0,
+  sellingPrice   DECIMAL(10,2) DEFAULT 0,
+  mrp            DECIMAL(10,2),
+  taxRate        DECIMAL(5,2)  DEFAULT 0,
+  taxType        VARCHAR(20)   DEFAULT 'GST',
+  stock          INT           DEFAULT 0,
+  minStockLevel  INT           DEFAULT 10,
+  maxStockLevel  INT,
+  location       VARCHAR(100),
+  image          VARCHAR(255),
+  expiryDate     DATE,
+  inventory_type ENUM('FINISHED','RAW','WIP','COMPONENT') DEFAULT 'FINISHED',
+  is_public      BOOL          DEFAULT FALSE,
+  isActive       BOOL          DEFAULT TRUE,
+  synced_at      DATETIME,
+  createdAt      DATETIME      DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES categories(category_id),
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(supplier_id)
+);
+
+CREATE TABLE IF NOT EXISTS stock_movements (
+  movement_id   VARCHAR(36)  PRIMARY KEY,
+  product_id    VARCHAR(36)  NOT NULL,
+  user_id       VARCHAR(36),
+  type          ENUM('SALE','PURCHASE','ADJUSTMENT','DAMAGE','RETURN_IN','RETURN_OUT','TRANSFER') NOT NULL,
+  quantity      INT          NOT NULL,
+  reason        TEXT,
+  reference     VARCHAR(100),
+  balanceBefore INT          DEFAULT 0,
+  balanceAfter  INT          DEFAULT 0,
+  createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (product_id) REFERENCES products(product_id)
 );
 `;
 
@@ -90,6 +144,7 @@ export const SUPPLIER_ORDERS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS customers (
   customer_id    VARCHAR(36)   PRIMARY KEY,
   name           VARCHAR(100)  NOT NULL,
+  slug           VARCHAR(100),
   email          VARCHAR(100),
   phone          VARCHAR(20),
   address        TEXT,
@@ -99,6 +154,7 @@ CREATE TABLE IF NOT EXISTS customers (
   notes          TEXT,
   totalSpent     DECIMAL(12,2) DEFAULT 0,
   isActive       BOOL          DEFAULT TRUE,
+  is_network     BOOL          DEFAULT FALSE,
   createdAt      DATETIME      DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -137,5 +193,47 @@ CREATE TABLE IF NOT EXISTS transaction_items (
   totalAmount    DECIMAL(12,2) NOT NULL,
   FOREIGN KEY (transaction_id) REFERENCES transactions(transaction_id),
   FOREIGN KEY (product_id)     REFERENCES products(product_id)
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+  payment_id     VARCHAR(36)   PRIMARY KEY,
+  transaction_id VARCHAR(36)   NOT NULL,
+  method         VARCHAR(20)   NOT NULL,
+  amount         DECIMAL(10,2) NOT NULL,
+  reference      VARCHAR(100),
+  createdAt      DATETIME      DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (transaction_id) REFERENCES transactions(transaction_id)
+);
+`;
+
+export const SUPPLIER_PROCUREMENT_SCHEMA = `
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  po_id         VARCHAR(36)   PRIMARY KEY,
+  poNumber      VARCHAR(50)   UNIQUE NOT NULL,
+  supplier_id   VARCHAR(36),
+  user_id       VARCHAR(36),
+  status        ENUM('PENDING','ORDERED','PARTIAL','RECEIVED','CANCELLED') DEFAULT 'PENDING',
+  subtotal      DECIMAL(12,2) DEFAULT 0,
+  taxAmount     DECIMAL(10,2) DEFAULT 0,
+  totalAmount   DECIMAL(12,2) DEFAULT 0,
+  expectedDate  DATE,
+  receivedDate  DATE,
+  notes         TEXT,
+  createdAt     DATETIME      DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers(supplier_id)
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+  po_item_id    VARCHAR(36)   PRIMARY KEY,
+  po_id         VARCHAR(36)   NOT NULL,
+  product_id    VARCHAR(36),
+  productName   VARCHAR(200)  NOT NULL,
+  quantity      INT           NOT NULL,
+  receivedQty   INT           DEFAULT 0,
+  costPrice     DECIMAL(10,2) NOT NULL,
+  taxRate       DECIMAL(5,2)  DEFAULT 0,
+  taxAmount     DECIMAL(10,2) DEFAULT 0,
+  totalAmount   DECIMAL(12,2) NOT NULL,
+  FOREIGN KEY (po_id) REFERENCES purchase_orders(po_id)
 );
 `;

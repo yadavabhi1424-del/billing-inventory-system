@@ -44,11 +44,21 @@ function useAuth() {
 
   useEffect(() => {
     try {
-      // Check token exists too
       const saved = localStorage.getItem('stocksense_user');
       const token = localStorage.getItem('accessToken');
       if (saved && token) {
-        setUser(JSON.parse(saved));
+        const userData = JSON.parse(saved);
+        setUser(userData);
+
+        // ── AUTO-REDIRECT TO SUBDOMAIN ──
+        // Only if on localhost (raw) and user has a slug
+        const host = window.location.hostname;
+        if ((host === 'localhost' || host === '127.0.0.1') && userData.slug) {
+          const port = window.location.port ? `:${window.location.port}` : '';
+          const newUrl = `${window.location.protocol}//${userData.slug}.${host}${port}${window.location.pathname}${window.location.search}`;
+          console.log("Redirecting to tenant subdomain:", newUrl);
+          window.location.href = newUrl;
+        }
       }
     } catch {
       localStorage.removeItem('stocksense_user');
@@ -61,8 +71,16 @@ function useAuth() {
 
   const login = (userData) => {
     // userData already saved by api.js
-    // just update state
     setUser(userData);
+
+    // ── TRIGGER REDIRECT AFTER LOGIN ──
+    const host = window.location.hostname;
+    if ((host === 'localhost' || host === '127.0.0.1') && userData.slug) {
+      const port = window.location.port ? `:${window.location.port}` : '';
+      const newUrl = `${window.location.protocol}//${userData.slug}.${host}${port}/dashboard`;
+      console.log("Post-login redirect to subdomain:", newUrl);
+      window.location.href = newUrl;
+    }
   };
 
   const logout = async () => {

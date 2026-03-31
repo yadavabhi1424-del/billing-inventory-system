@@ -67,15 +67,28 @@ export default function DiscoveryPage({ user }) {
     );
   };
 
+  const fetchSavedLocation = async (shouldOpenMap = false) => {
+    try {
+      const res = await getOwnProfile();
+      if (res?.success && res.data?.latitude && res.data?.longitude) {
+        const profileLoc = { lat: Number(res.data.latitude), lng: Number(res.data.longitude) };
+        setUserLoc(profileLoc);
+        if (shouldOpenMap) setViewMode('map');
+      }
+    } catch (err) {
+      console.error("Failed to fetch saved location", err);
+    }
+  };
+
   useEffect(() => {
-    // Initial auto-detection
+    // Priority 1: GPS
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          // Note: No automatic switch to map mode on load
         },
         () => {
+          // Priority 2: Stored Profile (Fallback)
           fetchSavedLocation(false); 
         },
         { timeout: 5000 }
@@ -84,19 +97,6 @@ export default function DiscoveryPage({ user }) {
       fetchSavedLocation(false);
     }
   }, []);
-
-  const fetchSavedLocation = async (shouldOpenMap = false) => {
-    try {
-      const res = await getOwnProfile();
-      if (shouldOpenMap) setViewMode('map');
-      if (res?.success && res.data?.latitude && res.data?.longitude) {
-        setUserLoc({ lat: Number(res.data.latitude), lng: Number(res.data.longitude) });
-      }
-    } catch (err) {
-      console.error("Failed to fetch saved location", err);
-    }
-    // Note: We don't force setViewMode('map') here anymore so it stays on grid by default
-  };
 
   useEffect(() => {
     let cancelled = false;

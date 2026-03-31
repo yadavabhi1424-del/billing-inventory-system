@@ -8,7 +8,7 @@ import Icon from '../../components/Icon';
 import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
-  getConnections, updateConnectionStatus, // new B2B networking APIs
+  getConnections, updateConnectionStatus, disconnectPartner, // new B2B networking APIs
   getB2BOrders, updatePurchaseOrderStatus
 } from '../../services/api';
 import './Suppliers.css';
@@ -39,20 +39,20 @@ function SupplierField({ label, field, placeholder, type = 'text', required, ful
 function SupplierFormModal({ title, supplier = null, onClose, onSave, entityName }) {
   const isEdit = !!supplier;
   const [form, setForm] = useState({
-    name:         supplier?.name          || '',
+    name: supplier?.name || '',
     contactPerson: supplier?.contactPerson || '',
-    phone:        supplier?.phone         || '',
-    email:        supplier?.email         || '',
-    address:      supplier?.address       || '',
-    city:         supplier?.city          || '',
-    state:        supplier?.state         || '',
-    pincode:      supplier?.pincode       || '',
-    gstin:        supplier?.gstin         || '',
-    paymentTerms: supplier?.paymentTerms  || '30 days',
-    notes:        supplier?.notes         || '',
+    phone: supplier?.phone || '',
+    email: supplier?.email || '',
+    address: supplier?.address || '',
+    city: supplier?.city || '',
+    state: supplier?.state || '',
+    pincode: supplier?.pincode || '',
+    gstin: supplier?.gstin || '',
+    paymentTerms: supplier?.paymentTerms || '30 days',
+    notes: supplier?.notes || '',
   });
-  const [errors,  setErrors]  = useState({});
-  const [saving,  setSaving]  = useState(false);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const set = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -61,7 +61,7 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave, entityName
 
   const validate = () => {
     const e = {};
-    if (!form.name.trim())  e.name  = 'Supplier name is required';
+    if (!form.name.trim()) e.name = 'Supplier name is required';
     if (!form.phone.trim()) e.phone = 'Phone number is required';
     if (form.phone && !/^\d{10}$/.test(form.phone.replace(/\s/g, '')))
       e.phone = 'Phone must be 10 digits';
@@ -97,15 +97,15 @@ function SupplierFormModal({ title, supplier = null, onClose, onSave, entityName
         <form className="supplier-form" onSubmit={handleSubmit}>
           <div className="supplier-form__content">
             <div className="supplier-form__grid">
-              <SupplierField label={`${entityName} Name`}   field="name"          placeholder="ABC Foods"          required {...f} />
-              <SupplierField label="Contact Person"  field="contactPerson" placeholder="Rajesh Kumar"              {...f} />
-              <SupplierField label="Phone"           field="phone"         placeholder="9876543210" type="tel" required {...f} />
-              <SupplierField label="Email"           field="email"         placeholder="contact@abc.com" type="email" {...f} />
-              <SupplierField label="City"            field="city"          placeholder="Delhi"                    {...f} />
-              <SupplierField label="State"           field="state"         placeholder="Delhi"                    {...f} />
-              <SupplierField label="Pincode"         field="pincode"       placeholder="110001"                   {...f} />
-              <SupplierField label="GSTIN"           field="gstin"         placeholder="07AABCT1234A1Z5"          {...f} />
-              <SupplierField label="Payment Terms"   field="paymentTerms"  placeholder="30 days" hint="e.g. 30 days, 45 days" {...f} />
+              <SupplierField label={`${entityName} Name`} field="name" placeholder="ABC Foods" required {...f} />
+              <SupplierField label="Contact Person" field="contactPerson" placeholder="Rajesh Kumar"              {...f} />
+              <SupplierField label="Phone" field="phone" placeholder="9876543210" type="tel" required {...f} />
+              <SupplierField label="Email" field="email" placeholder="contact@abc.com" type="email" {...f} />
+              <SupplierField label="City" field="city" placeholder="Delhi"                    {...f} />
+              <SupplierField label="State" field="state" placeholder="Delhi"                    {...f} />
+              <SupplierField label="Pincode" field="pincode" placeholder="110001"                   {...f} />
+              <SupplierField label="GSTIN" field="gstin" placeholder="07AABCT1234A1Z5"          {...f} />
+              <SupplierField label="Payment Terms" field="paymentTerms" placeholder="30 days" hint="e.g. 30 days, 45 days" {...f} />
 
               <div className="supplier-form__field supplier-form__field--full">
                 <label className="supplier-form__label">Address</label>
@@ -148,19 +148,19 @@ export default function Suppliers({ user }) {
   const entityNamePlural = isSupplier ? 'Customers' : 'Suppliers';
 
   const [suppliers, setSuppliers] = useState([]);
-  const [search,    setSearch]    = useState('');
-  const [selected,  setSelected]  = useState(null);
-  const [showAdd,   setShowAdd]   = useState(false);
-  const [showEdit,  setShowEdit]  = useState(false);
-  
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+
   // Tabs: 'crm' | 'requests' | 'orders'
   const [activeTab, setActiveTab] = useState('crm');
-  const [requests,  setRequests]  = useState([]);
-  const [orders,    setOrders]    = useState([]);
-  const [loading,   setLoading]   = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => { 
-    fetchSuppliers(); 
+  useEffect(() => {
+    fetchSuppliers();
     fetchRequests();
     if (!isSupplier) fetchOrders();
   }, []);
@@ -238,6 +238,25 @@ export default function Suppliers({ user }) {
     fetchSuppliers();
   };
 
+  const handleDisconnect = async (e, partner) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to DISCONNECT from "${partner.name}"? Historical reports will move to inactive, but new orders will be blocked.`)) return;
+
+    try {
+      setLoading(true);
+      // We use the business slug for safe, public-facing identification
+      const res = await disconnectPartner(partner.slug);
+      if (res.success) {
+        alert("Disconnected successfully. Connection is now inactive.");
+        fetchSuppliers();
+      }
+    } catch (err) {
+      alert("Disconnection failed: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRequestStatus = async (mapId, status) => {
     try {
       setLoading(true);
@@ -260,12 +279,12 @@ export default function Suppliers({ user }) {
     (s.phone || '').includes(search)
   );
 
-  const filteredRequests = requests.filter(r => 
+  const filteredRequests = requests.filter(r =>
     (r.name || r.business_name || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const activeCount    = suppliers.filter(s => s.isActive).length;
-  const totalProducts  = suppliers.reduce((sum, s) => sum + (s.productCount || 0), 0);
+  const activeCount = suppliers.filter(s => s.isActive).length;
+  const totalProducts = suppliers.reduce((sum, s) => sum + (s.productCount || 0), 0);
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
@@ -279,10 +298,10 @@ export default function Suppliers({ user }) {
       {/* Stats */}
       <div className="suppliers-stats">
         {[
-          { label: `Total ${entityNamePlural}`,  value: suppliers.length, icon: 'manufacturers', bg: 'var(--color-accent-soft)',  color: 'var(--color-accent-primary)' },
-          { label: `Active ${entityNamePlural}`, value: activeCount,      icon: 'check',         bg: 'var(--color-success-soft)', color: 'var(--color-success)'        },
-          { label: 'Total Products',   value: totalProducts,    icon: 'box',           bg: 'var(--color-violet-soft)',  color: 'var(--color-violet)'         },
-          { label: 'Order Count',      value: suppliers.reduce((s, sup) => s + (sup.orderCount || 0), 0), icon: 'billing', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)' },
+          { label: `Total ${entityNamePlural}`, value: suppliers.length, icon: 'manufacturers', bg: 'var(--color-accent-soft)', color: 'var(--color-accent-primary)' },
+          { label: `Active ${entityNamePlural}`, value: activeCount, icon: 'check', bg: 'var(--color-success-soft)', color: 'var(--color-success)' },
+          { label: 'Total Products', value: totalProducts, icon: 'box', bg: 'var(--color-violet-soft)', color: 'var(--color-violet)' },
+          { label: 'Order Count', value: suppliers.reduce((s, sup) => s + (sup.orderCount || 0), 0), icon: 'billing', bg: 'var(--color-warning-soft)', color: 'var(--color-warning)' },
         ].map(s => (
           <div key={s.label} className="suppliers-stat-card">
             <div className="suppliers-stat-card__icon" style={{ background: s.bg, color: s.color }}>
@@ -299,14 +318,14 @@ export default function Suppliers({ user }) {
       {/* Toolbar with Tabs */}
       <div className="suppliers-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button 
+          <button
             className={`suppliers-tab ${activeTab === 'crm' ? 'active' : ''}`}
             onClick={() => setActiveTab('crm')}
             style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'crm' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'crm' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
           >
             My CRM
           </button>
-          <button 
+          <button
             className={`suppliers-tab ${activeTab === 'requests' ? 'active' : ''}`}
             onClick={() => setActiveTab('requests')}
             style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'requests' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'requests' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center' }}
@@ -317,7 +336,7 @@ export default function Suppliers({ user }) {
             )}
           </button>
           {!isSupplier && (
-            <button 
+            <button
               className={`suppliers-tab ${activeTab === 'orders' ? 'active' : ''}`}
               onClick={() => { setActiveTab('orders'); fetchOrders(); }}
               style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'orders' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'orders' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
@@ -334,11 +353,12 @@ export default function Suppliers({ user }) {
               placeholder={`Search ${activeTab === 'crm' ? entityNamePlural.toLowerCase() : 'requests'}...`}
               value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          {activeTab === 'crm' && (
+          {/* Manual Add disabled as per requirement: Businesses find each other through Networks */}
+          {/* {activeTab === 'crm' && (
             <button className="suppliers-add-btn" onClick={() => setShowAdd(true)}>
               <Icon name="manufacturers" size={16} /> Add {entityName}
             </button>
-          )}
+          )} */}
         </div>
       </div>
 
@@ -362,8 +382,8 @@ export default function Suppliers({ user }) {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="suppliers-empty">
-                    <Icon name="manufacturers" size={48} />
-                    <p>{suppliers.length === 0 ? `No ${entityNamePlural.toLowerCase()} yet. Add your first ${entityName.toLowerCase()}!` : `No ${entityNamePlural.toLowerCase()} found`}</p>
+                    <Icon name="discovery" size={48} />
+                    <p>{suppliers.length === 0 ? `No active ${entityNamePlural.toLowerCase()} yet. Use Discovery to connect!` : `No ${entityNamePlural.toLowerCase()} found`}</p>
                   </td>
                 </tr>
               ) : filtered.map(s => (
@@ -384,14 +404,25 @@ export default function Suppliers({ user }) {
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <div className="suppliers-actions">
-                      <button className="suppliers-action-btn" title="Edit"
-                        onClick={e => { e.stopPropagation(); setSelected(s); setShowEdit(true); }}>
-                        <Icon name="settings" size={14} />
-                      </button>
-                      <button className="suppliers-action-btn suppliers-action-btn--danger"
-                        title="Delete" onClick={e => handleDelete(e, s)}>
-                        <Icon name="x" size={14} />
-                      </button>
+                      {/* Hide Edit for Network Connections */}
+                      {!s.is_network && (
+                        <button className="suppliers-action-btn" title="Edit"
+                          onClick={e => { e.stopPropagation(); setSelected(s); setShowEdit(true); }}>
+                          <Icon name="settings" size={14} />
+                        </button>
+                      )}
+
+                      {s.is_network ? (
+                        <button className="suppliers-action-btn suppliers-action-btn--warning"
+                          title="Disconnect" onClick={e => handleDisconnect(e, s)}>
+                          <Icon name="zapOff" size={14} />
+                        </button>
+                      ) : (
+                        <button className="suppliers-action-btn suppliers-action-btn--danger"
+                          title="Delete" onClick={e => handleDelete(e, s)}>
+                          <Icon name="x" size={14} />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -425,8 +456,8 @@ export default function Suppliers({ user }) {
                 <tr key={r.map_id} className="suppliers-row">
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      {r.logo ? <img src={r.logo} alt="" style={{width: 32, height: 32, borderRadius: 6, objectFit:'cover'}} />
-                              : <div style={{width: 32, height: 32, borderRadius: 6, background: 'rgba(255,255,255,0.1)', display:'flex', alignItems:'center', justifyContent:'center'}}>🏢</div>}
+                      {r.logo ? <img src={r.logo} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
+                        : <div style={{ width: 32, height: 32, borderRadius: 6, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🏢</div>}
                       <span className="suppliers-name">{r.name || r.business_name}</span>
                     </div>
                   </td>
@@ -496,7 +527,7 @@ export default function Suppliers({ user }) {
                   <td>{new Date(o.createdAt).toLocaleDateString()}</td>
                   <td>
                     {o.status !== 'RECEIVED' && o.status !== 'CANCELLED' && (
-                      <button 
+                      <button
                         className="suppliers-action-btn"
                         style={{ border: '1px solid #22c55e', color: '#22c55e', width: 'auto', padding: '4px 10px', fontSize: '0.75rem' }}
                         onClick={() => handleUpdateOrderStatus(o.po_id, 'RECEIVED')}
@@ -527,19 +558,23 @@ export default function Suppliers({ user }) {
               {selected.city && <p className="suppliers-detail-company">{selected.city}, {selected.state}</p>}
 
               {[
-                { title: 'Contact', rows: [
-                  ['Contact Person', selected.contactPerson || '—'],
-                  ['Phone',          selected.phone],
-                  ['Email',          selected.email || '—'],
-                  ['Address',        selected.address || '—'],
-                  ['GSTIN',          selected.gstin || '—'],
-                ]},
-                { title: 'Business', rows: [
-                  ['Payment Terms',  selected.paymentTerms || '—'],
-                  ['Products',       selected.productCount || 0],
-                  ['Total Orders',   selected.orderCount   || 0],
-                  ['Status',         selected.isActive ? 'Active' : 'Inactive'],
-                ]},
+                {
+                  title: 'Contact', rows: [
+                    ['Contact Person', selected.contactPerson || '—'],
+                    ['Phone', selected.phone],
+                    ['Email', selected.email || '—'],
+                    ['Address', selected.address || '—'],
+                    ['GSTIN', selected.gstin || '—'],
+                  ]
+                },
+                {
+                  title: 'Business', rows: [
+                    ['Payment Terms', selected.paymentTerms || '—'],
+                    ['Products', selected.productCount || 0],
+                    ['Total Orders', selected.orderCount || 0],
+                    ['Status', selected.isActive ? 'Active' : 'Inactive'],
+                  ]
+                },
               ].map(section => (
                 <div key={section.title} className="suppliers-detail-section">
                   <h4>{section.title}</h4>
@@ -563,9 +598,18 @@ export default function Suppliers({ user }) {
               <button className="suppliers-btn suppliers-btn--secondary" onClick={() => setSelected(null)}>
                 Close
               </button>
-              <button className="suppliers-btn suppliers-btn--primary" onClick={() => setShowEdit(true)}>
-                <Icon name="settings" size={16} /> Edit {entityName}
-              </button>
+              {!selected.is_network && (
+                <button className="suppliers-btn suppliers-btn--primary" onClick={() => setShowEdit(true)}>
+                  <Icon name="settings" size={16} /> Edit {entityName}
+                </button>
+              )}
+              {selected.is_network && (
+                <button className="suppliers-btn"
+                  style={{ background: 'var(--color-warning)', color: 'white' }}
+                  onClick={e => handleDisconnect(e, selected)}>
+                  <Icon name="zapOff" size={16} /> Disconnect
+                </button>
+              )}
             </div>
           </div>
         </div>

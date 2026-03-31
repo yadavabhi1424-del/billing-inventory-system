@@ -118,7 +118,7 @@ export const getConnections = async (req, res, next) => {
     }
 
     const [rows] = await masterPool.execute(query, params);
-    
+
     // Quick format for frontend compatibility (name vs business_name)
     const formatted = rows.map(r => ({
       ...r,
@@ -138,6 +138,7 @@ export const sendConnectionRequest = async (req, res, next) => {
 
     const userType = req.user.userType || 'shop';
     const myId = req.dbName;
+    if (partner_id === myId) return next(new AppError("You cannot connect with your own business.", 400));
 
     const shop_id = userType === 'shop' ? myId : partner_id;
     const supplier_id = userType === 'supplier' ? myId : partner_id;
@@ -176,10 +177,10 @@ export const updateConnectionStatus = async (req, res, next) => {
 
         // 1. Fetch profiles (Primary Source)
         const [shopProfile] = await masterPool.execute("SELECT business_name as name, email, phone, city, address FROM profiles WHERE entity_id=?", [shopDb]);
-        const [supProfile]  = await masterPool.execute("SELECT business_name as name, email, phone, city, address FROM profiles WHERE entity_id=?", [supplierDb]);
-        
+        const [supProfile] = await masterPool.execute("SELECT business_name as name, email, phone, city, address FROM profiles WHERE entity_id=?", [supplierDb]);
+
         let shopData = shopProfile[0];
-        let supData  = supProfile[0];
+        let supData = supProfile[0];
 
         // 2. Fallback to Master Records if Profile is missing
         if (!shopData) {
@@ -193,23 +194,59 @@ export const updateConnectionStatus = async (req, res, next) => {
 
         // 3. Sync to Tenant Databases
         if (shopData) {
+          const [sProfile] = await masterPool.execute("SELECT slug FROM profiles WHERE entity_id=?", [shopDb]);
+          const shopSlug = sProfile[0]?.slug || null;
           await masterPool.execute(
-            `INSERT IGNORE INTO \`${supplierDb}\`.customers (customer_id, name, email, phone, address, city, shop_tenant_id) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`, 
-            [shopDb, shopData.name, shopData.email || null, shopData.phone || '0000000000', shopData.address || null, shopData.city || null, shopDb]
+            `INSERT IGNORE INTO \`${supplierDb}\`.customers (customer_id, name, slug, email, phone, address, city, shop_tenant_id, is_network) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+            [shopDb, shopData.name, shopSlug, shopData.email || null, shopData.phone || '0000000000', shopData.address || null, shopData.city || null, shopDb, 1]
           );
         }
 
         if (supData) {
+          const [suProfile] = await masterPool.execute("SELECT slug FROM profiles WHERE entity_id=?", [supplierDb]);
+          const supSlug = suProfile[0]?.slug || null;
           await masterPool.execute(
-            `INSERT IGNORE INTO \`${shopDb}\`.suppliers (supplier_id, name, email, phone, address, city) 
-             VALUES (?, ?, ?, ?, ?, ?)`, 
-            [supplierDb, supData.name, supData.email || null, supData.phone || '0000000000', supData.address || null, supData.city || null]
+            `INSERT IGNORE INTO \`${shopDb}\`.suppliers (supplier_id, name, slug, email, phone, address, city, is_network) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, 
+            [supplierDb, supData.name, supSlug, supData.email || null, supData.phone || '0000000000', supData.address || null, supData.city || null, 1]
           );
         }
       }
     }
 
     res.json({ success: true, message: `Connection ${status.toLowerCase()}.` });
+  } catch (error) { next(error); }
+};
+
+export const disconnectPartner = async (req, res, next) => {
+  try {
+    const { slug } = req.params; // Using the provided business slug
+    const myId = req.dbName;
+
+    // 1. Resolve slug to partner entity_id (db_name)
+    const [profile] = await masterPool.execute("SELECT entity_id FROM profiles WHERE slug=?", [slug]);
+    if (profile.length === 0) return next(new AppError("Business profile not found.", 404));
+    const partnerId = profile[0].entity_id;
+
+    // 2. Find the relationship map
+    const [map] = await masterPool.execute(
+      `SELECT map_id, shop_id, supplier_id FROM shop_supplier_map 
+       WHERE (shop_id = ? AND supplier_id = ?) OR (shop_id = ? AND supplier_id = ?)`,
+      [myId, partnerId, partnerId, myId]
+    );
+
+    if (map.length === 0) return next(new AppError("Active connection not found.", 404));
+    
+    const { map_id, shop_id, supplier_id } = map[0];
+
+    // 3. Mark master map as DISCONNECTED
+    await masterPool.execute("UPDATE shop_supplier_map SET status='DISCONNECTED' WHERE map_id=?", [map_id]);
+
+    // 4. Mark as Inactive on both tenant apps (preserving history)
+    await masterPool.execute(`UPDATE \`${shop_id}\`.suppliers SET isActive=0 WHERE supplier_id=?`, [supplier_id]);
+    await masterPool.execute(`UPDATE \`${supplier_id}\`.customers SET isActive=0 WHERE customer_id=?`, [shop_id]);
+
+    res.json({ success: true, message: "Disconnected successfully by slug. History preserved." });
   } catch (error) { next(error); }
 };

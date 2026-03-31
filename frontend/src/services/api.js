@@ -75,10 +75,14 @@ api.interceptors.response.use(
 export async function login(credentials) {
   const res = await api.post('/auth/login', credentials);
   if (res.success) {
-    localStorage.setItem('accessToken',  res.data.accessToken);
+    localStorage.setItem('accessToken', res.data.accessToken);
     localStorage.setItem('refreshToken', res.data.refreshToken);
-    // Merge userType into user object before persisting
-    const userObj = { ...res.data.user, userType: res.data.userType || 'shop' };
+    // Merge userType and slug into user object before persisting
+    const userObj = {
+      ...res.data.user,
+      userType: res.data.userType || 'shop',
+      slug: res.data.tenant?.slug || null
+    };
     localStorage.setItem('stocksense_user', JSON.stringify(userObj));
   }
   return res;
@@ -86,10 +90,10 @@ export async function login(credentials) {
 
 export async function signup(userData) {
   return await api.post('/auth/signup', {
-    name:     userData.fullName,
-    email:    userData.email,
+    name: userData.fullName,
+    email: userData.email,
     password: userData.password,
-    phone:    userData.phone,
+    phone: userData.phone,
     userType: userData.userType || 'shop',
     shopType: userData.shopType || 'other',
   });
@@ -98,7 +102,7 @@ export async function signup(userData) {
 export async function logout() {
   try {
     await api.post('/auth/logout');
-  } catch {}
+  } catch { }
   localStorage.clear();
 }
 
@@ -133,9 +137,13 @@ export async function resetPassword(data) {
 export async function googleLogin(data) {
   const res = await api.post('/auth/google', data); // { idToken, userType? }
   if (res.success) {
-    localStorage.setItem('accessToken',  res.data.accessToken);
+    localStorage.setItem('accessToken', res.data.accessToken);
     localStorage.setItem('refreshToken', res.data.refreshToken);
-    const userObj = { ...res.data.user, userType: res.data.userType || 'shop' };
+    const userObj = {
+      ...res.data.user,
+      userType: res.data.userType || 'shop',
+      slug: res.data.tenant?.slug || null
+    };
     localStorage.setItem('stocksense_user', JSON.stringify(userObj));
   }
   return res;
@@ -473,6 +481,10 @@ export async function sendConnectionRequest(partnerId) {
 
 export async function updateConnectionStatus(mapId, status) {
   return await api.patch(`/network/connections/${mapId}`, { status });
+}
+
+export function disconnectPartner(slug) {
+  return api.delete(`/network/connections/${slug}`);
 }
 
 export async function getB2BProducts(params = {}) {

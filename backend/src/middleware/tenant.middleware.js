@@ -9,6 +9,7 @@ import {
   SUPPLIER_CORE_SCHEMA,
   SUPPLIER_CATALOG_SCHEMA,
   SUPPLIER_ORDERS_SCHEMA,
+  SUPPLIER_PROCUREMENT_SCHEMA,
 } from '../config/supplierSchema.js';
 
 const SCHEMA_MAP = {
@@ -140,6 +141,7 @@ export async function provisionSupplierTenant(supplierId, dbName) {
     await conn.query(SUPPLIER_CORE_SCHEMA);
     await conn.query(SUPPLIER_CATALOG_SCHEMA);
     await conn.query(SUPPLIER_ORDERS_SCHEMA);
+    await conn.query(SUPPLIER_PROCUREMENT_SCHEMA);
 
     console.log(`✅ Supplier tenant DB provisioned: ${dbName}`);
     return true;

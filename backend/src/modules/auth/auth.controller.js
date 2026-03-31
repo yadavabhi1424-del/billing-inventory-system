@@ -288,7 +288,12 @@ const login = async (req, res, next) => {
 
     res.json({
       success: true, message: "Login successful.",
-      data: { user: safeUser, ...tokens, userType: userType || 'shop', tenant: row ? { tenantId: row.id, dbName } : null },
+      data: {
+        user: safeUser,
+        ...tokens,
+        userType: userType || 'shop',
+        tenant: row ? { tenantId: row.id, dbName, slug: row.slug || row.shop_slug } : null
+      },
     });
   } catch (error) { next(error); }
 };
@@ -319,6 +324,14 @@ const googleAuth = async (req, res, next) => {
 
     if (existingRow) {
       db = existingDb; dbName = existingDbName; row = existingRow; userType = existingUserType;
+      // Ensure slug is available if it was missing in the 'row' from resolveDb
+      if (!row.slug && !row.shop_slug) {
+        const table = userType === 'supplier' ? 'suppliers' : 'tenants';
+        const idCol = userType === 'supplier' ? 'supplier_id' : 'tenant_id';
+        const slugCol = userType === 'supplier' ? 'slug' : 'shop_slug';
+        const [slugRows] = await masterPool.execute(`SELECT ${slugCol} FROM ${table} WHERE ${idCol} = ?`, [row.id]);
+        if (slugRows.length > 0) row.slug = slugRows[0][slugCol];
+      }
     } else {
       userType = reqUserType === 'supplier' ? 'supplier' : 'shop';
       const newId    = uuidv4();
@@ -391,7 +404,12 @@ const googleAuth = async (req, res, next) => {
 
     res.json({
       success: true, message: "Google sign-in successful.",
-      data: { user: safeUser, ...tokens, userType, tenant: row ? { tenantId: row.id, dbName } : null },
+      data: {
+        user: safeUser,
+        ...tokens,
+        userType,
+        tenant: row ? { tenantId: row.id, dbName, slug: row.slug || row.shop_slug } : null
+      },
     });
   } catch (error) { next(error); }
 };
