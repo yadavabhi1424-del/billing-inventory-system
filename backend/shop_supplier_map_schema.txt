@@ -1,0 +1,10 @@
+CREATE TABLE `shop_supplier_map` (
+  `map_id` varchar(36) NOT NULL,
+  `shop_id` varchar(36) NOT NULL,
+  `supplier_id` varchar(36) NOT NULL,
+  `status` enum('PENDING','ACCEPTED','REJECTED') DEFAULT 'PENDING',
+  `initiated_by` enum('shop','supplier') NOT NULL,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`map_id`),
+  UNIQUE KEY `uq_shop_sup` (`shop_id`,`supplier_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci

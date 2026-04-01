@@ -61,15 +61,19 @@ export const getDiscovery = async (req, res, next) => {
               p.logo, p.city, p.state, p.pincode,
               p.address, p.email, p.phone,
               p.latitude, p.longitude,
-              p.business_type, p.createdAt
+              p.business_type, p.createdAt,
+              m.status as connectionStatus
               ${distanceSelect}
        FROM profiles p
        ${searchJoin}
+       LEFT JOIN shop_supplier_map m ON 
+         ( ? = 'shop' AND m.shop_id = ? AND m.supplier_id = p.entity_id ) OR
+         ( ? = 'supplier' AND m.supplier_id = ? AND m.shop_id = p.entity_id )
        WHERE ${where}
        ${distanceHaving}
        ORDER BY ${distanceSelect ? 'distance ASC' : 'p.createdAt DESC'}
        LIMIT ${Number(limit)} OFFSET ${offset}`,
-      params
+      [userType, myId, userType, myId, ...params]
     );
 
     let total = 0;
@@ -85,12 +89,16 @@ export const getDiscovery = async (req, res, next) => {
         `SELECT DISTINCT p.profile_id, p.entity_id, p.entity_type,
                   p.business_name, p.slug, p.description,
                   p.logo, p.city, p.state, p.pincode,
-                  p.business_type, p.createdAt
+                  p.business_type, p.createdAt,
+                  m.status as connectionStatus
            FROM profiles p
+           LEFT JOIN shop_supplier_map m ON 
+             ( ? = 'shop' AND m.shop_id = ? AND m.supplier_id = p.entity_id ) OR
+             ( ? = 'supplier' AND m.supplier_id = ? AND m.shop_id = p.entity_id )
            WHERE ${fbCond.join(" AND ")}
            ORDER BY RAND()
            LIMIT ${Number(limit)}`,
-        fbParams
+        [userType, myId, userType, myId, ...fbParams]
       );
       rows = fbRows;
       total = rows.length;
@@ -138,11 +146,17 @@ export const upsertProfile = async (req, res, next) => {
     } = req.body;
 
     const userType = req.user.userType || 'shop';
-    const entityId = req.dbName;
+    let entityId = req.dbName;
+
+    // For suppliers, let's use the actual UUID for consistency with the catalog
+    if (userType === 'supplier') {
+      const [supRows] = await masterPool.execute("SELECT supplier_id FROM suppliers WHERE db_name = ?", [entityId]);
+      if (supRows.length > 0) entityId = supRows[0].supplier_id;
+    }
 
     const slug = (business_name || 'business')
       .toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 40)
-      + '_' + entityId.slice(-6);
+      + '_' + req.dbName.slice(-6);
 
     await masterPool.execute(
       `INSERT INTO profiles
@@ -185,5 +199,20 @@ export const getOwnProfile = async (req, res, next) => {
     if (rows.length === 0) return res.json({ success: true, data: null });
 
     res.json({ success: true, data: rows[0] });
+  } catch (error) { next(error); }
+};
+// GET /api/discovery/supplier/:id/catalog — fetch items from master DB (supports slug or ID)
+export const getCatalog = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await masterPool.execute(
+      `SELECT sp.* 
+       FROM supplier_products sp
+       JOIN suppliers s ON s.supplier_id = sp.supplier_id
+       WHERE (s.slug = ? OR s.supplier_id = ? OR s.db_name = ?) 
+         AND sp.is_active = TRUE`,
+      [id, id, id]
+    );
+    res.json({ success: true, data: rows });
   } catch (error) { next(error); }
 };

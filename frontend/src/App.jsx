@@ -18,7 +18,6 @@ import Reports from './modules/Reports/Reports';
 import Suppliers from './modules/Suppliers/Suppliers';
 import UserManagement from './modules/Users/UserManagement';
 import Settings from './modules/Settings/Settings';
-import B2BStore from './modules/B2B/B2BStore';
 import * as authAPI from './services/api';
 import SetupWizard from './pages/SetupWizard';
 import { getShopProfile } from './services/api';
@@ -28,8 +27,8 @@ import DiscoveryPage from './pages/Discovery';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
-  owner: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery', 'b2b-store'],
+  admin: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
+  owner: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery'],
   cashier: ['dashboard', 'billing', 'discovery', 'settings'],
 };
 
@@ -49,16 +48,6 @@ function useAuth() {
       if (saved && token) {
         const userData = JSON.parse(saved);
         setUser(userData);
-
-        // ── AUTO-REDIRECT TO SUBDOMAIN ──
-        // Only if on localhost (raw) and user has a slug
-        const host = window.location.hostname;
-        if ((host === 'localhost' || host === '127.0.0.1') && userData.slug) {
-          const port = window.location.port ? `:${window.location.port}` : '';
-          const newUrl = `${window.location.protocol}//${userData.slug}.${host}${port}${window.location.pathname}${window.location.search}`;
-          console.log("Redirecting to tenant subdomain:", newUrl);
-          window.location.href = newUrl;
-        }
       }
     } catch {
       localStorage.removeItem('stocksense_user');
@@ -72,15 +61,6 @@ function useAuth() {
   const login = (userData) => {
     // userData already saved by api.js
     setUser(userData);
-
-    // ── TRIGGER REDIRECT AFTER LOGIN ──
-    const host = window.location.hostname;
-    if ((host === 'localhost' || host === '127.0.0.1') && userData.slug) {
-      const port = window.location.port ? `:${window.location.port}` : '';
-      const newUrl = `${window.location.protocol}//${userData.slug}.${host}${port}/dashboard`;
-      console.log("Post-login redirect to subdomain:", newUrl);
-      window.location.href = newUrl;
-    }
   };
 
   const logout = async () => {
@@ -234,11 +214,6 @@ function AuthenticatedApp({ user, logout }) {
         <Route path="/discovery" element={
           <ProtectedRoute page="discovery" user={user}>
             <DiscoveryPage user={user} />
-          </ProtectedRoute>
-        } />
-        <Route path="/b2b-store" element={
-          <ProtectedRoute page="b2b-store" user={user}>
-            <B2BStore user={user} />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

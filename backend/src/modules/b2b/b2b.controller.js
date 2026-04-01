@@ -1,109 +1,181 @@
-import { v4 as uuidv4 } from 'uuid';
 import { masterPool } from "../../config/masterDatabase.js";
-import { getTenantPool } from "../../middleware/tenant.middleware.js";
-import { AppError } from "../../middleware/errorHandler.js";
+import { v4 as uuidv4 } from "uuid";
 
+// POST /api/b2b/orders — Place a new order (from Discovery)
 export const createB2BOrder = async (req, res, next) => {
+  const connection = await masterPool.getConnection();
   try {
-    const { items, notes } = req.body;
-    if (!items || items.length === 0) return next(new AppError("Order items are required.", 400));
+    console.log("🔥 CREATE ORDER HIT");
+    console.log("👉 DB NAME:", req.dbName);
+    console.log("👉 BODY:", req.body);
+    const { supplier_id, items, notes } = req.body;
+    const db_id = req.dbName;
+    const order_id = uuidv4();
 
-    const shopDbName = req.dbName;
-    const shopDb = req.db;
-    const userId = req.user.user_id;
-
-    // 1. Group items by supplier
-    const ordersBySupplier = items.reduce((acc, item) => {
-      if (!acc[item.supplier_id]) acc[item.supplier_id] = [];
-      acc[item.supplier_id].push(item);
-      return acc;
-    }, {});
-
-    const results = [];
-
-    // 2. Process each supplier order
-    for (const [supplierId, supplierItems] of Object.entries(ordersBySupplier)) {
-      const b2bOrderId = uuidv4();
-      const poNumber = `B2B-PO-${Date.now().toString().slice(-6)}`;
-      
-      // Calculate totals
-      const subtotal = supplierItems.reduce((sum, i) => sum + (i.sellingPrice * i.quantity), 0);
-      const totalAmount = subtotal; // Simplified tax for now
-
-      // A. Create Purchase Order in SHOP DB
-      await shopDb.execute(
-        `INSERT INTO purchase_orders 
-          (po_id, poNumber, supplier_id, user_id, status, subtotal, totalAmount, notes)
-         VALUES (?, ?, ?, ?, 'ORDERED', ?, ?, ?)`,
-        [b2bOrderId, poNumber, supplierId, userId, subtotal, totalAmount, notes || `B2B Order via Marketplace`]
-      );
-
-      for (const item of supplierItems) {
-        await shopDb.execute(
-          `INSERT INTO purchase_order_items (po_item_id, po_id, product_id, productName, quantity, costPrice, totalAmount)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), b2bOrderId, item.product_id, item.name, item.quantity, item.sellingPrice, item.sellingPrice * item.quantity]
-        );
-      }
-
-      // B. Create Sales Order (Transaction) in SUPPLIER DB
-      try {
-        const supplierDb = await getTenantPool(supplierId);
-        const invoiceNumber = `B2C-SO-${Date.now().toString().slice(-6)}`;
-        
-        // Find the customer record for this shop in the supplier's DB
-        const [customerRows] = await supplierDb.execute(
-          "SELECT customer_id FROM customers WHERE shop_tenant_id = ?", [shopDbName]
-        );
-        
-        if (customerRows.length > 0) {
-          const supplierCustomerId = customerRows[0].customer_id;
-          
-          await supplierDb.execute(
-            `INSERT INTO transactions 
-              (transaction_id, invoiceNumber, customer_id, status, subtotal, totalAmount, notes)
-             VALUES (?, ?, ?, 'PENDING', ?, ?, ?)`,
-            [b2bOrderId, invoiceNumber, supplierCustomerId, subtotal, totalAmount, `Incoming B2B Order from Shop ${shopDbName}`]
-          );
-
-          for (const item of supplierItems) {
-            await supplierDb.execute(
-              `INSERT INTO transaction_items 
-                (item_id, transaction_id, product_id, productName, quantity, sellingPrice, totalAmount)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [uuidv4(), b2bOrderId, item.product_id, item.name, item.quantity, item.sellingPrice, item.sellingPrice * item.quantity]
-            );
-          }
-        }
-      } catch (supplierErr) {
-        console.error(`Failed to push SO to supplier ${supplierId}`, supplierErr);
-        // We still created the PO locally, but marked it as "Push Failed" in notes?
-        await shopDb.execute(
-          "UPDATE purchase_orders SET notes = CONCAT(notes, '\n[!] Warning: Could not push to supplier system.') WHERE po_id = ?",
-          [b2bOrderId]
-        );
-      }
-
-      results.push({ supplierId, po_id: b2bOrderId, poNumber });
+    if (!supplier_id) {
+      return res.status(400).json({ success: false, message: "Supplier identifier is missing." });
     }
 
-    res.status(201).json({ 
-      success: true, 
-      message: "B2B Orders placed successfully.",
-      orders: results
+    if (!items || !items.length) {
+      return res.status(400).json({ success: false, message: "Order must have at least one item." });
+    }
+
+    // Resolve IDs to official master entity_ids for consistency
+    let finalSupplierId = supplier_id;
+    let finalShopId = db_id;
+
+    // 1. Resolve Target (Supplier)
+    const [supRows] = await masterPool.execute(
+      "SELECT s.supplier_id FROM suppliers s WHERE s.supplier_id = ? OR s.db_name = ? OR s.slug = ?",
+      [supplier_id, supplier_id, supplier_id]
+    );
+    if (supRows.length > 0) finalSupplierId = supRows[0].supplier_id;
+
+    // 2. Resolve Self (Shop/Supplier)
+    const [selfRows] = await masterPool.execute(
+      "SELECT s.supplier_id FROM suppliers s WHERE s.db_name = ?",
+      [db_id]
+    );
+    if (selfRows.length > 0) finalShopId = selfRows[0].supplier_id;
+
+    // 1. Pre-calculate totalAmount
+    let totalAmount = 0;
+    for (const item of items) {
+      totalAmount += Number(item.price) * Number(item.qty);
+    }
+
+    await connection.beginTransaction();
+
+    // 2. Insert Parent Order FIRST (to satisfy Foreign Key in order_items)
+    await connection.execute(
+      `INSERT INTO b2b_orders (order_id, shop_id, supplier_id, status, total_amount, notes)
+       VALUES (?, ?, ?, 'PENDING', ?, ?)`,
+      [order_id, finalShopId, finalSupplierId, totalAmount, notes || null]
+    );
+
+    // 3. Insert Order Items
+    for (const item of items) {
+      const item_id = uuidv4();
+      const lineTotal = Number(item.price) * Number(item.qty);
+
+      await connection.execute(
+        `INSERT INTO b2b_order_items (id, order_id, product_id, name, sku, price, qty, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item_id, order_id, item.product_id, item.name, item.sku, item.price, item.qty, lineTotal]
+      );
+    }
+
+    // 4. Auto-create/Update relationship
+    await connection.execute(
+      `INSERT IGNORE INTO shop_supplier_map (map_id, shop_id, supplier_id, status, initiated_by)
+       VALUES (?, ?, ?, 'PENDING', 'shop')`,
+      [uuidv4(), finalShopId, finalSupplierId]
+    );
+
+    await connection.commit();
+    res.json({ success: true, order_id, message: "Order placed successfully!" });
+  } catch (error) {
+    await connection.rollback();
+    console.error("❌ CREATE ORDER ERROR:", error);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Failed to place order due to a system error.",
+      detail: error.code || null
     });
+  } finally {
+    connection.release();
+  }
+};
+
+// GET /api/b2b/orders — List orders (Incoming for Supplier, Outgoing for Shop)
+export const getB2BOrders = async (req, res, next) => {
+  try {
+    const myId = req.dbName;
+    const userType = req.user.userType;
+    let query = "";
+    let params = [];
+
+    // Resolve myId to master UUID if it's a supplier's db_name
+    let finalMyId = myId;
+    const [selfRows] = await masterPool.execute(
+      "SELECT s.supplier_id FROM suppliers s WHERE s.db_name = ?", [myId]
+    );
+    if (selfRows.length > 0) finalMyId = selfRows[0].supplier_id;
+
+    if (userType === 'supplier') {
+      // Incoming orders: Join with Profiles to get Shop Name
+      query = `
+        SELECT o.*, p.business_name as business_name, p.logo
+        FROM b2b_orders o
+        JOIN profiles p ON p.entity_id = o.shop_id
+        WHERE o.supplier_id = ?
+        ORDER BY o.createdAt DESC
+      `;
+      params = [finalMyId];
+    } else {
+      // Outgoing orders: Join with Profiles to get Supplier Name
+      query = `
+        SELECT o.*, p.business_name as business_name, p.logo
+        FROM b2b_orders o
+        JOIN profiles p ON p.entity_id = o.supplier_id
+        WHERE o.shop_id = ?
+        ORDER BY o.createdAt DESC
+      `;
+      params = [finalMyId];
+    }
+
+    const [rows] = await masterPool.execute(query, params);
+    res.json({ success: true, data: rows });
   } catch (error) { next(error); }
 };
 
-export const getB2BOrders = async (req, res, next) => {
+// GET /api/b2b/orders/:id — Detail with items
+export const getB2BOrderById = async (req, res, next) => {
   try {
-    const shopDb = req.db;
-    const [orders] = await shopDb.execute(
-      `SELECT po.*, s.name as supplierName 
-       FROM purchase_orders po
-       LEFT JOIN suppliers s ON s.supplier_id = po.supplier_id
-       ORDER BY po.createdAt DESC`
+    const { id } = req.params;
+    const [orders] = await masterPool.execute(
+      `SELECT o.*, 
+              p_shop.business_name as shop_name, p_shop.phone as shop_phone, p_shop.email as shop_email, p_shop.address as shop_address,
+              p_sup.business_name as supplier_name, p_sup.phone as supplier_phone, p_sup.email as supplier_email, p_sup.address as supplier_address
+       FROM b2b_orders o
+       LEFT JOIN profiles p_shop ON p_shop.entity_id = o.shop_id
+       LEFT JOIN profiles p_sup ON p_sup.entity_id = o.supplier_id
+       WHERE o.order_id = ?`,
+      [id]
     );
-    res.json({ success: true, data: orders });
+
+    if (!orders.length) return res.status(404).json({ success: false, message: "Order not found." });
+
+    const [items] = await masterPool.execute(
+      "SELECT * FROM b2b_order_items WHERE order_id = ?", [id]
+    );
+
+    res.json({ success: true, data: { ...orders[0], items } });
+  } catch (error) { next(error); }
+};
+
+// PATCH /api/b2b/orders/:id/status — Update status (Accept, Reject, etc.)
+export const updateB2BOrderStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const [order] = await masterPool.execute("SELECT * FROM b2b_orders WHERE order_id = ?", [id]);
+    if (!order.length) return res.status(404).json({ success: false, message: "Order not found." });
+
+    await masterPool.execute(
+      "UPDATE b2b_orders SET status = ? WHERE order_id = ?",
+      [status, id]
+    );
+
+    // If order is ACCEPTED, also ensure relationship is ACCEPTED
+    if (status === 'ACCEPTED') {
+      await masterPool.execute(
+        "UPDATE shop_supplier_map SET status = 'ACCEPTED' WHERE shop_id = ? AND supplier_id = ?",
+        [order[0].shop_id, order[0].supplier_id]
+      );
+    }
+
+    res.json({ success: true, message: `Order status updated to ${status}` });
   } catch (error) { next(error); }
 };

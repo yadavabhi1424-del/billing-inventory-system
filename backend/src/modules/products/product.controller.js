@@ -9,18 +9,20 @@ async function syncSupplierProduct(req, isUpdate, productData) {
     if (!supRows.length) return;
     const supplier_id = supRows[0].supplier_id;
 
-    // A product is only active in the master catalog if it's both active in the tenant AND explicitly marked public
     let masterActive = 1;
-    if (productData.isActive === false || productData.is_public === false || productData.is_public === 0) {
+    const isPublic = (productData.is_public === 'true' || productData.is_public === true || productData.is_public === 1);
+    const isActive = (productData.isActive === 'true' || productData.isActive === true || productData.isActive === 1 || productData.isActive === undefined);
+    
+    if (!isPublic || !isActive) {
       masterActive = 0;
     }
 
     if (isUpdate) {
       const updates = [];
       const values  = [];
-      if (productData.name !== undefined) { updates.push("name = ?"); values.push(productData.name); }
+      if (productData.name) { updates.push("name = ?"); values.push(productData.name); }
       if (productData.description !== undefined) { updates.push("description = ?"); values.push(productData.description); }
-      if (productData.unit !== undefined) { updates.push("unit = ?"); values.push(productData.unit); }
+      if (productData.unit) { updates.push("unit = ?"); values.push(productData.unit); }
       if (productData.sellingPrice !== undefined) { updates.push("price = ?"); values.push(productData.sellingPrice); }
       
       // We always evaluate masterActive in case public status changed
@@ -43,7 +45,10 @@ async function syncSupplierProduct(req, isUpdate, productData) {
         }
       }
     } else {
-      if (masterActive === 1) {
+      // For creation, default to Private (0) unless explicitly marked public
+      const finalActive = productData.is_public ? 1 : 0;
+      
+      if (finalActive === 1) {
         await masterPool.execute(
           `INSERT INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -56,6 +61,22 @@ async function syncSupplierProduct(req, isUpdate, productData) {
     }
   } catch (err) {
     console.error("Master DB sync failed:", err.message);
+  }
+}
+
+async function removeSupplierProduct(req, productId) {
+  if (req.user.userType !== 'supplier' || !req.dbName) return;
+  try {
+    const [supRows] = await masterPool.execute("SELECT supplier_id FROM suppliers WHERE db_name = ?", [req.dbName]);
+    if (!supRows.length) return;
+    const supplier_id = supRows[0].supplier_id;
+    
+    await masterPool.execute(
+      "DELETE FROM supplier_products WHERE supplier_id = ? AND product_id = ?",
+      [supplier_id, productId]
+    );
+  } catch (err) {
+    console.error("Master DB removal failed:", err.message);
   }
 }
 
@@ -198,7 +219,8 @@ const createProduct = async (req, res, next) => {
          parseFloat(taxRate) || 0, taxType || "GST",
          initialStock, parseInt(minStockLevel) || 10,
          maxStockLevel ? parseInt(maxStockLevel) : null,
-         location || null, image, expiryDate || null, req.body.is_public ? 1 : 0]
+         location || null, image, expiryDate || null, 
+         (req.body.is_public === 'true' || req.body.is_public === true || req.body.is_public === 1) ? 1 : 0]
       );
 
       // result.insertId contains the generated product_seq
@@ -250,7 +272,7 @@ const updateProduct = async (req, res, next) => {
     } = req.body;
 
     const [existing] = await req.db.execute(
-      "SELECT product_id, stock FROM products WHERE product_id = ?",
+      "SELECT * FROM products WHERE product_id = ?",
       [req.params.id]
     );
 
@@ -309,9 +331,9 @@ const updateProduct = async (req, res, next) => {
         minStockLevel ? parseInt(minStockLevel)   : null,
         maxStockLevel ? parseInt(maxStockLevel)   : null,
         location      || null,
-        isActive      !== undefined ? (isActive ? 1 : 0) : null,
+        isActive      !== undefined ? (isActive === 'true' || isActive === true || isActive === 1 ? 1 : 0) : null,
         expiryDate    || null,
-        is_public     !== undefined ? (is_public ? 1 : 0) : null,
+        is_public     !== undefined ? (is_public === 'true' || is_public === true || is_public === 1 ? 1 : 0) : null,
         newStock,
         req.params.id,
       ]
@@ -333,11 +355,17 @@ const updateProduct = async (req, res, next) => {
     }
 
     // Phase 5: Sync to Master DB
+    // We pass all current fields to ensure robust synchronization
     await syncSupplierProduct(req, true, {
-      product_id: req.params.id, name, description, unit, sku: existing && existing[0] ? existing[0].sku : null,
-      sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : undefined,
-      isActive: isActive !== undefined ? isActive : undefined,
-      is_public: is_public !== undefined ? is_public : undefined
+      product_id: req.params.id,
+      name: name || existing[0].name,
+      description: description || existing[0].description,
+      unit: unit || existing[0].unit,
+      sku: existing[0].sku,
+      sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : existing[0].sellingPrice,
+      isActive: isActive !== undefined ? !!isActive : !!existing[0].isActive,
+      is_public: is_public !== undefined ? !!is_public : !!existing[0].is_public,
+      image: existing[0].image
     });
 
     res.json({ success: true, message: "Product updated successfully." });
@@ -351,6 +379,10 @@ const deleteProduct = async (req, res, next) => {
     await req.db.execute(
       "UPDATE products SET isActive = FALSE WHERE product_id = ?", [req.params.id]
     );
+    
+    // Sync: Remove from master catalog if supplier
+    await removeSupplierProduct(req, req.params.id);
+
     res.json({ success: true, message: "Product deactivated." });
   } catch (error) { next(error); }
 };

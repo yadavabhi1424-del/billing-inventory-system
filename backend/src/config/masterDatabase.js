@@ -68,7 +68,35 @@ export async function seedMasterData() {
     )
   `);
 
-  // ── Phase 6: Relationships (Many-to-Many Map) ─────────────
+  // ── Phase 7: B2B Order Lifecycle (Cross-Tenant) ─────────────
+  await masterPool.execute(`
+    CREATE TABLE IF NOT EXISTS b2b_orders (
+      order_id      VARCHAR(36)  PRIMARY KEY,
+      shop_id       VARCHAR(36)  NOT NULL,
+      supplier_id   VARCHAR(36)  NOT NULL,
+      status        ENUM('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED') DEFAULT 'PENDING',
+      total_amount  DECIMAL(12,2) DEFAULT 0,
+      notes         TEXT,
+      createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+      updatedAt     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+
+  await masterPool.execute(`
+    CREATE TABLE IF NOT EXISTS b2b_order_items (
+      id            VARCHAR(36)  PRIMARY KEY,
+      order_id      VARCHAR(36)  NOT NULL,
+      product_id    VARCHAR(36)  NOT NULL,
+      name          VARCHAR(200) NOT NULL,
+      sku           VARCHAR(100) NOT NULL,
+      price         DECIMAL(10,2) DEFAULT 0,
+      qty           INT          DEFAULT 1,
+      total         DECIMAL(12,2) DEFAULT 0,
+      FOREIGN KEY (order_id) REFERENCES b2b_orders(order_id) ON DELETE CASCADE
+    )
+  `);
+
+  // ── Phase 8: Relationships (Many-to-Many Map) ─────────────
   await masterPool.execute(`
     CREATE TABLE IF NOT EXISTS shop_supplier_map (
       map_id        VARCHAR(36)  PRIMARY KEY,

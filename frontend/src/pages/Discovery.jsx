@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getDiscovery, getConnections, sendConnectionRequest, getOwnProfile } from '../services/api';
+import { getDiscovery, getConnections, sendConnectionRequest, getOwnProfile, getCatalog, placeB2BOrder } from '../services/api';
 import { GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import './Discovery.css';
 
@@ -23,7 +23,19 @@ export default function DiscoveryPage({ user }) {
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCatMenu, setShowCatMenu] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
+  const [userLoc, setUserLoc] = useState({ lat: 20.5937, lng: 78.9629 });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [cart, setCart] = useState({}); // { productId: { ...product, qty } }
+  const catMenuRef = useRef(null);
   const [fallback, setFallback] = useState(false);
+
   const [filters, setFilters] = useState({
     type: oppositeType,
     business_type: user?.business_type || 'All',
@@ -31,126 +43,104 @@ export default function DiscoveryPage({ user }) {
     match_my_category: true
   });
 
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-  const [userLoc, setUserLoc] = useState({ lat: 20.5937, lng: 78.9629 });
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [selectedItem, setSelectedItem] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
   const [isMapMaximized, setIsMapMaximized] = useState(false);
-  const [showCatMenu, setShowCatMenu] = useState(false);
-  const [catSearch, setCatSearch] = useState('');
+  const { isLoaded } = useJsApiLoader({ id: 'google-map-script', googleMapsApiKey: "YOUR_API_KEY_HERE" });
 
-  const catMenuRef = useRef(null);
-  const GOOGLE_MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-
-  const { isLoaded } = useJsApiLoader({ id: 'google-map-script', googleMapsApiKey: GOOGLE_MAPS_KEY });
-  const [map, setMap] = useState(null);
-  const onLoad = useCallback(m => setMap(m), []);
-
-  const handleCheckNearby = async () => {
-    if (!navigator.geolocation) {
-      fetchSavedLocation(true);
-      return;
-    }
-
-    setLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const newLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLoc(newLoc);
-        setViewMode('map');
-      },
-      () => {
-        fetchSavedLocation(true);
-      }
-    );
-  };
-
-  const fetchSavedLocation = async (shouldOpenMap = false) => {
+  const fetchCatalog = async (supplierId) => {
+    setCatalogLoading(true);
     try {
-      const res = await getOwnProfile();
-      if (res?.success && res.data?.latitude && res.data?.longitude) {
-        const profileLoc = { lat: Number(res.data.latitude), lng: Number(res.data.longitude) };
-        setUserLoc(profileLoc);
-        if (shouldOpenMap) setViewMode('map');
-      }
+      const res = await getCatalog(supplierId);
+      if (res.success) setCatalog(res.data);
     } catch (err) {
-      console.error("Failed to fetch saved location", err);
+      console.error("Failed to fetch catalog", err);
+    } finally {
+      setCatalogLoading(false);
     }
   };
 
-  useEffect(() => {
-    // Priority 1: GPS
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        },
-        () => {
-          // Priority 2: Stored Profile (Fallback)
-          fetchSavedLocation(false); 
-        },
-        { timeout: 5000 }
-      );
-    } else {
-      fetchSavedLocation(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const params = { ...filters, page, limit: 24 };
-
-        // Radius filter only if map is active
-        if (viewMode === 'map') {
-          params.lat = userLoc.lat;
-          params.lng = userLoc.lng;
-        }
-
-        const res = await getDiscovery(params);
-        if (!cancelled && res.success) {
-          setItems(res.data || []);
-          setTotal(res.pagination?.total || 0);
-          setFallback(res.fallback || false);
-        }
-      } catch (err) {
-        console.error("Discovery error:", err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchData();
-    return () => { cancelled = true; };
-  }, [filters, page, userLoc, viewMode]);
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (catMenuRef.current && !catMenuRef.current.contains(e.target)) setShowCatMenu(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleConnect = async (partnerId) => {
-    try {
-      const res = await sendConnectionRequest(partnerId);
-      if (res.success) alert("Connection request sent!");
-    } catch (err) {
-      alert(err.message || "Failed to send request.");
-    }
+  const handleCheckNearby = () => {
+    setFilters(prev => ({ ...prev, match_my_category: true, search: '' }));
   };
 
-  const handleAddCategory = (cat) => {
-    const cleaned = cat.trim().toLowerCase();
-    if (cleaned && !categories.includes(cleaned)) setCategories([...categories, cleaned]);
-    setFilters({ ...filters, business_type: cleaned, match_my_category: false });
+  const handleAddCategory = (newCat) => {
+    if (!categories.includes(newCat)) {
+      setCategories([...categories, newCat]);
+    }
+    setFilters({ ...filters, business_type: newCat, match_my_category: false });
     setShowCatMenu(false);
-    setPage(1);
   };
+
+  const fetchProfiles = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await getDiscovery({
+        ...filters,
+        page,
+        limit: 20
+      });
+      if (res.success) {
+        setItems(res.data);
+        setFallback(res.fallback || false);
+      }
+    } catch (err) {
+      console.error("Discovery error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, page]);
+
+  useEffect(() => {
+    fetchProfiles();
+  }, [fetchProfiles]);
+
+  useEffect(() => {
+    if (selectedItem && selectedItem.entity_type === 'supplier') {
+      // Use slug for catalog fetching instead of entity_id (db_name) to avoid mismatches
+      fetchCatalog(selectedItem.slug || selectedItem.entity_id);
+    } else {
+      setCatalog([]);
+    }
+    setCart({}); // Reset cart when switching profiles
+  }, [selectedItem]);
+
+  const updateCart = (product, delta) => {
+    setCart(prev => {
+      const existing = prev[product.product_id];
+      const newQty = (existing?.qty || 0) + delta;
+      
+      if (newQty <= 0) {
+        const { [product.product_id]: _, ...rest } = prev;
+        return rest;
+      }
+      
+      return { 
+        ...prev, 
+        [product.product_id]: { ...product, qty: newQty } 
+      };
+    });
+  };
+
+  const handlePlaceOrder = async () => {
+    const items = Object.values(cart);
+    if (!items.length) return alert("Your cart is empty!");
+    
+    try {
+      const res = await placeB2BOrder({ 
+        supplier_id: selectedItem.entity_id, 
+        items 
+      });
+      if (res.success) {
+        alert("Order placed successfully! Check 'B2B Orders' for updates.");
+        setSelectedItem(null);
+      }
+    } catch (err) {
+      alert("Failed to place order: " + err.message);
+    }
+  };
+
+  const cartItems = Object.values(cart);
+  const cartTotal = cartItems.reduce((sum, i) => sum + (i.price * i.qty), 0);
 
   return (
     <div className="discovery">
@@ -192,14 +182,20 @@ export default function DiscoveryPage({ user }) {
         <div className="discovery__loading">Searching platform...</div>
       ) : (
         <>
-          {fallback && (<div className="discovery__fallback-notice"><h3>No exact matches.</h3><p>Recommended instead:</p></div>)}
+          {(fallback && (filters.search.trim() || (filters.business_type !== 'All' && !filters.match_my_category))) && (
+            <div className="discovery__fallback-notice">
+              <h3>No exact matches.</h3>
+              <p>Recommended instead:</p>
+            </div>
+          )}
 
           <div className="discovery__grid">
             {items.map(item => (
               <div key={item.profile_id} className="discovery-card" onClick={() => setSelectedItem(item)}>
                 <div className="discovery-card__image">
                   {item.logo ? <img src={item.logo} /> : <span>{item.entity_type === 'supplier' ? '🏭' : '🏪'}</span>}
-                  <span className={`badge badge--${item.entity_type}`}>{item.entity_type}</span>
+                  {item.connectionStatus === 'ACCEPTED' && <span className="badge badge--connected">Connected</span>}
+                  {item.connectionStatus === 'PENDING' && <span className="badge badge--pending">Pending</span>}
                 </div>
                 <div className="discovery-card__content">
                   <h3>{item.business_name}</h3>
@@ -282,23 +278,82 @@ export default function DiscoveryPage({ user }) {
 
       {selectedItem && (
         <div className="discovery-modal-overlay" onClick={() => setSelectedItem(null)}>
-          <div className="discovery-modal" onClick={e => e.stopPropagation()}>
+          <div className="discovery-modal discovery-modal--catalog" onClick={e => e.stopPropagation()}>
             <button className="close-btn" onClick={() => setSelectedItem(null)}>×</button>
-            <div className="modal-header">
-              <div className="modal-logo">{selectedItem.logo ? <img src={selectedItem.logo} /> : <span>{selectedItem.entity_type === 'supplier' ? '🏭' : '🏪'}</span>}</div>
-              <div><h2>{selectedItem.business_name}</h2><span className="category-pill">{selectedItem.business_type}</span></div>
+
+            <div className="modal-header-compact">
+              <div className="modal-logo-compact">
+                {selectedItem.logo ? <img src={selectedItem.logo} /> : <span>{selectedItem.entity_type === 'supplier' ? '🏭' : '🏪'}</span>}
+              </div>
+              <div className="modal-info-compact">
+                <h2>{selectedItem.business_name}</h2>
+                <div className="modal-sub-info">
+                  <span className="category-pill">{selectedItem.business_type}</span>
+                  <span className="modal-contact">📞 {selectedItem.phone || 'N/A'}</span>
+                  <span className="modal-contact">📧 {selectedItem.email || 'N/A'}</span>
+                </div>
+              </div>
             </div>
-            <div className="modal-body">
-              <p className="description">{selectedItem.description || "No description provided."}</p>
-              <div className="contact-info">
-                <div className="info-item">📞 {selectedItem.phone || 'N/A'}</div>
-                <div className="info-item">📧 {selectedItem.email || 'N/A'}</div>
-                <div className="info-item">📍 {selectedItem.address || selectedItem.city || 'N/A'}</div>
+
+            <div className="modal-layout-main" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: cartItems.length > 0 ? '1fr 360px' : '1fr' 
+            }}>
+              {/* Catalog Section */}
+              <div className="modal-catalog">
+                {catalogLoading ? (
+                  <div className="catalog-loading">Loading catalog...</div>
+                ) : catalog.length === 0 ? (
+                  <div className="catalog-empty">No products listed by this supplier.</div>
+                ) : (
+                  <div className="catalog-grid">
+                    {catalog.map(prod => (
+                      <div key={prod.product_id} className="catalog-card">
+                        {prod.image && <img src={prod.image} className="catalog-card__img" alt={prod.name} />}
+                        <div className="catalog-card__details">
+                          <h4>{prod.name}</h4>
+                          <p className="sku">{prod.sku}</p>
+                          <div className="catalog-card__footer">
+                            <span className="price">₹{prod.price}</span>
+                            <div className="qty-controls">
+                              <button onClick={() => updateCart(prod, -1)} disabled={!cart[prod.product_id]}>−</button>
+                              <span>{cart[prod.product_id]?.qty || 0}</span>
+                              <button onClick={() => updateCart(prod, 1)}>+</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="modal-actions">
-                <button className="connect-btn" onClick={() => handleConnect(selectedItem.entity_id)}>Connect</button>
-                <button className="message-btn">Message</button>
-              </div>
+
+              {/* Sidebar Cart */}
+              {cartItems.length > 0 && (
+                <div className="modal-sidebar-cart visible">
+                  <h3>My Order</h3>
+                  <div className="cart-items-list">
+                    {cartItems.map(item => (
+                      <div key={item.product_id} className="cart-item-row">
+                        <div className="cart-item-info">
+                          <div className="name">{item.name}</div>
+                          <div className="sub">₹{item.price} × {item.qty}</div>
+                        </div>
+                        <div className="item-total">₹{item.price * item.qty}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="cart-footer">
+                    <div className="cart-total-row">
+                      <span>Total Amount</span>
+                      <strong>₹{cartTotal}</strong>
+                    </div>
+                    <button className="place-order-btn" onClick={handlePlaceOrder}>
+                      Place Order Request
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

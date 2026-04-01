@@ -3,141 +3,18 @@
 //  StockSense Pro
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Icon from '../../components/Icon';
 import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
   getConnections, updateConnectionStatus, disconnectPartner, // new B2B networking APIs
-  getB2BOrders, updatePurchaseOrderStatus
+  getCatalog, placeB2BOrder
 } from '../../services/api';
+import B2BOrders from '../B2B/B2BOrders';
 import './Suppliers.css';
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
-
-// ══════════════════════════════════════════════════════════
-//  SUPPLIER FORM MODAL
-// ══════════════════════════════════════════════════════════
-// Field defined OUTSIDE the modal so React never unmounts/remounts inputs on re-render
-function SupplierField({ label, field, placeholder, type = 'text', required, full, hint, form, errors, set }) {
-  return (
-    <div className={`supplier-form__field ${full ? 'supplier-form__field--full' : ''}`}>
-      <label className="supplier-form__label">{label}{required && ' *'}</label>
-      <input type={type}
-        className={`supplier-form__input ${errors[field] ? 'supplier-form__input--error' : ''}`}
-        placeholder={placeholder} value={form[field]}
-        onChange={e => set(field, type === 'tel'
-          ? e.target.value.replace(/\D/g, '').slice(0, 10)
-          : e.target.value)}
-      />
-      {errors[field] && <span className="supplier-form__error">{errors[field]}</span>}
-      {hint && <span className="supplier-form__hint">{hint}</span>}
-    </div>
-  );
-}
-
-function SupplierFormModal({ title, supplier = null, onClose, onSave, entityName }) {
-  const isEdit = !!supplier;
-  const [form, setForm] = useState({
-    name: supplier?.name || '',
-    contactPerson: supplier?.contactPerson || '',
-    phone: supplier?.phone || '',
-    email: supplier?.email || '',
-    address: supplier?.address || '',
-    city: supplier?.city || '',
-    state: supplier?.state || '',
-    pincode: supplier?.pincode || '',
-    gstin: supplier?.gstin || '',
-    paymentTerms: supplier?.paymentTerms || '30 days',
-    notes: supplier?.notes || '',
-  });
-  const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  const set = (field, value) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors(prev => ({ ...prev, [field]: '' }));
-  };
-
-  const validate = () => {
-    const e = {};
-    if (!form.name.trim()) e.name = 'Supplier name is required';
-    if (!form.phone.trim()) e.phone = 'Phone number is required';
-    if (form.phone && !/^\d{10}$/.test(form.phone.replace(/\s/g, '')))
-      e.phone = 'Phone must be 10 digits';
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      e.email = 'Invalid email format';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    try {
-      setSaving(true);
-      await onSave(form);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const f = { form, errors, set };
-
-  return (
-    <div className="supplier-form-modal-backdrop" onClick={onClose}>
-      <div className="supplier-form-modal" onClick={e => e.stopPropagation()}>
-        <div className="supplier-form-modal__header">
-          <h3>{title}</h3>
-          <button className="supplier-form-modal__close" onClick={onClose}>
-            <Icon name="x" size={20} />
-          </button>
-        </div>
-
-        <form className="supplier-form" onSubmit={handleSubmit}>
-          <div className="supplier-form__content">
-            <div className="supplier-form__grid">
-              <SupplierField label={`${entityName} Name`} field="name" placeholder="ABC Foods" required {...f} />
-              <SupplierField label="Contact Person" field="contactPerson" placeholder="Rajesh Kumar"              {...f} />
-              <SupplierField label="Phone" field="phone" placeholder="9876543210" type="tel" required {...f} />
-              <SupplierField label="Email" field="email" placeholder="contact@abc.com" type="email" {...f} />
-              <SupplierField label="City" field="city" placeholder="Delhi"                    {...f} />
-              <SupplierField label="State" field="state" placeholder="Delhi"                    {...f} />
-              <SupplierField label="Pincode" field="pincode" placeholder="110001"                   {...f} />
-              <SupplierField label="GSTIN" field="gstin" placeholder="07AABCT1234A1Z5"          {...f} />
-              <SupplierField label="Payment Terms" field="paymentTerms" placeholder="30 days" hint="e.g. 30 days, 45 days" {...f} />
-
-              <div className="supplier-form__field supplier-form__field--full">
-                <label className="supplier-form__label">Address</label>
-                <textarea className="supplier-form__input supplier-form__textarea"
-                  placeholder="123 Industrial Area, City" rows="2"
-                  value={form.address} onChange={e => set('address', e.target.value)} />
-              </div>
-
-              <div className="supplier-form__field supplier-form__field--full">
-                <label className="supplier-form__label">Notes</label>
-                <textarea className="supplier-form__input supplier-form__textarea"
-                  placeholder="Additional notes..." rows="2"
-                  value={form.notes} onChange={e => set('notes', e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          <div className="supplier-form__footer">
-            <button type="button" className="supplier-form__btn supplier-form__btn--secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="supplier-form__btn supplier-form__btn--primary" disabled={saving}>
-              <Icon name="check" size={16} />
-              {saving ? 'Saving...' : isEdit ? `Update ${entityName}` : `Add ${entityName}`}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 
 // ══════════════════════════════════════════════════════════
 //  MAIN SUPPLIERS
@@ -150,19 +27,22 @@ export default function Suppliers({ user }) {
   const [suppliers, setSuppliers] = useState([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
-  const [showAdd, setShowAdd] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
 
   // Tabs: 'crm' | 'requests' | 'orders'
   const [activeTab, setActiveTab] = useState('crm');
   const [requests, setRequests] = useState([]);
-  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // Catalog / Ordering State
+  const [showCatalogModal, setShowCatalogModal] = useState(false);
+  const [catalog, setCatalog] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [cart, setCart] = useState({}); // { productId: { ...item, qty } }
+  const [catalogSearch, setCatalogSearch] = useState('');
 
   useEffect(() => {
     fetchSuppliers();
     fetchRequests();
-    if (!isSupplier) fetchOrders();
   }, []);
 
   const fetchSuppliers = async () => {
@@ -189,47 +69,6 @@ export default function Suppliers({ user }) {
     }
   };
 
-  const fetchOrders = async () => {
-    try {
-      if (activeTab === 'orders') setLoading(true);
-      const res = await getB2BOrders();
-      if (res.success) setOrders(res.data);
-    } catch (err) {
-      console.error("Orders fetch error:", err.message);
-    } finally {
-      if (activeTab === 'orders') setLoading(false);
-    }
-  };
-
-  const handleUpdateOrderStatus = async (orderId, status) => {
-    try {
-      setLoading(true);
-      const res = await updatePurchaseOrderStatus(orderId, status);
-      if (res.success) {
-        alert(`Order status updated to ${status}`);
-        fetchOrders();
-      }
-    } catch (err) {
-      alert("Failed to update order: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAdd = async (form) => {
-    isSupplier ? await createCustomer(form) : await createSupplier(form);
-    setShowAdd(false);
-    fetchSuppliers();
-  };
-
-  const handleEdit = async (form) => {
-    const id = isSupplier ? selected.customer_id : selected.supplier_id;
-    isSupplier ? await updateCustomer(id, form) : await updateSupplier(id, form);
-    setShowEdit(false);
-    setSelected(null);
-    fetchSuppliers();
-  };
-
   const handleDelete = async (e, supplier) => {
     e.stopPropagation();
     if (!confirm(`Delete ${entityName.toLowerCase()} "${supplier.name}"?`)) return;
@@ -244,7 +83,6 @@ export default function Suppliers({ user }) {
 
     try {
       setLoading(true);
-      // We use the business slug for safe, public-facing identification
       const res = await disconnectPartner(partner.slug);
       if (res.success) {
         alert("Disconnected successfully. Connection is now inactive.");
@@ -264,10 +102,58 @@ export default function Suppliers({ user }) {
       if (res.success) {
         alert(`Request ${status.toLowerCase()} correctly. CRM has been automatically synchronized!`);
         await fetchRequests();
-        await fetchSuppliers(); // refresh CRM table to show the new connection
+        await fetchSuppliers();
       }
     } catch (err) {
       alert("Failed to update status: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpenCatalog = async () => {
+    if (!selected) return;
+    setCatalogLoading(true);
+    setShowCatalogModal(true);
+    try {
+      const res = await getCatalog(selected.supplier_id || selected.entity_id);
+      if (res.success) setCatalog(res.data);
+    } catch (err) {
+      alert("Failed to fetch catalog: " + err.message);
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const updateCart = (product, delta) => {
+    setCart(prev => {
+      const existing = prev[product.product_id];
+      const newQty = (existing?.qty || 0) + delta;
+      if (newQty <= 0) {
+        const { [product.product_id]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [product.product_id]: { ...product, qty: newQty } };
+    });
+  };
+
+  const handlePlaceB2BOrder = async () => {
+    const items = Object.values(cart);
+    if (!items.length) return;
+    try {
+      setLoading(true);
+      const res = await placeB2BOrder({
+        supplier_id: selected.supplier_id || selected.entity_id,
+        items
+      });
+      if (res.success) {
+        alert("Order placed successfully! Check 'Purchase Orders' for updates.");
+        setCart({});
+        setShowCatalogModal(false);
+        setActiveTab('orders');
+      }
+    } catch (err) {
+      alert("Failed to place order: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -286,7 +172,7 @@ export default function Suppliers({ user }) {
   const activeCount = suppliers.filter(s => s.isActive).length;
   const totalProducts = suppliers.reduce((sum, s) => sum + (s.productCount || 0), 0);
 
-  if (loading) return (
+  if (loading && !showCatalogModal) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
       <div className="app-loading__spinner" />
     </div>
@@ -321,25 +207,22 @@ export default function Suppliers({ user }) {
           <button
             className={`suppliers-tab ${activeTab === 'crm' ? 'active' : ''}`}
             onClick={() => setActiveTab('crm')}
-            style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'crm' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'crm' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
           >
             My CRM
           </button>
           <button
             className={`suppliers-tab ${activeTab === 'requests' ? 'active' : ''}`}
             onClick={() => setActiveTab('requests')}
-            style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'requests' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'requests' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center' }}
           >
             Network Requests
             {requests.length > 0 && (
-              <span style={{ background: '#ef4444', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>{requests.length}</span>
+              <span className="request-badge">{requests.length}</span>
             )}
           </button>
           {!isSupplier && (
             <button
               className={`suppliers-tab ${activeTab === 'orders' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('orders'); fetchOrders(); }}
-              style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'orders' ? 'rgba(99,102,241,0.2)' : 'transparent', color: activeTab === 'orders' ? '#818cf8' : '#cbd5e1', cursor: 'pointer', fontWeight: 600 }}
+              onClick={() => setActiveTab('orders')}
             >
               Purchase Orders
             </button>
@@ -353,12 +236,6 @@ export default function Suppliers({ user }) {
               placeholder={`Search ${activeTab === 'crm' ? entityNamePlural.toLowerCase() : 'requests'}...`}
               value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-          {/* Manual Add disabled as per requirement: Businesses find each other through Networks */}
-          {/* {activeTab === 'crm' && (
-            <button className="suppliers-add-btn" onClick={() => setShowAdd(true)}>
-              <Icon name="manufacturers" size={16} /> Add {entityName}
-            </button>
-          )} */}
         </div>
       </div>
 
@@ -404,14 +281,6 @@ export default function Suppliers({ user }) {
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <div className="suppliers-actions">
-                      {/* Hide Edit for Network Connections */}
-                      {!s.is_network && (
-                        <button className="suppliers-action-btn" title="Edit"
-                          onClick={e => { e.stopPropagation(); setSelected(s); setShowEdit(true); }}>
-                          <Icon name="settings" size={14} />
-                        </button>
-                      )}
-
                       {s.is_network ? (
                         <button className="suppliers-action-btn suppliers-action-btn--warning"
                           title="Disconnect" onClick={e => handleDisconnect(e, s)}>
@@ -495,56 +364,13 @@ export default function Suppliers({ user }) {
 
       {/* Purchase Orders Table */}
       {activeTab === 'orders' && (
-        <div className="suppliers-table-wrapper">
-          <table className="suppliers-table">
-            <thead>
-              <tr>
-                <th>Order #</th>
-                <th>Supplier</th>
-                <th>Total Amount</th>
-                <th>Status</th>
-                <th>Date</th>
-                <th style={{ width: 150 }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orders.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="suppliers-empty">
-                    <p>No purchase orders found.</p>
-                  </td>
-                </tr>
-              ) : orders.map(o => (
-                <tr key={o.po_id} className="suppliers-row">
-                  <td className="suppliers-name">{o.poNumber}</td>
-                  <td>{o.supplierName || '—'}</td>
-                  <td>{fmt(o.totalAmount)}</td>
-                  <td>
-                    <span className={`suppliers-status-badge suppliers-status-badge--${o.status === 'RECEIVED' ? 'active' : 'pending'}`}>
-                      {o.status}
-                    </span>
-                  </td>
-                  <td>{new Date(o.createdAt).toLocaleDateString()}</td>
-                  <td>
-                    {o.status !== 'RECEIVED' && o.status !== 'CANCELLED' && (
-                      <button
-                        className="suppliers-action-btn"
-                        style={{ border: '1px solid #22c55e', color: '#22c55e', width: 'auto', padding: '4px 10px', fontSize: '0.75rem' }}
-                        onClick={() => handleUpdateOrderStatus(o.po_id, 'RECEIVED')}
-                      >
-                        Mark Received
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="suppliers-table-wrapper" style={{ flex: 1, padding: 0 }}>
+          <B2BOrders user={user} />
         </div>
       )}
 
       {/* Side Panel */}
-      {selected && !showEdit && (
+      {selected && (
         <div className="suppliers-side-panel-backdrop" onClick={() => setSelected(null)}>
           <div className="suppliers-side-panel" onClick={e => e.stopPropagation()}>
             <div className="suppliers-side-panel__header">
@@ -560,7 +386,7 @@ export default function Suppliers({ user }) {
               {[
                 {
                   title: 'Contact', rows: [
-                    ['Contact Person', selected.contactPerson || '—'],
+                    ['Owner / Person', selected.contactPerson || '—'],
                     ['Phone', selected.phone],
                     ['Email', selected.email || '—'],
                     ['Address', selected.address || '—'],
@@ -587,6 +413,12 @@ export default function Suppliers({ user }) {
                 </div>
               ))}
 
+              {!isSupplier && selected.isActive && (
+                <button className="suppliers-detail-order-btn" onClick={handleOpenCatalog}>
+                  <Icon name="billing" size={18} /> Shop Supplier Catalog
+                </button>
+              )}
+
               {selected.notes && (
                 <div className="suppliers-detail-section">
                   <h4>Notes</h4>
@@ -598,11 +430,6 @@ export default function Suppliers({ user }) {
               <button className="suppliers-btn suppliers-btn--secondary" onClick={() => setSelected(null)}>
                 Close
               </button>
-              {!selected.is_network && (
-                <button className="suppliers-btn suppliers-btn--primary" onClick={() => setShowEdit(true)}>
-                  <Icon name="settings" size={16} /> Edit {entityName}
-                </button>
-              )}
               {selected.is_network && (
                 <button className="suppliers-btn"
                   style={{ background: 'var(--color-warning)', color: 'white' }}
@@ -615,19 +442,123 @@ export default function Suppliers({ user }) {
         </div>
       )}
 
-      {/* Add Modal */}
-      {showAdd && (
-        <SupplierFormModal title={`Add New ${entityName}`}
-          onClose={() => setShowAdd(false)}
-          onSave={handleAdd} entityName={entityName} />
-      )}
+      {/* Catalog Order Modal — Dynamic B2B Procurement Overlay */}
+      {showCatalogModal && (
+        <div className="catalog-modal-overlay">
+          <div className="catalog-modal">
+            <div className="catalog-modal__header">
+              {/* TOP 30%: Supplier Profile Header */}
+              <div className="supplier-profile-header">
+                <div className="header-topline">
+                  <div className="business-main">
+                    <h2>{selected.name}</h2>
+                    <span className="owner-badge">Owner: {selected.contactPerson}</span>
+                  </div>
+                  <div className="header-actions">
+                    <button className="close-catalog-btn" onClick={() => setShowCatalogModal(false)}>
+                      <Icon name="x" size={24} />
+                    </button>
+                  </div>
+                </div>
+                <div className="header-details">
+                  <div className="header-detail-item">
+                    <Icon name="phone" size={14} />
+                    <span>{selected.phone}</span>
+                  </div>
+                  <div className="header-detail-item">
+                    <Icon name="mail" size={14} />
+                    <span>{selected.email || 'No email provided'}</span>
+                  </div>
+                  <div className="header-detail-item">
+                    <Icon name="location" size={14} />
+                    <span>{selected.address || 'Address not listed'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-      {/* Edit Modal */}
-      {showEdit && selected && (
-        <SupplierFormModal title={`Edit ${entityName}`}
-          supplier={selected}
-          onClose={() => { setShowEdit(false); setSelected(null); }}
-          onSave={handleEdit} entityName={entityName} />
+            <div className="catalog-modal__body">
+              <div className="catalog-modal__split" style={{ 
+                gridTemplateColumns: Object.values(cart).length > 0 ? '1fr 360px' : '1fr' 
+              }}>
+                {/* LEFT 70%: Product Catalog */}
+                <div className="catalog-products">
+                  <div className="catalog-search-bar">
+                    <Icon name="search" size={18} />
+                    <input placeholder="Search products in this catalog..." 
+                           value={catalogSearch} 
+                           onChange={e => setCatalogSearch(e.target.value)} />
+                  </div>
+                  
+                  <div className="catalog-grid">
+                    {catalogLoading ? (
+                      <div className="catalog-loading-state">
+                        <div className="app-loading__spinner" />
+                        <p>Loading catalog...</p>
+                      </div>
+                    ) : catalog.filter(p => (p.name || '').toLowerCase().includes(catalogSearch.toLowerCase())).map(p => (
+                      <div key={p.product_id} className="catalog-card">
+                        {p.image && <img src={p.image} alt="" className="catalog-card__img" />}
+                        <div className="catalog-card__body">
+                          <span className="catalog-card__sku">SKU: {p.sku || 'N/A'}</span>
+                          <h4 className="catalog-card__title">{p.name}</h4>
+                          <p className="catalog-card__desc">{p.description}</p>
+                          <div className="catalog-card__footer">
+                            <span className="catalog-card__price">{fmt(p.price)}</span>
+                            <div className="catalog-card__qty-control">
+                              <button onClick={() => updateCart(p, -1)} disabled={!cart[p.product_id]}>-</button>
+                              <span className="qty-val">{cart[p.product_id]?.qty || 0}</span>
+                              <button onClick={() => updateCart(p, 1)}>+</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {!catalogLoading && catalog.length === 0 && (
+                      <div className="catalog-empty-state">No products found in this catalog.</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* RIGHT SIDE: Procurement Cart (Conditional) */}
+                {Object.values(cart).length > 0 && (
+                  <div className="catalog-cart">
+                    <div className="cart-header">
+                      <h3>Order Summary</h3>
+                      <span className="cart-badge">{Object.values(cart).length} items</span>
+                    </div>
+                    
+                    <div className="cart-items-list">
+                      {Object.values(cart).map(item => (
+                        <div key={item.product_id} className="cart-item-entry">
+                          <div className="item-meta">
+                            <strong>{item.name}</strong>
+                            <span>{item.qty} × {fmt(item.price)}</span>
+                          </div>
+                          <span className="item-subtotal">{fmt(item.qty * item.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="cart-footer-btn-wrapper">
+                      <div className="cart-total-display">
+                        <span>Total Invoice Amount</span>
+                        <strong className="total-amount">
+                          {fmt(Object.values(cart).reduce((sum, item) => sum + (item.qty * item.price), 0))}
+                        </strong>
+                      </div>
+                      <button className="catalog-place-order-btn" 
+                              disabled={loading}
+                              onClick={handlePlaceB2BOrder}>
+                        {loading ? 'Placing Order...' : 'Confirm B2B Order'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

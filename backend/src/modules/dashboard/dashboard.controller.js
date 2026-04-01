@@ -1,3 +1,5 @@
+import { masterPool } from "../../config/masterDatabase.js";
+
 const getDashboard = async (req, res, next) => {
   try {
     const { period = 'week' } = req.query;
@@ -48,19 +50,58 @@ const getDashboard = async (req, res, next) => {
        WHERE ${getCondition('t.createdAt', period)} AND t.status = 'COMPLETED'`
     );
 
-    // 4. Procurement (Purchased Items & Spend)
-    const [[spendData]] = await req.db.execute(
-      `SELECT COALESCE(SUM(totalAmount), 0) as procurementSpend
-       FROM purchase_orders
+    // 4. Procurement (Combining Local + Network Orders)
+    // 4a. Local Stats (Legacy/Manual)
+    const [[localSpend]] = await req.db.execute(
+      `SELECT COALESCE(SUM(totalAmount), 0) as spend FROM purchase_orders
        WHERE ${getCondition('createdAt', period)} AND status IN ('RECEIVED', 'PARTIAL')`
     );
-
-    const [[itemsData]] = await req.db.execute(
-      `SELECT COALESCE(SUM(poi.receivedQty), 0) as itemsPurchased
-       FROM purchase_order_items poi
+    const [[localItems]] = await req.db.execute(
+      `SELECT COALESCE(SUM(poi.receivedQty), 0) as items FROM purchase_order_items poi
        JOIN purchase_orders po ON po.po_id = poi.po_id
        WHERE ${getCondition('po.createdAt', period)} AND po.status IN ('RECEIVED', 'PARTIAL')`
     );
+
+    // 4b. Network Stats (B2B Orders)
+    let b2bSpend = 0;
+    let b2bItems = 0;
+
+    try {
+      // Find current shop's master ID from the tenants table
+      const cleanDbName = req.dbName.replace('shop_', '').replace('supplier_', '');
+      
+      const [[mapping]] = await masterPool.execute(
+        "SELECT tenant_id FROM tenants WHERE db_name = ? OR db_name LIKE ? OR db_name = ?",
+        [req.dbName, `%${cleanDbName}%`, cleanDbName]
+      );
+
+      if (mapping) {
+        const masterId = mapping.tenant_id;
+        // Include PENDING orders in procurement cards if user wants to see what's "on the way"
+        // and only exclude REJECTED or CANCELLED
+        const statusFilter = "('PENDING', 'ACCEPTED', 'BILLED', 'CLOSED')";
+        
+        const [[networkSpend]] = await masterPool.execute(
+          `SELECT COALESCE(SUM(total_amount), 0) as spend FROM b2b_orders
+           WHERE shop_id = ? AND status IN ${statusFilter} AND ${getCondition('createdAt', period)}`,
+          [masterId]
+        );
+        const [[networkItems]] = await masterPool.execute(
+          `SELECT COALESCE(SUM(oi.qty), 0) as items FROM b2b_order_items oi
+           JOIN b2b_orders o ON o.order_id = oi.order_id
+           WHERE o.shop_id = ? AND o.status IN ${statusFilter} AND ${getCondition('o.createdAt', period)}`,
+          [masterId]
+        );
+
+        b2bSpend = parseFloat(networkSpend.spend);
+        b2bItems = parseInt(networkItems.items);
+      }
+    } catch (err) {
+      console.error("Failed to fetch network dashboard stats:", err.message);
+    }
+
+    const procurementSpend = parseFloat(localSpend.spend) + b2bSpend;
+    const itemsPurchased    = parseInt(localItems.items) + b2bItems;
 
     // 5. Static Inventory Stats (Always total)
     const [[inventoryStats]] = await req.db.execute(
@@ -165,8 +206,8 @@ const getDashboard = async (req, res, next) => {
           transactions:   currentStats.totalTransactions,
           netProfit:      parseFloat(profitData.netProfit),
           salesGrowth:    parseFloat(growth),
-          itemsPurchased: parseInt(itemsData.itemsPurchased),
-          procurementSpend: parseFloat(spendData.procurementSpend),
+          itemsPurchased:   itemsPurchased,
+          procurementSpend: procurementSpend,
           totalProducts:     inventoryStats.totalProducts,
           lowStockCount:     inventoryStats.lowStockCount,
         },

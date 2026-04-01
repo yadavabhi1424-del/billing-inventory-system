@@ -1,11 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import Overview from './Overview';
 import Transactions from './Transactions';
 import Payment from '../billing/Payment';
+import B2BOrders from '../B2B/B2BOrders';
 import './Billing.css';
 
 export default function Billing({ user }) {
   const [activeTab, setActiveTab] = useState('overview');
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('order_id')) {
+      setActiveTab('newbill');
+    }
+  }, [location]);
 
   return (
     <div className="billing-module">
@@ -25,6 +35,14 @@ export default function Billing({ user }) {
           >
             Transactions
           </button>
+          {(user?.userType === 'supplier') && (
+            <button
+              className={`billing-tab ${activeTab === 'orders' ? 'billing-tab--active' : ''}`}
+              onClick={() => setActiveTab('orders')}
+            >
+              Orders
+            </button>
+          )}
         </div>
         
         <button
@@ -44,6 +62,10 @@ export default function Billing({ user }) {
 
         {activeTab === 'transactions' && (
           <Transactions />
+        )}
+
+        {activeTab === 'orders' && (
+          <B2BOrders user={user} />
         )}
 
         {activeTab === 'newbill' && (

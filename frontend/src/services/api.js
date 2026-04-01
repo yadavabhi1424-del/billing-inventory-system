@@ -26,6 +26,13 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Attach tenant slug from localStorage user object for multi-tenancy
+    const user = JSON.parse(localStorage.getItem('stocksense_user') || '{}');
+    if (user?.slug) {
+      config.headers['x-tenant-slug'] = user.slug;
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -460,15 +467,31 @@ export async function getDiscoveryProfile(slug) {
   return await api.get(`/discovery/${slug}`);
 }
 
+export async function getCatalog(supplierId) {
+  return await api.get(`/discovery/supplier/${supplierId}/catalog`);
+}
+
 export async function upsertDiscoveryProfile(data) {
   return await api.post('/discovery/profile', data);
 }
 
 // ============================================================
-//  NETWORK / B2B (Phase 5 & 6)
+//  NETWORK / B2B (Order-to-Connect Flow)
 // ============================================================
-export async function getSupplierCatalog(supplierId, params = {}) {
-  return await api.get(`/network/supplier/${supplierId}/catalog`, { params });
+export async function getB2BOrders() {
+  return await api.get('/b2b/orders');
+}
+
+export async function getB2BOrderById(id) {
+  return await api.get(`/b2b/orders/${id}`);
+}
+
+export async function placeB2BOrder(data) {
+  return await api.post('/b2b/orders', data);
+}
+
+export async function updateB2BOrderStatus(id, status) {
+  return await api.patch(`/b2b/orders/${id}/status`, { status });
 }
 
 export async function getConnections(params = {}) {
@@ -485,18 +508,6 @@ export async function updateConnectionStatus(mapId, status) {
 
 export function disconnectPartner(slug) {
   return api.delete(`/network/connections/${slug}`);
-}
-
-export async function getB2BProducts(params = {}) {
-  return await api.get('/network/b2b-products', { params });
-}
-
-export async function placeB2BOrder(data) {
-  return await api.post('/b2b/orders', data);
-}
-
-export async function getB2BOrders() {
-  return await api.get('/b2b/orders');
 }
 
 export async function getOwnProfile() {

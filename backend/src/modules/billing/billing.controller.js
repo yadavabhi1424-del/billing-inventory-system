@@ -25,6 +25,32 @@ const createTransaction = async (req, res, next) => {
 
     const conn = await req.db.getConnection();
     try {
+      // Compatibility check: Ensure required billing columns exist
+      const [columns] = await conn.query("SHOW COLUMNS FROM transactions");
+      const columnNames = columns.map(c => c.Field);
+      
+      if (!columnNames.includes('roundOff')) {
+        await conn.query("ALTER TABLE transactions ADD COLUMN roundOff DECIMAL(5,2) DEFAULT 0 AFTER taxAmount");
+      }
+      if (!columnNames.includes('discountType')) {
+        await conn.query("ALTER TABLE transactions ADD COLUMN discountType ENUM('PERCENT','FIXED') AFTER subtotal");
+      }
+      if (!columnNames.includes('discountValue')) {
+        await conn.query("ALTER TABLE transactions ADD COLUMN discountValue DECIMAL(10,2) DEFAULT 0 AFTER discountType");
+      }
+      if (!columnNames.includes('discountAmount')) {
+        await conn.query("ALTER TABLE transactions ADD COLUMN discountAmount DECIMAL(10,2) DEFAULT 0 AFTER discountValue");
+      }
+      if (!columnNames.includes('changeGiven')) {
+        await conn.query("ALTER TABLE transactions ADD COLUMN changeGiven DECIMAL(10,2) DEFAULT 0 AFTER amountPaid");
+      }
+
+      const [itemColumns] = await conn.query("SHOW COLUMNS FROM transaction_items");
+      const itemColNames = itemColumns.map(c => c.Field);
+      if (!itemColNames.includes('discountAmount')) {
+        await conn.query("ALTER TABLE transaction_items ADD COLUMN discountAmount DECIMAL(10,2) DEFAULT 0 AFTER taxAmount");
+      }
+
       await conn.beginTransaction();
 
       const enrichedItems = [];

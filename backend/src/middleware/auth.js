@@ -6,6 +6,7 @@ import { AppError }           from "./errorHandler.js";
 
 const protect = async (req, res, next) => {
   try {
+    console.log("USING DB:", req.dbName);
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer "))
       return next(new AppError("Access token required. Please login.", 401));

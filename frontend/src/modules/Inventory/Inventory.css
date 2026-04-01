@@ -920,3 +920,99 @@
     border-radius: 0;
   }
 }
+
+/* Public Toggle Component (B2B Sync) */
+.product-form__public-toggle-container {
+  grid-column: 1 / -1;
+  margin-top: var(--space-4);
+  padding: var(--space-6);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  transition: all var(--transition-fast);
+}
+
+.product-form__public-toggle-container:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-accent-soft);
+}
+
+.public-toggle__info {
+  flex: 1;
+}
+
+.public-toggle__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.public-toggle__desc {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* Custom Checkbox mimicking Mockup #3 */
+.custom-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+  width: fit-content;
+}
+
+.custom-checkbox {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  background: var(--color-bg-input);
+  border: 2px solid var(--color-border-strong);
+  border-radius: 6px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-checkbox-row:hover .custom-checkbox {
+  border-color: var(--color-accent-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.custom-checkbox.is-checked {
+  background: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 10px var(--color-accent-glow);
+}
+
+.custom-checkbox svg {
+  color: white;
+  transform: scale(0);
+  opacity: 0;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.custom-checkbox.is-checked svg {
+  transform: scale(1);
+  opacity: 1;
+}
+
+/* Confirmation Label */
+.custom-checkbox-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.custom-checkbox-row:hover .custom-checkbox-label {
+  color: var(--color-text-primary);
+}

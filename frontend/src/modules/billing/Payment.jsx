@@ -5,7 +5,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
-import { getProducts, createTransaction, getShopProfile, getMe } from '../../services/api';
+import { getProducts, createTransaction, getShopProfile, getMe, getB2BOrderById, updateB2BOrderStatus } from '../../services/api';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { STORE_INFO } from './paymentData';
 import './Payment.css';
 
@@ -181,8 +182,45 @@ export default function Payment({ user }) {
   const [submitting,    setSubmitting]    = useState(false);
   const [invoiceNo,     setInvoiceNo]     = useState('INV-...');
   const [shopInfo,      setShopInfo]      = useState(STORE_INFO);
+  const [b2bOrderId,    setB2BOrderId]    = useState(null);
 
   const searchInputRef = useRef(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // ── Handle incoming B2B Order ──────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const oid = params.get('order_id');
+    if (oid) {
+      setB2BOrderId(oid);
+      fetchB2BOrder(oid);
+    }
+  }, [location]);
+
+  const fetchB2BOrder = async (id) => {
+    try {
+      const res = await getB2BOrderById(id);
+      if (res.success && res.data) {
+        const order = res.data;
+        setCustomerName(order.shop_name);
+        setCustomerPhone(order.shop_phone || '');
+        
+        // Map B2B items to POS cart structure
+        const mappedItems = order.items.map(item => ({
+          product_id:   item.product_id, 
+          name:         item.name,
+          sku:          item.sku,
+          sellingPrice: Number(item.price),
+          qty:          item.qty,
+          taxRate:      item.taxRate || 0,
+        }));
+        setCart(mappedItems);
+      }
+    } catch (err) {
+      console.error("Failed to load B2B order", err);
+    }
+  };
 
   // ── Load popular products on mount ─────────────────────────
   useEffect(() => {
@@ -381,6 +419,15 @@ export default function Payment({ user }) {
       const res = await createTransaction(transactionData);
 
       if (res.success) {
+        // If this was a B2B order fulfillment, mark it as BILLED
+        if (b2bOrderId) {
+          try {
+            await updateB2BOrderStatus(b2bOrderId, 'BILLED');
+          } catch (err) {
+            console.error("Failed to update B2B order status:", err);
+          }
+        }
+
         setInvoiceNo(res.data.invoiceNumber);
         const invoiceData = {
           no:            res.data.invoiceNumber,
@@ -413,6 +460,9 @@ export default function Payment({ user }) {
     setInvoice(null);
     setPayMethod('cash');
     setInvoiceNo('INV-...');
+    setB2BOrderId(null);
+    // Clear URL params
+    navigate('/billing', { replace: true });
   };
 
   // ══════════════════════════════════════════════════════════
