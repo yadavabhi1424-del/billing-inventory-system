@@ -121,9 +121,9 @@ const getSupplierReport = async (req, res, next) => {
       `SELECT s.supplier_id, s.name, s.phone, s.isActive, s.slug as networkSlug,
               (SELECT COUNT(*) FROM products WHERE supplier_id = s.supplier_id) as productCount,
               (SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = s.supplier_id 
-               AND status IN ('RECEIVED', 'PARTIAL') AND ${localOrderCond}) as localOrders,
+               AND status != 'CANCELLED' AND ${localOrderCond}) as localOrders,
               (SELECT COALESCE(SUM(totalAmount), 0) FROM purchase_orders WHERE supplier_id = s.supplier_id 
-               AND status IN ('RECEIVED', 'PARTIAL') AND ${localOrderCond}) as localPurchased
+               AND status != 'CANCELLED' AND ${localOrderCond}) as localPurchased
        FROM suppliers s
        WHERE s.isActive = TRUE`,
       [...localOrderParams, ...localOrderParams]
@@ -133,23 +133,23 @@ const getSupplierReport = async (req, res, next) => {
     let networkOrders = [];
     if (shopUuid || slug || dbName) {
       const b2bParams = [shopUuid, dbName, slug];
-      const b2bCond = getCondition('o.updatedAt', req, b2bParams);
-      const b2bStatusFilter = "('ACCEPTED', 'BILLED', 'CLOSED')";
+      const b2bCond = getCondition('o.createdAt', req, b2bParams);
+      const b2bStatusFilter = "('PENDING', 'ORDERED', 'ACCEPTED', 'BILLED', 'CLOSED')";
 
       [networkOrders] = await masterPool.execute(
-        `SELECT ms.slug as networkSlug, COUNT(*) as count, SUM(o.total_amount) as total
+        `SELECT ms.db_name as supplierDbName, COUNT(*) as count, SUM(o.total_amount) as total
          FROM b2b_orders o
          JOIN suppliers ms ON ms.supplier_id = o.supplier_id
          WHERE (o.shop_id = ? OR o.shop_id = ? OR o.shop_id = ?)
          AND o.status IN ${b2bStatusFilter} AND ${b2bCond}
-         GROUP BY ms.slug`,
+         GROUP BY ms.db_name`,
         b2bParams
       );
     }
 
     // 4. Combine results: Local totals + Network B2B totals
     const combined = localSuppliers.map(s => {
-      const nMatch = s.networkSlug ? networkOrders.find(no => no.networkSlug === s.networkSlug) : null;
+      const nMatch = networkOrders.find(no => no.supplierDbName === s.supplier_id);
       return {
         ...s,
         totalOrders: parseInt(s.localOrders || 0) + (nMatch ? parseInt(nMatch.count) : 0),
@@ -230,10 +230,96 @@ const getProfitLoss = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const getSupplierOrderHistory = async (req, res, next) => {
+  try {
+    const { supplierId } = req.params; // local db format (e.g. supplier_123)
+    const dbName = req.dbName || "";
+    const slug = dbName.replace("stocksense_tenant_", "").replace("stocksense_supplier_", "").replace("shop_", "").replace("supplier_", "");
+
+    // 1. Identify shop in master DB
+    const [[shopMapping]] = await masterPool.execute(
+      "SELECT tenant_id FROM tenants WHERE db_name = ? OR shop_slug = ?",
+      [dbName, slug]
+    );
+    const shopUuid = shopMapping ? shopMapping.tenant_id : null;
+
+    // 2. Fetch local orders
+    const [localOrders] = await req.db.execute(
+      `SELECT po_id as id, poNumber as orderNumber, totalAmount, status, createdAt as date,
+              'LOCAL' as source, subtotal, taxAmount
+       FROM purchase_orders WHERE supplier_id = ?
+       ORDER BY createdAt DESC`,
+      [supplierId]
+    );
+
+    const localOrderIds = localOrders.map(o => o.id);
+    let localItemsMap = {};
+    if (localOrderIds.length > 0) {
+      const placeholders = localOrderIds.map(() => '?').join(',');
+      const [allLocalItems] = await req.db.execute(
+        `SELECT po_item_id as id, po_id, product_id, productName as name, quantity as qty, 
+                receivedQty, costPrice as price, taxAmount, totalAmount
+         FROM purchase_order_items WHERE po_id IN (${placeholders})`,
+        localOrderIds
+      );
+      allLocalItems.forEach(item => {
+        if (!localItemsMap[item.po_id]) localItemsMap[item.po_id] = [];
+        localItemsMap[item.po_id].push(item);
+      });
+    }
+
+    localOrders.forEach(o => { o.items = localItemsMap[o.id] || []; });
+
+    // 3. Fetch B2B network orders
+    let networkOrders = [];
+    if (shopUuid || slug || dbName) {
+      const b2bParams = [shopUuid, dbName, slug, supplierId];
+      const [rows] = await masterPool.execute(
+        `SELECT o.order_id as id, o.order_number as orderNumber, o.total_amount as totalAmount, 
+                o.status, o.createdAt as date, 'B2B' as source, o.notes
+         FROM b2b_orders o
+         JOIN suppliers ms ON ms.supplier_id = o.supplier_id
+         WHERE (o.shop_id = ? OR o.shop_id = ? OR o.shop_id = ?)
+         AND ms.db_name = ?
+         ORDER BY o.createdAt DESC`,
+        b2bParams
+      );
+
+      networkOrders = rows;
+      
+      const b2bOrderIds = networkOrders.map(o => o.id);
+      let b2bItemsMap = {};
+      if (b2bOrderIds.length > 0) {
+        const placeholders = b2bOrderIds.map(() => '?').join(',');
+        const [allB2BItems] = await masterPool.execute(
+          `SELECT id, order_id, product_id, name, qty,
+                  price, total as totalAmount
+           FROM b2b_order_items WHERE order_id IN (${placeholders})`,
+          b2bOrderIds
+        );
+        allB2BItems.forEach(item => {
+          if (!b2bItemsMap[item.order_id]) b2bItemsMap[item.order_id] = [];
+          b2bItemsMap[item.order_id].push(item);
+        });
+      }
+      
+      networkOrders.forEach(o => { o.items = b2bItemsMap[o.id] || []; });
+    }
+
+    const combined = [...localOrders, ...networkOrders].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({
+      success: true,
+      data: combined
+    });
+  } catch (error) { next(error); }
+};
+
 export {
   getSalesReport,
   getCustomerReport,
   getSupplierReport,
   getInventoryReport,
-  getProfitLoss
+  getProfitLoss,
+  getSupplierOrderHistory
 };

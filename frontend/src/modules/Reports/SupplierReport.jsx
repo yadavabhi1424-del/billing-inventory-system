@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
 import { getSupplierReport } from '../../services/api';
+import SupplierHistoryModal from './SupplierHistoryModal';
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
@@ -8,6 +9,7 @@ export default function SupplierReport() {
   const [suppliers, setSuppliers] = useState([]);
   const [period,    setPeriod]    = useState('month');
   const [loading,   setLoading]   = useState(true);
+  const [selectedSupplier, setSelectedSupplier] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -83,7 +85,7 @@ export default function SupplierReport() {
                   {suppliers.length === 0 ? (
                     <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No suppliers yet</td></tr>
                   ) : suppliers.map((s, i) => (
-                    <tr key={i}>
+                    <tr key={i} onClick={() => setSelectedSupplier(s)} style={{ cursor: 'pointer' }}>
                       <td><div className="report-supplier-name">{s.name}</div></td>
                       <td><span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{s.phone || '—'}</span></td>
                       <td style={{ textAlign: 'right' }}><span className="report-qty">{s.productCount}</span></td>
@@ -107,6 +109,13 @@ export default function SupplierReport() {
         <button className="report-export-btn"><Icon name="reports" size={16} /> Export to PDF</button>
         <button className="report-export-btn report-export-btn--secondary"><Icon name="inventory" size={16} /> Export to Excel</button>
       </div>
+
+      {selectedSupplier && (
+        <SupplierHistoryModal 
+          supplier={selectedSupplier}
+          onClose={() => setSelectedSupplier(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,0 +1,243 @@
+.receipt-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1500;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+}
+
+.receipt-modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.receipt-modal__header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface-soft);
+}
+
+.receipt-modal__header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.receipt-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.receipt-action-btn {
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.receipt-action-btn:hover {
+  background: var(--color-border);
+}
+
+.receipt-action-btn.primary {
+  background: var(--color-accent-primary);
+  border-color: var(--color-accent-primary);
+  color: white;
+}
+
+.receipt-action-btn.primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.receipt-printable-area {
+  padding: 3rem;
+  overflow-y: auto;
+  background: #ffffff; /* Explicitly white for receipt aesthetics */
+  color: #1a1a1a;
+  flex: 1;
+}
+
+.receipt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.receipt-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.receipt-brand svg {
+  color: #4f46e5;
+  margin-bottom: 0.5rem;
+}
+
+.receipt-brand h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #111827;
+}
+
+.receipt-brand p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+.receipt-meta {
+  text-align: right;
+}
+
+.receipt-meta h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1f2937;
+  letter-spacing: 1px;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.5rem 1rem;
+  text-align: left;
+}
+
+.meta-lbl {
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.meta-val {
+  color: #111827;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.receipt-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 2rem 0;
+}
+
+.receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 2rem;
+}
+
+.receipt-table th,
+.receipt-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  text-align: left;
+}
+
+.receipt-table th {
+  background: #f9fafb;
+  color: #4b5563;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+.receipt-table td {
+  color: #1f2937;
+  font-size: 0.95rem;
+}
+
+.receipt-summary {
+  width: 300px;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.receipt-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 1rem;
+  color: #4b5563;
+}
+
+.receipt-summary-row.primary {
+  border-top: 2px solid #e5e7eb;
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.receipt-footer {
+  margin-top: 4rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.receipt-notes {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  text-align: left;
+  color: #374151;
+}
+
+@media print {
+  @page {
+    margin: 0.5cm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .receipt-printable-area, .receipt-printable-area * {
+    visibility: visible;
+  }
+  .receipt-printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    background: transparent;
+  }
+  .hide-on-print {
+    display: none !important;
+  }
+}

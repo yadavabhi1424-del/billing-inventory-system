@@ -396,6 +396,10 @@ export async function getSupplierReport(params = {}) {
   return await api.get('/reports/suppliers', { params });
 }
 
+export async function getSupplierOrderHistory(supplierId) {
+  return await api.get(`/reports/supplier-orders/${supplierId}`);
+}
+
 export async function getProfitLossReport(params = {}) {
   return await api.get('/reports/profit-loss', { params });
 }
