@@ -40,9 +40,9 @@
 }
 
 .billing-tab--active {
-  background: var(--color-bg-surface);
+  background: var(--color-accent-soft);
   border-color: var(--color-border);
-  color: var(--color-text-primary);
+  color: var(--color-accent-primary);
   font-weight: 700;
 }
 

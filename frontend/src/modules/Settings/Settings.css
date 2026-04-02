@@ -137,6 +137,31 @@
 
 .settings-credits { text-align: center; padding: 1rem; color: var(--color-text-muted); font-size: 0.82rem; }
 
+/* Appearance Settings */
+.appearance-options { display: flex; flex-direction: column; gap: 1.5rem; }
+.appearance-section { display: flex; flex-direction: column; gap: 0.75rem; }
+.appearance-divider { height: 1px; background: var(--color-border-tertiary); margin: 0.5rem 0; }
+
+.color-presets { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.color-preset { width: 32px; height: 32px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; padding: 0; }
+.color-preset:hover { transform: scale(1.1); }
+.color-preset.active { border-color: var(--color-accent-primary); transform: scale(1.1); box-shadow: 0 0 10px var(--color-accent-soft); }
+.color-preset--default { background: var(--color-bg-base); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+
+.color-picker-wrapper { position: relative; width: 32px; height: 32px; border-radius: 8px; overflow: hidden; border: 1px solid var(--color-border); cursor: pointer; }
+.color-picker-wrapper input { position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; border: none; padding: 0; cursor: pointer; }
+.color-picker-wrapper svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; mix-blend-mode: difference; pointer-events: none; }
+
+.image-upload-zone { width: 100%; max-width: 400px; }
+.image-upload-label { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; height: 120px; border: 2px dashed var(--color-border); border-radius: 12px; background: var(--color-bg-input); cursor: pointer; transition: all 0.2s; color: var(--color-text-muted); }
+.image-upload-label:hover { border-color: var(--color-accent-primary); background: var(--color-bg-overlay); color: var(--color-text-primary); }
+.image-upload-label span { font-size: 0.85rem; font-weight: 500; }
+
+.bg-preview-container { position: relative; width: 100%; height: 120px; border-radius: 12px; overflow: hidden; border: 2px solid var(--color-accent-primary); }
+.bg-preview { width: 100%; height: 100%; object-fit: cover; }
+.bg-remove-btn { position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: background 0.2s; }
+.bg-remove-btn:hover { background: var(--color-danger); }
+
 @media (max-width: 768px) {
   .settings-layout  { flex-direction: column; }
   .settings-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; position: static; }

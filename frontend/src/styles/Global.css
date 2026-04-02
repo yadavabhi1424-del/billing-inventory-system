@@ -34,7 +34,12 @@ body {
 }
 
 /* ── Typography resets ─────────────────────────────────── */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-display);
   font-weight: 800;
   line-height: 1.2;
@@ -119,4 +124,185 @@ input:-webkit-autofill:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════
+   GLOBAL GLASSMORPHISM — Outer Containers Only
+   Inspired by frosted-glass / translucent panel aesthetic.
+   Targets every "card" and "panel" class across the entire
+   app.  Inner content layers are explicitly untouched.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── Body gradient (subtle depth for glass refraction, same dark theme) ── */
+body {
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(30, 41, 59, 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 90%, rgba(30, 41, 59, 0.2) 0%, transparent 50%),
+    #0b0f1a !important;
+  background-attachment: fixed !important;
+  background-color: var(--color-bg-base) !important;
+}
+
+/* ── Master glass selector ───────────────────────────────── */
+/* Every outer panel/card/container across all modules       */
+
+/* Layout shell */
+.main-sidebar,
+.main-header,
+
+/* Dashboard */
+.stat-card,
+.today-card,
+.chart-container,
+.top-products,
+.ai-section,
+.low-stock,
+.recent-tx,
+.date-filter,
+.quick-action-btn,
+.chart-toggle,
+.drilldown-modal__content,
+.drilldown-modal__chart,
+
+/* Billing — Overview */
+.overview-stat-card,
+.overview-section,
+
+/* Billing — Transactions */
+.transactions-stat-card,
+.transactions-table-wrapper,
+
+/* Billing — Payment / POS */
+.bill-panel,
+.product-card,
+.pos-invoice-no,
+.pos-search__results,
+
+/* Inventory */
+.inventory-stat-card,
+.inventory-table-wrapper,
+.inventory-modal,
+.inventory-side-panel,
+.inventory-detail-image,
+.product-form-modal,
+
+/* Suppliers */
+.suppliers-stat-card,
+.suppliers-table-wrapper,
+.suppliers-modal,
+.suppliers-side-panel,
+.supplier-form-modal,
+.catalog-modal,
+
+/* Reports */
+.report-stat-card,
+.report-section,
+.report-period-filter,
+
+/* B2B */
+.b2b-card,
+.b2b-cart,
+.side-panel,
+
+/* AI */
+.ai-stat-card,
+.ai-table-card,
+.ai-section-card,
+.ai-tabs,
+.ai-chart-wrap,
+.ai-modal,
+.forecast-card,
+.model-info-card,
+/* ── Layout Cards & Panels (highly transparent glass) ── */
+.um-content,
+.settings-card,
+.settings-sidebar,
+.card,
+.dashboard-card,
+.discovery-map-container,
+.discovery-sidebar {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--glass-shadow), var(--glass-highlight) !important;
+}
+
+/* ── Floating Modals & Dropdowns (opaque glass) ── */
+.um-modal,
+.um-dropdown-menu,
+.settings-dropdown-menu,
+.notif-panel,
+.header-user__dropdown,
+.receipt-modal,
+.history-modal {
+  background: var(--glass-panel-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+  border: 1px solid var(--glass-border) !important;
+  box-shadow: var(--shadow-lg), var(--glass-highlight) !important;
+}
+
+/* ── Hover glow for interactive glass panels ─────────────── */
+.stat-card:hover,
+.today-card:hover,
+.quick-action-btn:hover,
+.overview-stat-card:hover,
+.transactions-stat-card:hover,
+.product-card:hover,
+.inventory-stat-card:hover,
+.suppliers-stat-card:hover,
+.report-stat-card:hover,
+.b2b-card:hover,
+.ai-stat-card:hover,
+.forecast-card:hover,
+.model-info-card:hover,
+.card:hover,
+.dashboard-card:hover,
+.settings-card:hover {
+  border-color: var(--glass-border-hover) !important;
+  box-shadow: var(--glass-shadow-hover), var(--glass-highlight) !important;
+}
+
+/* ── Layout areas stay transparent so glass refracts the body gradient ── */
+.auth-layout,
+.main-layout__page,
+.main-layout__content {
+  background: transparent !important;
+}
+
+/* ── Inner elements: keep opaque / no blur so text stays crisp ── */
+.history-table th,
+.transactions-table th,
+.inventory-table th,
+.suppliers-table th,
+.orders-table th,
+.um-th,
+.report-table th,
+.ai-table-card th {
+  background: rgba(15, 23, 42, 0.85) !important;
+  backdrop-filter: none !important;
+  color: rgba(255, 255, 255, 0.6) !important; /* Force light text for readability on dark background */
+}
+
+.receipt-printable-area,
+.invoice-modal {
+  background: var(--color-bg-surface) !important;
+  backdrop-filter: none !important;
+}
+
+.orders-table-container {
+  background: var(--glass-bg-heavy) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+.notif-panel__header {
+  background: var(--glass-bg-heavy) !important;
+  backdrop-filter: none !important;
+}
+
+.drilldown-modal__overlay {
+  backdrop-filter: blur(8px) !important;
 }

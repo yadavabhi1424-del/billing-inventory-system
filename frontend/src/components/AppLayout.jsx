@@ -26,10 +26,50 @@ function useTheme() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('stocksense_theme', theme);
+    // Trigger background update on theme change
+    window.dispatchEvent(new Event('ss_bg_update'));
   }, [theme]);
 
   const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
   return { theme, toggleTheme };
+}
+
+function useBackground(theme) {
+  const [bgStyle, setBgStyle] = useState({});
+
+  const updateBackground = () => {
+    const isDark = theme === 'dark';
+    const prefix = isDark ? 'dark' : 'light';
+    
+    const type = localStorage.getItem(`ss_bg_${prefix}_type`) || 'default';
+    const val = localStorage.getItem(`ss_bg_${prefix}_val`) || '';
+
+    if (type === 'color' && val) {
+      setBgStyle({ 
+        backgroundColor: val, 
+        backgroundImage: 'none' 
+      });
+    } else if (type === 'image' && val) {
+      const isGradient = val.startsWith('linear-gradient');
+      setBgStyle({ 
+        backgroundImage: isGradient ? val : `url(${val})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        backgroundColor: 'transparent'
+      });
+    } else {
+      setBgStyle({}); // Revert to CSS default (var(--color-bg-base))
+    }
+  };
+
+  useEffect(() => {
+    updateBackground();
+    window.addEventListener('ss_bg_update', updateBackground);
+    return () => window.removeEventListener('ss_bg_update', updateBackground);
+  }, [theme]);
+
+  return bgStyle;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -359,10 +399,77 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
 // ══════════════════════════════════════════════════════════
 //  MAIN LAYOUT
 // ══════════════════════════════════════════════════════════
+
+function useAccentColor(theme) {
+  useEffect(() => {
+    const hex2rgb = (hex) => {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.length === 3 ? h[0]+h[0] : h.slice(0, 2), 16) || 0;
+      const g = parseInt(h.length === 3 ? h[1]+h[1] : h.slice(2, 4), 16) || 0;
+      const b = parseInt(h.length === 3 ? h[2]+h[2] : h.slice(4, 6), 16) || 0;
+      return `${r}, ${g}, ${b}`;
+    };
+
+    const pSBC = (p, c) => {
+      const r = parseInt(c.slice(1,3), 16);
+      const g = parseInt(c.slice(3,5), 16);
+      const b = parseInt(c.slice(5,7), 16);
+      const R = Math.round(r + (255 - r) * p);
+      const G = Math.round(g + (255 - g) * p);
+      const B = Math.round(b + (255 - b) * p);
+      return `#${Math.min(255, Math.max(0, R)).toString(16).padStart(2, '0')}${Math.min(255, Math.max(0, G)).toString(16).padStart(2, '0')}${Math.min(255, Math.max(0, B)).toString(16).padStart(2, '0')}`;
+    };
+
+    const updateAccent = () => {
+      const isDark = theme === 'dark';
+      const prefix = isDark ? 'dark' : 'light';
+      const bgVal = localStorage.getItem(`ss_bg_${prefix}_val`) || '';
+      
+      let accent = isDark ? '#6366f1' : '#4f46e5'; // Default Indigo
+
+      // Map known theme backgrounds to their appropriate accents
+      if (bgVal.includes('#0f172a') || bgVal.includes('#334155')) accent = isDark ? '#0ea5e9' : '#0284c7'; // Slate -> Cyan
+      else if (bgVal.includes('#1e1b4b')) accent = isDark ? '#a78bfa' : '#7c3aed'; // Midnight -> Violet
+      else if (bgVal.includes('#fef2f2') || bgVal.includes('#fee2e2')) accent = isDark ? '#fb7185' : '#e11d48'; // Rose
+      else if (bgVal.includes('#eff6ff') || bgVal.includes('#dbeafe')) accent = isDark ? '#38bdf8' : '#0284c7'; // Sky/Ocean
+      else if (bgVal.includes('#f5f3ff')) accent = isDark ? '#a78bfa' : '#7c3aed'; // Lavender -> Violet
+      
+      // Calculate derived hex if custom color (naive tint to visible range)
+      if (bgVal && bgVal.startsWith('#') && !['#020617', '#111827', '#f8fafc', '#f1f5f9'].includes(bgVal)) {
+        // Just use it as the base if it's not a grayscale default, we lighten/darken it to act as accent
+        if (bgVal.length === 7) {
+           // If user picked a custom background color, let's use a brightened/darkened version of it as accent!
+           accent = isDark ? pSBC(0.6, bgVal) : pSBC(-0.2, bgVal);
+           if(accent.includes('NaN')) accent = isDark ? '#6366f1' : '#4f46e5';
+        }
+      }
+
+      document.documentElement.style.setProperty('--color-accent-primary', accent);
+      
+      if (accent.startsWith('#')) {
+        const rgb = hex2rgb(accent);
+        const lighter = pSBC(0.15, accent);
+        document.documentElement.style.setProperty('--color-accent-soft', `rgba(${rgb}, 0.12)`);
+        document.documentElement.style.setProperty('--color-accent-glow', `rgba(${rgb}, 0.35)`);
+        document.documentElement.style.setProperty('--color-border-accent', `rgba(${rgb}, 0.35)`);
+        document.documentElement.style.setProperty('--color-accent-hover', lighter);
+        document.documentElement.style.setProperty('--gradient-brand', `linear-gradient(135deg, ${accent}, ${lighter})`);
+        document.documentElement.style.setProperty('--gradient-brand-hover', `linear-gradient(135deg, ${lighter}, ${accent})`);
+      }
+    };
+
+    updateAccent();
+    window.addEventListener('ss_bg_update', updateAccent); // Listen to Background update instead!
+    return () => window.removeEventListener('ss_bg_update', updateAccent);
+  }, [theme]);
+}
+
 export default function MainLayout({ user, onLogout, allowedRoutes, children }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  useAccentColor();
+  const bgStyle = useBackground(theme);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -372,7 +479,7 @@ export default function MainLayout({ user, onLogout, allowedRoutes, children }) 
   };
 
   return (
-    <div className="main-layout">
+    <div className="main-layout" style={bgStyle}>
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}

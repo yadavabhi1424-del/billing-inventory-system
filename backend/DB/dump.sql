@@ -43,7 +43,7 @@ CREATE TABLE `b2b_order_items` (
 
 LOCK TABLES `b2b_order_items` WRITE;
 /*!40000 ALTER TABLE `b2b_order_items` DISABLE KEYS */;
-INSERT INTO `b2b_order_items` VALUES ('373092dd-bfdd-4db6-868d-f6fa38557735','d5ad577a-1463-4afc-8a30-412c0dadba34','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('3ad2751f-00bb-44a1-9004-0244f36961a5','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,10,500.00),('973305a8-80c0-4e34-8bba-a83b9a20353f','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,9,900.00);
+INSERT INTO `b2b_order_items` VALUES ('13696db5-23f5-4665-be3b-4a0c81a3aaca','fd1d2a1f-9faa-4b3f-a626-637732b6a169','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('373092dd-bfdd-4db6-868d-f6fa38557735','d5ad577a-1463-4afc-8a30-412c0dadba34','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('3ad2751f-00bb-44a1-9004-0244f36961a5','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,10,500.00),('973305a8-80c0-4e34-8bba-a83b9a20353f','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,9,900.00),('9c403cbb-68f1-4e5a-a489-13f4a42d0430','a736ecff-a34c-41b8-b8f5-fbcaeb706cbd','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,3,300.00),('b5f7cba8-e9c0-4219-9172-bb3ba0d50065','fd1d2a1f-9faa-4b3f-a626-637732b6a169','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,5,250.00);
 /*!40000 ALTER TABLE `b2b_order_items` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -66,7 +66,7 @@ CREATE TABLE `b2b_orders` (
   `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`order_id`),
   UNIQUE KEY `order_number` (`order_number`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -75,7 +75,7 @@ CREATE TABLE `b2b_orders` (
 
 LOCK TABLES `b2b_orders` WRITE;
 /*!40000 ALTER TABLE `b2b_orders` DISABLE KEYS */;
-INSERT INTO `b2b_orders` VALUES ('baeaf1e3-074f-4a50-a3b1-d429d1dae575',2,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',1400.00,NULL,'2026-04-01 02:21:54','2026-04-01 02:25:33'),('d5ad577a-1463-4afc-8a30-412c0dadba34',1,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',100.00,NULL,'2026-04-01 01:30:28','2026-04-01 02:22:49');
+INSERT INTO `b2b_orders` VALUES ('a736ecff-a34c-41b8-b8f5-fbcaeb706cbd',4,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',300.00,NULL,'2026-04-02 22:11:14','2026-04-02 22:13:39'),('baeaf1e3-074f-4a50-a3b1-d429d1dae575',2,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',1400.00,NULL,'2026-04-01 02:21:54','2026-04-01 02:25:33'),('d5ad577a-1463-4afc-8a30-412c0dadba34',1,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',100.00,NULL,'2026-04-01 01:30:28','2026-04-01 02:22:49'),('fd1d2a1f-9faa-4b3f-a626-637732b6a169',3,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',350.00,NULL,'2026-04-02 14:18:17','2026-04-02 14:21:26');
 /*!40000 ALTER TABLE `b2b_orders` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -382,4 +382,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-01 16:40:59
+-- Dump completed on 2026-04-02 22:38:03

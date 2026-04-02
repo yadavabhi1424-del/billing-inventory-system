@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getB2BOrders, getB2BOrderById, updateB2BOrderStatus } from '../../services/api';
 import Icon from '../../components/Icon';
@@ -47,7 +48,6 @@ export default function B2BOrders({ user }) {
       if (res.success) {
         setSelectedOrder(res.data);
         setPanelOpen(true);
-        // Refresh added-items tracking for this order from localStorage
         const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
         setAddedItems(stored);
       }
@@ -58,7 +58,7 @@ export default function B2BOrders({ user }) {
 
   const handleClosePanel = () => {
     setPanelOpen(false);
-    setTimeout(() => setSelectedOrder(null), 300); // Wait for transition
+    setTimeout(() => setSelectedOrder(null), 300);
   };
 
   const handleAction = async (id, status) => {
@@ -69,7 +69,6 @@ export default function B2BOrders({ user }) {
         if (selectedOrder?.order_id === id) {
           setSelectedOrder(prev => ({ ...prev, status }));
         }
-        // If it was a list-level action, close panel if open
         if (panelOpen && status === 'REJECTED') handleClosePanel();
       }
     } catch (err) {
@@ -152,135 +151,140 @@ export default function B2BOrders({ user }) {
         )}
       </div>
 
-      {/* Side Panel Drawer */}
-      <div className={`side-panel-overlay ${panelOpen ? 'open' : ''}`} onClick={handleClosePanel} />
-      <div className={`side-panel ${panelOpen ? 'open' : ''}`}>
-        {selectedOrder && (
-          <div className="side-panel__content">
-            <div className="side-panel__header">
-              <div className="header-top">
-                <span className="order-tag">Order Details</span>
-                <button className="close-btn" onClick={handleClosePanel}><Icon name="x" size={20} /></button>
-              </div>
-              <h2>Order #{selectedOrder.order_number}</h2>
-              <div className="header-meta">
-                <span className={`status-pill status-pill--large ${STATUS_MAP[selectedOrder.status].cls}`}>
-                  {STATUS_MAP[selectedOrder.status].label}
-                </span>
-                <span className="date">{new Date(selectedOrder.createdAt).toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="side-panel__body">
-              <div className="info-section">
-                <h3>{isSupplier ? 'Billing To' : 'Supplier Details'}</h3>
-                <div className="info-card">
-                  <div className="info-card__row">
-                    <Icon name="box" size={14} />
-                    <strong>{isSupplier ? selectedOrder.shop_name : selectedOrder.supplier_name}</strong>
+      {/* Side Panel — portaled to document.body to escape backdrop-filter containment */}
+      {createPortal(
+        <>
+          <div className={`side-panel-overlay ${panelOpen ? 'open' : ''}`} onClick={handleClosePanel} />
+          <div className={`side-panel ${panelOpen ? 'open' : ''}`}>
+            {selectedOrder && (
+              <div className="side-panel__content">
+                <div className="side-panel__header">
+                  <div className="header-top">
+                    <span className="order-tag">Order Details</span>
+                    <button className="close-btn" onClick={handleClosePanel}><Icon name="x" size={20} /></button>
                   </div>
-                  <div className="info-card__row">
-                    <Icon name="payment" size={14} />
-                    <span>{isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone}</span>
+                  <h2>Order #{selectedOrder.order_number}</h2>
+                  <div className="header-meta">
+                    <span className={`status-pill status-pill--large ${STATUS_MAP[selectedOrder.status].cls}`}>
+                      {STATUS_MAP[selectedOrder.status].label}
+                    </span>
+                    <span className="date">{new Date(selectedOrder.createdAt).toLocaleString()}</span>
                   </div>
                 </div>
-              </div>
 
-              <div className="items-section">
-                <h3>Ordered Items</h3>
-                <div className="items-list">
-                  {selectedOrder.items?.map(item => (
-                    <div key={item.id} className={`item-row ${!isSupplier && selectedOrder.status === 'CLOSED' ? 'item-row--with-action' : ''}`}>
-                      <div className="item-info">
-                        <span className="item-name">{item.name}</span>
-                        <span className="item-sku">{item.sku}</span>
+                <div className="side-panel__body">
+                  <div className="info-section">
+                    <h3>{isSupplier ? 'Billing To' : 'Supplier Details'}</h3>
+                    <div className="info-card">
+                      <div className="info-card__row">
+                        <Icon name="box" size={14} />
+                        <strong>{isSupplier ? selectedOrder.shop_name : selectedOrder.supplier_name}</strong>
                       </div>
-                      <div className="item-qty">
-                        {item.qty} × {fmt(item.price)}
+                      <div className="info-card__row">
+                        <Icon name="payment" size={14} />
+                        <span>{isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone}</span>
                       </div>
-                      <div className="item-total">{fmt(item.total)}</div>
-                      {!isSupplier && selectedOrder.status === 'CLOSED' && (() => {
-                        const itemKey = `${selectedOrder.order_id}_${item.id}`;
-                        const isAdded = !!addedItems[itemKey];
-                        return (
-                          <button
-                            className={`item-add-inventory-btn ${isAdded ? 'item-add-inventory-btn--added' : ''}`}
-                            title={isAdded ? 'Already added to inventory' : 'Add to Inventory'}
-                            disabled={isAdded}
-                            onClick={() => navigate('/inventory', {
-                              state: {
-                                addFromOrder: {
-                                  name: item.name,
-                                  costPrice: item.price,
-                                  quantity: item.qty,
-                                  supplierName: selectedOrder.supplier_name,
-                                  supplierId: selectedOrder.supplier_id,
-                                  supplierDbName: selectedOrder.supplier_db_name,
-                                  orderId: selectedOrder.order_id,
-                                  itemId: item.id,
-                                }
-                              }
-                            })}
-                          >
-                            <Icon name={isAdded ? 'check' : 'box'} size={13} />
-                            {isAdded ? 'Added' : 'Add item'}
-                          </button>
-                        );
-                      })()}
                     </div>
-                  ))}
-                </div>
-              </div>
-              
-              {selectedOrder.notes && (
-                <div className="notes-section">
-                  <h3>Notes</h3>
-                  <p>{selectedOrder.notes}</p>
-                </div>
-              )}
-            </div>
+                  </div>
 
-            <div className="side-panel__footer">
-              <div className="footer-summary">
-                <span>Summary</span>
-                <div className="total-row">
-                  <span>Total Amount</span>
-                  <strong>{fmt(selectedOrder.total_amount)}</strong>
+                  <div className="items-section">
+                    <h3>Ordered Items</h3>
+                    <div className="items-list">
+                      {selectedOrder.items?.map(item => (
+                        <div key={item.id} className={`item-row ${!isSupplier && selectedOrder.status === 'CLOSED' ? 'item-row--with-action' : ''}`}>
+                          <div className="item-info">
+                            <span className="item-name">{item.name}</span>
+                            <span className="item-sku">{item.sku}</span>
+                          </div>
+                          <div className="item-qty">
+                            {item.qty} × {fmt(item.price)}
+                          </div>
+                          <div className="item-total">{fmt(item.total)}</div>
+                          {!isSupplier && selectedOrder.status === 'CLOSED' && (() => {
+                            const itemKey = `${selectedOrder.order_id}_${item.id}`;
+                            const isAdded = !!addedItems[itemKey];
+                            return (
+                              <button
+                                className={`item-add-inventory-btn ${isAdded ? 'item-add-inventory-btn--added' : ''}`}
+                                title={isAdded ? 'Already added to inventory' : 'Add to Inventory'}
+                                disabled={isAdded}
+                                onClick={() => navigate('/inventory', {
+                                  state: {
+                                    addFromOrder: {
+                                      name: item.name,
+                                      costPrice: item.price,
+                                      quantity: item.qty,
+                                      supplierName: selectedOrder.supplier_name,
+                                      supplierId: selectedOrder.supplier_id,
+                                      supplierDbName: selectedOrder.supplier_db_name,
+                                      orderId: selectedOrder.order_id,
+                                      itemId: item.id,
+                                    }
+                                  }
+                                })}
+                              >
+                                <Icon name={isAdded ? 'check' : 'box'} size={13} />
+                                {isAdded ? 'Added' : 'Add item'}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {selectedOrder.notes && (
+                    <div className="notes-section">
+                      <h3>Notes</h3>
+                      <p>{selectedOrder.notes}</p>
+                    </div>
+                  )}
                 </div>
-              </div>
 
-              <div className="footer-actions">
-                {isSupplier && selectedOrder.status === 'PENDING' && (
-                  <div className="dual-actions">
-                    <button className="panel-btn btn-accept" onClick={() => handleAction(selectedOrder.order_id, 'ACCEPTED')}>
-                      Accept Order
-                    </button>
-                    <button className="panel-btn btn-reject" onClick={() => handleAction(selectedOrder.order_id, 'REJECTED')}>
-                      Reject
+                <div className="side-panel__footer">
+                  <div className="footer-summary">
+                    <span>Summary</span>
+                    <div className="total-row">
+                      <span>Total Amount</span>
+                      <strong>{fmt(selectedOrder.total_amount)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="footer-actions">
+                    {isSupplier && selectedOrder.status === 'PENDING' && (
+                      <div className="dual-actions">
+                        <button className="panel-btn btn-accept" onClick={() => handleAction(selectedOrder.order_id, 'ACCEPTED')}>
+                          Accept Order
+                        </button>
+                        <button className="panel-btn btn-reject" onClick={() => handleAction(selectedOrder.order_id, 'REJECTED')}>
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                    
+                    {isSupplier && selectedOrder.status === 'ACCEPTED' && (
+                      <button className="panel-btn btn-primary" onClick={() => navigate(`/billing?order_id=${selectedOrder.order_id}`)}>
+                        Proceed to Bill
+                      </button>
+                    )}
+
+                    {!isSupplier && selectedOrder.status === 'BILLED' && (
+                      <button className="panel-btn btn-success" onClick={() => handleAction(selectedOrder.order_id, 'CLOSED')}>
+                        Mark Received
+                      </button>
+                    )}
+
+                    <button className="panel-btn btn-outline" onClick={handleClosePanel}>
+                      Close
                     </button>
                   </div>
-                )}
-                
-                {isSupplier && selectedOrder.status === 'ACCEPTED' && (
-                  <button className="panel-btn btn-primary" onClick={() => navigate(`/billing?order_id=${selectedOrder.order_id}`)}>
-                    Proceed to Bill
-                  </button>
-                )}
-
-                {!isSupplier && selectedOrder.status === 'BILLED' && (
-                  <button className="panel-btn btn-success" onClick={() => handleAction(selectedOrder.order_id, 'CLOSED')}>
-                    Mark Received
-                  </button>
-                )}
-
-                <button className="panel-btn btn-outline" onClick={handleClosePanel}>
-                  Close
-                </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
-      </div>
+        </>,
+        document.body
+      )}
     </div>
   );
 }

@@ -553,6 +553,146 @@ function InventoryPreferences() {
 // ══════════════════════════════════════════════════════════
 //  NOTIFICATIONS
 // ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+//  APPEARANCE SETTINGS
+// ══════════════════════════════════════════════════════════
+function AppearanceSettings({ theme }) {
+  const isDark = theme === 'dark';
+  const prefix = isDark ? 'dark' : 'light';
+
+  const [bgType, setBgType] = useState(getLocal(`bg_${prefix}_type`, 'default'));
+  const [bgVal, setBgVal] = useState(getLocal(`bg_${prefix}_val`, ''));
+  const [saved, setSaved] = useState(false);
+
+  const presets = isDark 
+    ? [
+        { type: 'color', val: '#020617', label: 'Obsidian' },
+        { type: 'color', val: '#0f172a', label: 'Slate' },
+        { type: 'color', val: '#1e1b4b', label: 'Midnight' },
+        { type: 'image', val: 'linear-gradient(135deg, #020617 0%, #1e1b4b 100%)', label: 'Cosmos' },
+        { type: 'image', val: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)', label: 'Steel' },
+        { type: 'image', val: 'linear-gradient(135deg, #111827 0%, #1e293b 100%)', label: 'Shadow' }
+      ]
+    : [
+        { type: 'color', val: '#f8fafc', label: 'Alabaster' },
+        { type: 'color', val: '#f1f5f9', label: 'Cloud' },
+        { type: 'color', val: '#fef2f2', label: 'Rose' },
+        { type: 'color', val: '#eff6ff', label: 'Sky' },
+        { type: 'color', val: '#f5f3ff', label: 'Lavender' },
+        { type: 'image', val: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)', label: 'Frost' },
+        { type: 'image', val: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)', label: 'Misty' },
+        { type: 'image', val: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', label: 'Ocean' }
+      ];
+
+  const handleSave = (type, val) => {
+    setBgType(type);
+    setBgVal(val);
+    saveLocal(`bg_${prefix}_type`, type);
+    saveLocal(`bg_${prefix}_val`, val);
+    
+    // Trigger global update
+    window.dispatchEvent(new Event('ss_bg_update'));
+    
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Image is too large (max 2MB). Please use a smaller file.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      handleSave('image', reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div className="settings-form">
+      <div className="settings-section-title">Current Theme: {isDark ? 'Dark Mode' : 'Light Mode'}</div>
+
+      <div className="settings-card">
+        <div className="settings-card__header">
+          <h3>Main Background</h3>
+          <p>Customize the app's base background layer for {isDark ? 'dark' : 'light'} mode</p>
+        </div>
+
+        <div className="appearance-options">
+          <div className="appearance-section">
+            <label className="settings-label">Solid Colors</label>
+            <div className="color-presets">
+              <button 
+                className={`color-preset color-preset--default ${bgType === 'default' ? 'active' : ''}`}
+                onClick={() => handleSave('default', '')}
+                title="System Default"
+              >
+                <Icon name="refresh" size={14} />
+              </button>
+              {presets.map(c => (
+                <button 
+                  key={c.label}
+                  className={`color-preset ${bgVal === c.val ? 'active' : ''}`}
+                  style={{ background: c.val }}
+                  onClick={() => handleSave(c.type, c.val)}
+                  title={c.label}
+                />
+              ))}
+              <div className="color-picker-wrapper">
+                <input 
+                  type="color" 
+                  value={bgType === 'color' ? bgVal : '#6366f1'} 
+                  onChange={(e) => handleSave('color', e.target.value)}
+                />
+                <Icon name="settings" size={12} />
+              </div>
+            </div>
+          </div>
+
+          <div className="appearance-divider" />
+
+          <div className="appearance-section">
+            <label className="settings-label">Background Image</label>
+            <div className="image-upload-zone">
+              {bgType === 'image' && bgVal ? (
+                <div className="bg-preview-container">
+                  <img src={bgVal} alt="Background preview" className="bg-preview" />
+                  <button className="bg-remove-btn" onClick={() => handleSave('default', '')}>
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+              ) : (
+                <label className="image-upload-label">
+                  <Icon name="box" size={24} />
+                  <span>Upload Image</span>
+                  <input type="file" accept="image/*" onChange={handleImageUpload} hidden />
+                </label>
+              )}
+            </div>
+            <p className="settings-hint">High-quality abstract patterns work best (Max 2MB)</p>
+          </div>
+        </div>
+
+        <div className="settings-footer">
+          {saved && <span className="settings-saved">✅ Applied to {isDark ? 'Dark' : 'Light'} Mode</span>}
+        </div>
+      </div>
+
+      <div className="settings-info-card" style={{ background: 'var(--color-bg-overlay)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--color-border)' }}>
+        <p style={{ fontSize: '0.82rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+          <Icon name="check" size={14} style={{ verticalAlign: 'middle', marginRight: '6px' }} />
+          <strong>Pro Tip:</strong> Backgrounds are saved separately for Light and Dark modes. Toggle your theme in the header to set the perfect background for both!
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Notifications() {
   const [form, setForm] = useState({
     lowStockEmail: getLocal('notif_lowStockEmail', 'true') === 'true',
@@ -673,6 +813,7 @@ const TABS = [
   { id: 'team', label: 'Team', icon: 'users' },
   { id: 'inventory', label: 'Inventory', icon: 'inventory' },
   { id: 'notif', label: 'Notifications', icon: 'dashboard' },
+  { id: 'appearance', label: 'Appearance', icon: 'settings' },
   { id: 'about', label: 'About', icon: 'settings' },
 ];
 
@@ -682,7 +823,7 @@ export default function Settings({ user }) {
 
   const filteredTabs = TABS.filter(t => {
     if (isAdmin) return true;
-    return ['billing', 'account', 'about'].includes(t.id);
+    return ['billing', 'account', 'appearance', 'about'].includes(t.id);
   });
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -724,6 +865,7 @@ export default function Settings({ user }) {
           {activeTab === 'team' && <UserManagement user={user} />}
           {activeTab === 'inventory' && <InventoryPreferences />}
           {activeTab === 'notif' && <Notifications />}
+          {activeTab === 'appearance' && <AppearanceSettings theme={document.documentElement.getAttribute('data-theme') || 'dark'} />}
           {activeTab === 'about' && <About />}
         </div>
       </div>
