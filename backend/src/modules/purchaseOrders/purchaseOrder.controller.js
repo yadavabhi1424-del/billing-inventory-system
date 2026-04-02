@@ -185,7 +185,7 @@ const receiveOrder = async (req, res, next) => {
       }
 
       await conn.execute(
-        `UPDATE purchase_orders SET status = ?, receivedDate = NOW() WHERE po_id = ?`,
+        `UPDATE purchase_orders SET status = ?, receivedDate = CURDATE() WHERE po_id = ?`,
         [allReceived ? "RECEIVED" : "PARTIAL", req.params.id]
       );
 

@@ -16,6 +16,70 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
+-- Table structure for table `b2b_order_items`
+--
+
+DROP TABLE IF EXISTS `b2b_order_items`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `b2b_order_items` (
+  `id` varchar(36) NOT NULL,
+  `order_id` varchar(36) NOT NULL,
+  `product_id` varchar(36) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `sku` varchar(100) NOT NULL,
+  `price` decimal(10,2) DEFAULT '0.00',
+  `qty` int DEFAULT '1',
+  `total` decimal(12,2) DEFAULT '0.00',
+  PRIMARY KEY (`id`),
+  KEY `order_id` (`order_id`),
+  CONSTRAINT `b2b_order_items_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `b2b_orders` (`order_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `b2b_order_items`
+--
+
+LOCK TABLES `b2b_order_items` WRITE;
+/*!40000 ALTER TABLE `b2b_order_items` DISABLE KEYS */;
+INSERT INTO `b2b_order_items` VALUES ('373092dd-bfdd-4db6-868d-f6fa38557735','d5ad577a-1463-4afc-8a30-412c0dadba34','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('3ad2751f-00bb-44a1-9004-0244f36961a5','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,10,500.00),('973305a8-80c0-4e34-8bba-a83b9a20353f','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,9,900.00);
+/*!40000 ALTER TABLE `b2b_order_items` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `b2b_orders`
+--
+
+DROP TABLE IF EXISTS `b2b_orders`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `b2b_orders` (
+  `order_id` varchar(36) NOT NULL,
+  `order_number` int NOT NULL AUTO_INCREMENT,
+  `shop_id` varchar(36) NOT NULL,
+  `supplier_id` varchar(36) NOT NULL,
+  `status` enum('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED') DEFAULT 'PENDING',
+  `total_amount` decimal(12,2) DEFAULT '0.00',
+  `notes` text,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`order_id`),
+  UNIQUE KEY `order_number` (`order_number`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `b2b_orders`
+--
+
+LOCK TABLES `b2b_orders` WRITE;
+/*!40000 ALTER TABLE `b2b_orders` DISABLE KEYS */;
+INSERT INTO `b2b_orders` VALUES ('baeaf1e3-074f-4a50-a3b1-d429d1dae575',2,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',1400.00,NULL,'2026-04-01 02:21:54','2026-04-01 02:25:33'),('d5ad577a-1463-4afc-8a30-412c0dadba34',1,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',100.00,NULL,'2026-04-01 01:30:28','2026-04-01 02:22:49');
+/*!40000 ALTER TABLE `b2b_orders` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `global_users`
 --
 
@@ -37,7 +101,7 @@ CREATE TABLE `global_users` (
 
 LOCK TABLES `global_users` WRITE;
 /*!40000 ALTER TABLE `global_users` DISABLE KEYS */;
-INSERT INTO `global_users` VALUES ('nothing0123459876@gmail.com','supplier_fd8d25b8502f457a','supplier','2026-03-28 23:45:52'),('tiyeb13599@smkanba.com','stocksense_tenant_b15d6534d0a14ed6','shop','2026-03-28 23:45:52'),('yadavabhinav964104@gmail.com','inventory','shop','2026-03-29 01:48:41');
+INSERT INTO `global_users` VALUES ('karansyfb7575@gmail.com','supplier_9ed4e45d6be84d39','supplier','2026-03-31 13:14:15'),('nothing0123459876@gmail.com','supplier_fd8d25b8502f457a','supplier','2026-03-28 23:45:52'),('tiyeb13599@smkanba.com','stocksense_tenant_b15d6534d0a14ed6','shop','2026-03-28 23:45:52'),('yadavabhinav964104@gmail.com','inventory','shop','2026-03-29 01:48:41');
 /*!40000 ALTER TABLE `global_users` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -83,6 +147,7 @@ CREATE TABLE `profiles` (
   `entity_id` varchar(36) NOT NULL,
   `entity_type` enum('shop','supplier') NOT NULL,
   `business_name` varchar(100) NOT NULL,
+  `owner_name` varchar(100) DEFAULT NULL,
   `slug` varchar(120) NOT NULL,
   `description` text,
   `logo` varchar(255) DEFAULT NULL,
@@ -109,7 +174,7 @@ CREATE TABLE `profiles` (
 
 LOCK TABLES `profiles` WRITE;
 /*!40000 ALTER TABLE `profiles` DISABLE KEYS */;
-INSERT INTO `profiles` VALUES ('564e5269-8af9-4922-862a-d94e9a2655da','supplier_fd8d25b8502f457a','supplier','ABC Beverages','karan_s_business_2f457a','ABC Beverages is a wholesale and distribution company specializing in a wide range of non-alcoholic drinks including packaged drinking water, soft drinks, fruit juices, energy drinks, and dairy-based beverages. The supplier partners with leading national and regional brands to ensure consistent quality and timely delivery. With a strong logistics network across Lucknow and nearby districts, ABC Beverages caters to retail stores, supermarkets, restaurants, and institutional clients. The company focuses on maintaining product freshness, competitive pricing, and reliable supply chain operations.',NULL,NULL,NULL,NULL,'warehouse',1,'2026-03-29 02:44:39',NULL,'nothing0123459876@gmail.com','+918756543910',NULL,NULL),('965c0575-9c45-458e-b7ee-645549d97d12','stocksense_tenant_b15d6534d0a14ed6','shop','as shop','as_shop_a14ed6','as shop is hardware shop where you can find all types of hardware components',NULL,NULL,NULL,NULL,'hardware',1,'2026-03-28 23:20:50','2/3, local street, lucknow','tiyeb13599@smkanba.com','+9198876456789',NULL,NULL),('cb0bc51f-8cca-459f-a42a-66a418c08fbf','inventory','shop','My Shop','my_shop_entory','My Shop is a retail shop that provides a wide range of everyday essentials required for daily living. It focuses on convenience, affordability, and quick access to commonly used products, making it a go-to place for nearby residents.\n\nProducts (Examples):\n\nGroceries (rice, flour, pulses, sugar)\nPackaged foods (biscuits, snacks, instant noodles)\nBeverages (tea, coffee, soft drinks)\nHousehold items (detergents, soaps, cleaning supplies)\nPersonal care products (shampoo, toothpaste, oils)\nStationery items (notebooks, pens, pencils)',NULL,NULL,NULL,NULL,'general_store',1,'2026-03-29 02:44:39',NULL,'yadavabhi1424@gmail.com',NULL,NULL,NULL);
+INSERT INTO `profiles` VALUES ('5512a360-2ce9-11f1-842e-d4939063d02e','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','supplier','KSY\'s Business',NULL,'ksy_s_business_9ed4e4',NULL,NULL,NULL,NULL,NULL,'general',1,'2026-03-31 15:36:49',NULL,NULL,NULL,NULL,NULL),('7a1ed6a2-57f8-4ce3-9ede-8809cb18c34e','supplier_9ed4e45d6be84d39','shop','KSY Stationary Supplier',NULL,'ksy_stationary_supplier_e84d39','KSY Stationery Suppliers is a reliable distributor of high-quality stationery products catering to schools, offices, and retail stores. The company offers a wide range of items including notebooks, pens, pencils, files, registers, printing paper, art supplies, and office essentials. Known for consistent product quality and timely delivery, ABC Stationery Suppliers focuses on maintaining strong client relationships through competitive pricing and dependable service. Whether for bulk institutional needs or everyday office use, the supplier ensures availability of trusted brands along with cost-effective alternatives.',NULL,NULL,NULL,NULL,'stationery',1,'2026-03-31 13:22:48','Shop No. 12, First Floor, Shree Plaza Near Alambagh Bus Stand Alambagh Lucknow, Uttar Pradesh – 226005 India',NULL,NULL,NULL,NULL),('965c0575-9c45-458e-b7ee-645549d97d12','stocksense_tenant_b15d6534d0a14ed6','shop','as shop',NULL,'as_shop_a14ed6','as shop is hardware shop where you can find all types of hardware components',NULL,NULL,NULL,NULL,'hardware',1,'2026-03-28 23:20:50','2/3, local street, lucknow','tiyeb13599@smkanba.com','+9198876456789',NULL,NULL),('cb0bc51f-8cca-459f-a42a-66a418c08fbf','inventory','shop','My Shop',NULL,'my_shop_entory','My Shop is a retail shop that provides a wide range of everyday essentials required for daily living. It focuses on convenience, affordability, and quick access to commonly used products, making it a go-to place for nearby residents.\n\nProducts (Examples):\n\nGroceries (rice, flour, pulses, sugar)\nPackaged foods (biscuits, snacks, instant noodles)\nBeverages (tea, coffee, soft drinks)\nHousehold items (detergents, soaps, cleaning supplies)\nPersonal care products (shampoo, toothpaste, oils)\nStationery items (notebooks, pens, pencils)',NULL,NULL,NULL,NULL,'general_store',1,'2026-03-29 02:44:39',NULL,'yadavabhi1424@gmail.com',NULL,NULL,NULL);
 /*!40000 ALTER TABLE `profiles` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -138,7 +203,7 @@ CREATE TABLE `shop_supplier_map` (
 
 LOCK TABLES `shop_supplier_map` WRITE;
 /*!40000 ALTER TABLE `shop_supplier_map` DISABLE KEYS */;
-INSERT INTO `shop_supplier_map` VALUES ('a8f5a8cc-205a-4168-bf77-edd4085f6b1e','inventory','supplier_fd8d25b8502f457a','ACCEPTED','shop','2026-03-29 00:54:34');
+INSERT INTO `shop_supplier_map` VALUES ('80c36348-c5dc-4cd0-b43f-b1b1a7e714fb','inventory','supplier_9ed4e45d6be84d39','ACCEPTED','supplier','2026-03-31 16:34:19'),('a8f5a8cc-205a-4168-bf77-edd4085f6b1e','inventory','supplier_fd8d25b8502f457a','ACCEPTED','shop','2026-03-29 00:54:34'),('c9d77523-ef80-486f-9ba6-7e73ae081242','inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','ACCEPTED','shop','2026-04-01 01:30:28');
 /*!40000 ALTER TABLE `shop_supplier_map` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -235,6 +300,7 @@ CREATE TABLE `supplier_products` (
 
 LOCK TABLES `supplier_products` WRITE;
 /*!40000 ALTER TABLE `supplier_products` DISABLE KEYS */;
+INSERT INTO `supplier_products` VALUES ('a59c3d41-405d-4e41-8447-9236b98b6fb2','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',NULL,'pack',50.00,NULL,1,'2026-04-01 02:21:02'),('e6095bdd-7d1d-426e-98f2-14254e46a06a','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',NULL,'pcs',100.00,NULL,1,'2026-03-31 22:28:03');
 /*!40000 ALTER TABLE `supplier_products` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -268,7 +334,7 @@ CREATE TABLE `suppliers` (
 
 LOCK TABLES `suppliers` WRITE;
 /*!40000 ALTER TABLE `suppliers` DISABLE KEYS */;
-INSERT INTO `suppliers` VALUES ('fd8d25b8-502f-457a-a9f1-aab04d48a721','Karan\'s Business','karan_s_business_fd8d25','Karan','nothing0123459876@gmail.com','+918756543910','supplier_fd8d25b8502f457a','TRIAL','2026-03-28 22:56:47');
+INSERT INTO `suppliers` VALUES ('9ed4e45d-6be8-4d39-b578-4bbd37b6e122','KSY\'s Business','ksy_s_business_9ed4e4','KSY','karansyfb7575@gmail.com','+918756543910','supplier_9ed4e45d6be84d39','TRIAL','2026-03-31 13:14:14');
 /*!40000 ALTER TABLE `suppliers` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -316,4 +382,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-30  6:45:43
+-- Dump completed on 2026-04-01 16:40:59

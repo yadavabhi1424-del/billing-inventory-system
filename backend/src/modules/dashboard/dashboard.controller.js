@@ -8,14 +8,14 @@ const getDashboard = async (req, res, next) => {
     // Helper to generate date conditions with proper column prefixing
     const getCondition = (col, p) => {
       if (p === 'today') return `DATE(${col}) = CURDATE()`;
-      if (p === 'week')  return `${col} >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
+      if (p === 'week') return `${col} >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
       if (p === 'month') return `MONTH(${col}) = MONTH(CURDATE()) AND YEAR(${col}) = YEAR(CURDATE())`;
       return "1=1";
     };
 
     const getPrevCondition = (col, p) => {
       if (p === 'today') return `DATE(${col}) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)`;
-      if (p === 'week')  return `${col} >= DATE_SUB(CURDATE(), INTERVAL 13 DAY) AND ${col} < DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
+      if (p === 'week') return `${col} >= DATE_SUB(CURDATE(), INTERVAL 13 DAY) AND ${col} < DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
       if (p === 'month') return `MONTH(${col}) = MONTH(DATE_SUB(CURDATE(), INTERVAL 1 MONTH)) AND YEAR(${col}) = YEAR(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))`;
       return "1=1";
     };
@@ -30,15 +30,16 @@ const getDashboard = async (req, res, next) => {
     );
 
     // 2. Growth (Previous Period Revenue)
-    let growth = 0;
+    let growth = null;
     if (!isOverall) {
+      growth = 0;
       const [[prevStats]] = await req.db.execute(
         `SELECT COALESCE(SUM(totalAmount), 0) as totalRevenue
          FROM transactions
          WHERE ${getPrevCondition('createdAt', period)} AND status = 'COMPLETED'`
       );
       const currentRev = parseFloat(currentStats.totalRevenue);
-      const prevRev    = parseFloat(prevStats.totalRevenue);
+      const prevRev = parseFloat(prevStats.totalRevenue);
       growth = prevRev > 0 ? (((currentRev - prevRev) / prevRev) * 100).toFixed(1) : 0;
     }
 
@@ -50,58 +51,61 @@ const getDashboard = async (req, res, next) => {
        WHERE ${getCondition('t.createdAt', period)} AND t.status = 'COMPLETED'`
     );
 
-    // 4. Procurement (Combining Local + Network Orders)
-    // 4a. Local Stats (Legacy/Manual)
-    const [[localSpend]] = await req.db.execute(
-      `SELECT COALESCE(SUM(totalAmount), 0) as spend FROM purchase_orders
-       WHERE ${getCondition('createdAt', period)} AND status IN ('RECEIVED', 'PARTIAL')`
-    );
-    const [[localItems]] = await req.db.execute(
-      `SELECT COALESCE(SUM(poi.receivedQty), 0) as items FROM purchase_order_items poi
-       JOIN purchase_orders po ON po.po_id = poi.po_id
-       WHERE ${getCondition('po.createdAt', period)} AND po.status IN ('RECEIVED', 'PARTIAL')`
-    );
-
-    // 4b. Network Stats (B2B Orders)
-    let b2bSpend = 0;
-    let b2bItems = 0;
+    // 4. Procurement Stats (Ultimate Consolidation: Local + Network B2B)
+    let procurementSpend = 0;
+    let itemsPurchased    = 0;
 
     try {
-      // Find current shop's master ID from the tenants table
-      const cleanDbName = req.dbName.replace('shop_', '').replace('supplier_', '');
-      
+      // 4a. LOCAL Manual Purchase Orders (Marked Received)
+      const [[localSpend]] = await req.db.execute(
+        `SELECT COALESCE(SUM(totalAmount), 0) as spend FROM purchase_orders
+         WHERE ${getCondition('COALESCE(receivedDate, createdAt)', period)} AND status IN ('RECEIVED', 'PARTIAL')`
+      );
+      const [[localItems]] = await req.db.execute(
+        `SELECT COALESCE(SUM(poi.receivedQty), 0) as items FROM purchase_order_items poi
+         JOIN purchase_orders po ON po.po_id = poi.po_id
+         WHERE ${getCondition('COALESCE(po.receivedDate, po.createdAt)', period)} AND po.status IN ('RECEIVED', 'PARTIAL')`
+      );
+
+      // 4b. NETWORK B2B Orders (Shop as Buyer)
+      let networkSpend = 0;
+      let networkItems = 0;
+
+      // Identify the shop by everything possible: UUID, db_name, or slug
+      const dbName   = req.dbName;
+      const slug     = req.dbName.replace('shop_', '').replace('supplier_', '');
       const [[mapping]] = await masterPool.execute(
-        "SELECT tenant_id FROM tenants WHERE db_name = ? OR db_name LIKE ? OR db_name = ?",
-        [req.dbName, `%${cleanDbName}%`, cleanDbName]
+        "SELECT tenant_id FROM tenants WHERE db_name = ? OR shop_slug = ?",
+        [dbName, slug]
       );
 
       if (mapping) {
-        const masterId = mapping.tenant_id;
-        // Include PENDING orders in procurement cards if user wants to see what's "on the way"
-        // and only exclude REJECTED or CANCELLED
-        const statusFilter = "('PENDING', 'ACCEPTED', 'BILLED', 'CLOSED')";
+        const uuid = mapping.tenant_id;
+        const b2bStatusFilter = "('ACCEPTED', 'BILLED', 'CLOSED')";
         
-        const [[networkSpend]] = await masterPool.execute(
+        const [[nSpend]] = await masterPool.execute(
           `SELECT COALESCE(SUM(total_amount), 0) as spend FROM b2b_orders
-           WHERE shop_id = ? AND status IN ${statusFilter} AND ${getCondition('createdAt', period)}`,
-          [masterId]
+           WHERE (shop_id = ? OR shop_id = ? OR shop_id = ?) 
+           AND status IN ${b2bStatusFilter} AND ${getCondition('updatedAt', period)}`,
+          [uuid, dbName, slug]
         );
-        const [[networkItems]] = await masterPool.execute(
+        const [[nItems]] = await masterPool.execute(
           `SELECT COALESCE(SUM(oi.qty), 0) as items FROM b2b_order_items oi
            JOIN b2b_orders o ON o.order_id = oi.order_id
-           WHERE o.shop_id = ? AND o.status IN ${statusFilter} AND ${getCondition('o.createdAt', period)}`,
-          [masterId]
+           WHERE (o.shop_id = ? OR o.shop_id = ? OR o.shop_id = ?) 
+           AND o.status IN ${b2bStatusFilter} AND ${getCondition('o.updatedAt', period)}`,
+          [uuid, dbName, slug]
         );
 
-        b2bSpend = parseFloat(networkSpend.spend);
-        b2bItems = parseInt(networkItems.items);
+        networkSpend = parseFloat(nSpend.spend) || 0;
+        networkItems = parseInt(nItems.items)    || 0;
       }
-    } catch (err) {
-      console.error("Failed to fetch network dashboard stats:", err.message);
-    }
 
-    const procurementSpend = parseFloat(localSpend.spend) + b2bSpend;
-    const itemsPurchased    = parseInt(localItems.items) + b2bItems;
+      procurementSpend = (parseFloat(localSpend.spend) || 0) + networkSpend;
+      itemsPurchased    = (parseInt(localItems.items)    || 0) + networkItems;
+    } catch (err) {
+      console.error("Dashboard Procurement Stats Error:", err);
+    }
 
     // 5. Static Inventory Stats (Always total)
     const [[inventoryStats]] = await req.db.execute(
@@ -129,11 +133,11 @@ const getDashboard = async (req, res, next) => {
       });
       const sales = match ? parseFloat(match.sales) : 0;
       const prevSales = last7Days[last7Days.length - 1]?.sales || 0;
-      let growth = 0;
-      if (prevSales > 0) growth = ((sales - prevSales) / prevSales) * 100;
-      else if (sales > 0) growth = 100;
+      let barGrowth = 0;
+      if (prevSales > 0) barGrowth = ((sales - prevSales) / prevSales) * 100;
+      else if (sales > 0) barGrowth = 100;
 
-      last7Days.push({ date: dateStr, sales, growth: parseFloat(growth.toFixed(1)) });
+      last7Days.push({ date: dateStr, sales, growth: parseFloat(barGrowth.toFixed(1)) });
     }
 
     // 6b. 12-Month Revenue (Padded)
@@ -151,11 +155,11 @@ const getDashboard = async (req, res, next) => {
       const match = last12MonthsRaw.find(r => r.date === dateStr);
       const sales = match ? parseFloat(match.sales) : 0;
       const prevSales = last12Months[last12Months.length - 1]?.sales || 0;
-      let growth = 0;
-      if (prevSales > 0) growth = ((sales - prevSales) / prevSales) * 100;
-      else if (sales > 0) growth = 100;
+      let barGrowth = 0;
+      if (prevSales > 0) barGrowth = ((sales - prevSales) / prevSales) * 100;
+      else if (sales > 0) barGrowth = 100;
 
-      last12Months.push({ date: dateStr, sales, growth: parseFloat(growth.toFixed(1)) });
+      last12Months.push({ date: dateStr, sales, growth: parseFloat(barGrowth.toFixed(1)) });
     }
 
     // 6c. Drilldown Handle (Weekly breakdown of a specific month)
@@ -202,14 +206,14 @@ const getDashboard = async (req, res, next) => {
       success: true,
       data: {
         stats: {
-          revenue:        parseFloat(currentStats.totalRevenue),
-          transactions:   currentStats.totalTransactions,
-          netProfit:      parseFloat(profitData.netProfit),
-          salesGrowth:    parseFloat(growth),
-          itemsPurchased:   itemsPurchased,
+          revenue: parseFloat(currentStats.totalRevenue),
+          transactions: currentStats.totalTransactions,
+          netProfit: parseFloat(profitData.netProfit),
+          salesGrowth: isOverall ? null : parseFloat(growth),
+          itemsPurchased: itemsPurchased,
           procurementSpend: procurementSpend,
-          totalProducts:     inventoryStats.totalProducts,
-          lowStockCount:     inventoryStats.lowStockCount,
+          totalProducts: inventoryStats.totalProducts,
+          lowStockCount: inventoryStats.lowStockCount,
         },
         charts: { last7Days, last12Months, topProducts, weekDrilldown },
         recentTransactions,

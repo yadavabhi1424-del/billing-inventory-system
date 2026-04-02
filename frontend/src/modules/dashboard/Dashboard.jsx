@@ -132,19 +132,19 @@ export default function Dashboard({ user }) {
   const isSupplier = user?.userType === 'supplier';
   
   const statCards = isSupplier ? [
-    { label: 'Total Revenue',          value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth },
+    { label: 'Total Revenue',          value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth ?? undefined },
     { label: 'Total Sales (Completed Orders)', value: stats.transactions || 0,   icon: 'billing',    accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
     { label: 'Net Profit',             value: fmt(stats.netProfit || 0),        icon: 'payment',    accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
-    { label: 'Sales Growth',           value: (stats.salesGrowth || 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
+    { label: 'Sales Growth',           value: (stats.salesGrowth ?? 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
     { label: 'Pending B2B Orders',     value: stats.pendingB2B || 0,            icon: 'inventory',  accent: 'var(--color-cyan)',           accentSoft: 'var(--color-cyan-soft)'     },
     { label: 'Fulfilled B2B Orders',   value: stats.fulfilledB2B || 0,          icon: 'reports',    accent: 'var(--color-indigo)',         accentSoft: 'var(--color-indigo-soft)'   },
     { label: 'Total Products',         value: stats.totalProducts || 0,          icon: 'inventory',  accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
     { label: 'Low Stock Items',        value: stats.lowStockCount || 0,          icon: 'alert',      accent: 'var(--color-danger)',         accentSoft: 'var(--color-danger-soft)'   },
   ] : [
-    { label: 'Total Revenue',          value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth },
+    { label: 'Total Revenue',          value: fmt(stats.revenue || 0),          icon: 'reports',    accent: 'var(--color-accent-primary)', accentSoft: 'var(--color-accent-soft)', trend: stats.salesGrowth ?? undefined },
     { label: 'Total Sales',            value: stats.transactions || 0,          icon: 'billing',    accent: 'var(--color-warning)',        accentSoft: 'var(--color-warning-soft)'  },
     { label: 'Net Profit',             value: fmt(stats.netProfit || 0),        icon: 'payment',    accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },
-    { label: 'Sales Growth',           value: (stats.salesGrowth || 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
+    { label: 'Sales Growth',           value: (stats.salesGrowth ?? 0) + '%',    icon: 'ai',         accent: 'var(--color-violet)',         accentSoft: 'var(--color-violet-soft)'   },
     { label: 'Items Purchased',         value: stats.itemsPurchased || 0,        icon: 'inventory',  accent: 'var(--color-cyan)',           accentSoft: 'var(--color-cyan-soft)'     },
     { label: 'Procurement Spend',      value: fmt(stats.procurementSpend || 0),  icon: 'reports',    accent: 'var(--color-indigo)',         accentSoft: 'var(--color-indigo-soft)'   },
     { label: 'Total Products',         value: stats.totalProducts || 0,          icon: 'inventory',  accent: 'var(--color-success)',        accentSoft: 'var(--color-success-soft)'  },

@@ -56,6 +56,7 @@ DROP TABLE IF EXISTS `customers`;
 CREATE TABLE `customers` (
   `customer_id` varchar(36) NOT NULL DEFAULT (uuid()),
   `name` varchar(100) NOT NULL,
+  `slug` varchar(100) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
   `phone` varchar(15) DEFAULT NULL,
   `address` text,
@@ -64,6 +65,7 @@ CREATE TABLE `customers` (
   `loyaltyPoints` int DEFAULT '0',
   `totalSpent` decimal(12,2) DEFAULT '0.00',
   `isActive` tinyint(1) DEFAULT '1',
+  `is_network` tinyint(1) DEFAULT '0',
   `notes` text,
   `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -105,7 +107,6 @@ CREATE TABLE `email_otps` (
 
 LOCK TABLES `email_otps` WRITE;
 /*!40000 ALTER TABLE `email_otps` DISABLE KEYS */;
-INSERT INTO `email_otps` VALUES ('7d3ecc15-77d1-4924-a773-b1e4abbaefd8','9a538e0f-7aba-4a53-b6f4-5fe33edc234c','503250','2026-03-29 01:03:28','2026-03-29 00:58:28');
 /*!40000 ALTER TABLE `email_otps` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -138,7 +139,7 @@ CREATE TABLE `invitations` (
 
 LOCK TABLES `invitations` WRITE;
 /*!40000 ALTER TABLE `invitations` DISABLE KEYS */;
-INSERT INTO `invitations` VALUES ('2354d964-e82a-412f-87ec-a1af49142201','yadavabhinav964104@gmail.com','CASHIER','992e0d0bdb858ffdceeaf03739bac8062d718bf880d08ec08963ce6acffcab5e','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-03 23:11:28','2026-03-27 23:11:28'),('eb65b17d-3049-411d-9ad3-df88f5f7dcc0','nothing0123459876@gmail.com','ADMIN','7dad956944ed9bcca0d81c1929a6ece0cff4af7cc217f03c2ef3698d4a8ab95f','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-05 00:15:44','2026-03-29 00:15:44');
+INSERT INTO `invitations` VALUES ('2354d964-e82a-412f-87ec-a1af49142201','yadavabhinav964104@gmail.com','CASHIER','992e0d0bdb858ffdceeaf03739bac8062d718bf880d08ec08963ce6acffcab5e','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-03 23:11:28','2026-03-27 23:11:28'),('270c403f-89a2-4975-ac3d-a5a9516e9890','karansy4321@gmail.com','CASHIER','00758eecfcccfdbe752ddd1550b18a175d98594ba4360fe95fec6962b0a545af','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-07 13:06:48','2026-03-31 13:06:48'),('431ad11e-bb30-4c88-ab0c-7974e1aed34a','kolicav694@nexafilm.com','CASHIER','91547696a46546a668047ca72b8bb15917fee0c715fccec1f7d1461cfcf3f8f9','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-07 13:05:13','2026-03-31 13:05:13'),('a95a0c14-6d06-4bb2-b414-4607b902170b','abhinavsinghyadav1424@gmail.com','ADMIN','9af2f5b9b9ffd04682313e0c6a989cd6ebf405e4e6dc9dc9315ffac59a87bc36','039b651e-2056-11f1-a157-d4939063d02e','ACCEPTED','2026-04-07 13:09:08','2026-03-31 13:09:08'),('b3bb8a94-019f-4da9-a851-c02c521ffa88','karansyfb7575@gmail.com','CASHIER','e9772b1df3552c95a9213b4a0543a173f4e4e8646609ddb4fe9efd47be301545','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-07 13:08:14','2026-03-31 13:08:14'),('eb65b17d-3049-411d-9ad3-df88f5f7dcc0','nothing0123459876@gmail.com','ADMIN','7dad956944ed9bcca0d81c1929a6ece0cff4af7cc217f03c2ef3698d4a8ab95f','039b651e-2056-11f1-a157-d4939063d02e','PENDING','2026-04-05 00:15:44','2026-03-29 00:15:44');
 /*!40000 ALTER TABLE `invitations` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -419,6 +420,7 @@ DROP TABLE IF EXISTS `suppliers`;
 CREATE TABLE `suppliers` (
   `supplier_id` varchar(36) NOT NULL DEFAULT (uuid()),
   `name` varchar(150) NOT NULL,
+  `slug` varchar(100) DEFAULT NULL,
   `contactPerson` varchar(100) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
   `phone` varchar(15) NOT NULL,
@@ -433,6 +435,7 @@ CREATE TABLE `suppliers` (
   `paymentTerms` varchar(50) DEFAULT '30 days',
   `rating` float DEFAULT '0',
   `isActive` tinyint(1) DEFAULT '1',
+  `is_network` tinyint(1) DEFAULT '0',
   `notes` text,
   `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -446,7 +449,7 @@ CREATE TABLE `suppliers` (
 
 LOCK TABLES `suppliers` WRITE;
 /*!40000 ALTER TABLE `suppliers` DISABLE KEYS */;
-INSERT INTO `suppliers` VALUES ('ae75892c-e6e4-4cdf-a4e7-05ee6a2f0199','ABC Beverages','James',NULL,'9876543210',NULL,'Dispur','Assam',NULL,NULL,NULL,NULL,NULL,'30 days',0,0,NULL,'2026-03-28 01:49:46','2026-03-28 22:53:40');
+INSERT INTO `suppliers` VALUES ('ae75892c-e6e4-4cdf-a4e7-05ee6a2f0199','ABC Beverages',NULL,'James',NULL,'9876543210',NULL,'Dispur','Assam',NULL,NULL,NULL,NULL,NULL,'30 days',0,0,0,NULL,'2026-03-28 01:49:46','2026-03-28 22:53:40'),('supplier_9ed4e45d6be84d39','KSY Stationary Supplier','ksy_stationary_supplier_e84d39',NULL,NULL,'0000000000','Shop No. 12, First Floor, Shree Plaza Near Alambagh Bus Stand Alambagh Lucknow, Uttar Pradesh – 226005 India',NULL,NULL,NULL,NULL,NULL,NULL,NULL,'30 days',0,1,0,NULL,'2026-03-31 16:36:48','2026-03-31 17:09:00');
 /*!40000 ALTER TABLE `suppliers` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -573,7 +576,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES ('039b651e-2056-11f1-a157-d4939063d02e','Abhi','yadavabhi1424@gmail.com','$2a$12$yscCQwBOnQic7EhmraPCbuLf4M8lDAHyb7npyqCT9/DO7zOFaO.Ui','OWNER','9087654321','https://lh3.googleusercontent.com/a/ACg8ocKqThg7khh-cb9tsJXpBYPmh_XkAmojIAERs_9eC8edB0MznA=s96-c',1,'APPROVED',NULL,NULL,'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzOWI2NTFlLTIwNTYtMTFmMS1hMTU3LWQ0OTM5MDYzZDAyZSIsImVtYWlsIjoieWFkYXZhYmhpMTQyNEBnbWFpbC5jb20iLCJyb2xlIjoib3duZXIiLCJuYW1lIjoiQWJoaSIsImRiTmFtZSI6ImludmVudG9yeSIsInVzZXJUeXBlIjoic2hvcCIsImlhdCI6MTc3NDgxMzc1NCwiZXhwIjoxNzc1NDE4NTU0fQ.cM4BumyNB-GfBpGI3HjbFXZW3maOoBx3uX22Q2iSSCM','2026-03-15 15:32:02','2026-03-30 01:19:14',1,NULL,NULL,'local'),('1a739b6b-2ae3-11f1-842e-d4939063d02e','Restorer','readdtest@test.com','dummy','CASHIER',NULL,NULL,0,'DELETED',NULL,NULL,NULL,'2026-03-29 01:47:11','2026-03-29 01:47:11',1,NULL,NULL,'local'),('906f9481-1a59-4bb9-b93a-fba5eee03b8f','Karan','karansy4321@gmail.com','$2a$12$YXdUvx/8j5nIIjpzBSvVjuOgTC2lmmi5xH7IH34QNsHV4/IRfyHL2','CASHIER','9685646646',NULL,1,'PENDING',NULL,NULL,NULL,'2026-03-30 03:35:48','2026-03-30 03:35:48',0,'390306ad988106ab30761fd47297014f7d777308fa4211afd591eae79b008b43','2026-03-31 03:35:48','local'),('9a538e0f-7aba-4a53-b6f4-5fe33edc234c','Test User','testuser_new@example.com','$2a$12$99jcmKx7/zKyKGX9lTQwKeKgUYE4HAGo2BnTHeDQOFYg8VX2UI5jO','OWNER','+919876543210',NULL,0,'PENDING',NULL,NULL,NULL,'2026-03-29 00:58:28','2026-03-29 00:58:28',0,'{\"shopType\":\"other\",\"userType\":\"shop\"}',NULL,'local'),('cd06f27f-ac50-4050-8ff6-0f110f32a4cc','AS','yadavabhinav964104@gmail.com','$2a$12$iUClPKOZIZdVf65wAB6Gy.RoPaYCcY3qp0xNb8tg9uf7QgELXpIgq','CASHIER',NULL,NULL,1,'APPROVED',NULL,NULL,NULL,'2026-03-27 23:14:20','2026-03-29 01:48:41',1,NULL,'2026-03-28 23:14:20','local');
+INSERT INTO `users` VALUES ('039b651e-2056-11f1-a157-d4939063d02e','Abhi','yadavabhi1424@gmail.com','$2a$12$yscCQwBOnQic7EhmraPCbuLf4M8lDAHyb7npyqCT9/DO7zOFaO.Ui','OWNER','9087654321','https://lh3.googleusercontent.com/a/ACg8ocKqThg7khh-cb9tsJXpBYPmh_XkAmojIAERs_9eC8edB0MznA=s96-c',1,'APPROVED',NULL,NULL,'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjAzOWI2NTFlLTIwNTYtMTFmMS1hMTU3LWQ0OTM5MDYzZDAyZSIsImVtYWlsIjoieWFkYXZhYmhpMTQyNEBnbWFpbC5jb20iLCJyb2xlIjoib3duZXIiLCJuYW1lIjoiQWJoaSIsImRiTmFtZSI6ImludmVudG9yeSIsInVzZXJUeXBlIjoic2hvcCIsImlhdCI6MTc3NDk5MDgzOSwiZXhwIjoxNzc1NTk1NjM5fQ.a-9lwaNdRLZFq1zfaCtYYijCOtoIwI7cCnIajhJWkN8','2026-03-15 15:32:02','2026-04-01 02:30:39',1,NULL,NULL,'local'),('1a739b6b-2ae3-11f1-842e-d4939063d02e','Restorer','readdtest@test.com','dummy','CASHIER',NULL,NULL,0,'DELETED',NULL,NULL,NULL,'2026-03-29 01:47:11','2026-03-29 01:47:11',1,NULL,NULL,'local'),('cd06f27f-ac50-4050-8ff6-0f110f32a4cc','AS','yadavabhinav964104@gmail.com','$2a$12$iUClPKOZIZdVf65wAB6Gy.RoPaYCcY3qp0xNb8tg9uf7QgELXpIgq','CASHIER',NULL,NULL,1,'APPROVED',NULL,NULL,NULL,'2026-03-27 23:14:20','2026-03-29 01:48:41',1,NULL,'2026-03-28 23:14:20','local');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -586,4 +589,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-30  6:46:36
+-- Dump completed on 2026-04-01 16:41:43
