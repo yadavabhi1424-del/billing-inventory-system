@@ -4,6 +4,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import {
   getProducts, createProduct, updateProduct,
@@ -19,25 +20,33 @@ const getStatus = (stock, min) =>
 // ══════════════════════════════════════════════════════════
 //  PRODUCT FORM MODAL
 // ══════════════════════════════════════════════════════════
-function ProductFormModal({ title, product = null, categories = [], suppliers = [], onClose, onSave, onCategoriesUpdate }) {
+function ProductFormModal({ title, product = null, prefillData = null, categories = [], suppliers = [], onClose, onSave, onCategoriesUpdate }) {
   const isEdit = !!product;
   const user = JSON.parse(localStorage.getItem('stocksense_user') || '{}');
   const isSupplier = user?.userType === 'supplier';
 
+  // When opened from a purchase order (prefillData present):
+  //   - Edit mode: costPrice = order price (what was paid), stock = current + received qty
+  //   - Add  mode: name / costPrice / stock / supplierId seeded from order
+  const fromOrder = !!prefillData;
   const [form, setForm] = useState({
-    name: product?.name || '',
-    sku: product?.sku || '',
-    sellingPrice: product?.sellingPrice || '',
-    costPrice: product?.costPrice || '',
-    stock: product?.stock || '',
-    unit: product?.unit || 'pcs',
-    taxRate: product?.taxRate || '0',
+    name:          product?.name          || prefillData?.name      || '',
+    sku:           product?.sku           || '',
+    sellingPrice:  product?.sellingPrice  || '',
+    costPrice:     fromOrder && prefillData?.costPrice
+                     ? prefillData.costPrice
+                     : (product?.costPrice || ''),
+    stock:         isEdit && fromOrder
+                     ? (Number(product?.stock || 0) + Number(prefillData?.quantity || 0))
+                     : (product?.stock ?? prefillData?.quantity ?? ''),
+    unit:          product?.unit          || 'pcs',
+    taxRate:       product?.taxRate       || '0',
     minStockLevel: product?.minStockLevel || '',
-    categoryId: product?.category_id || '',
-    supplierId: product?.supplier_id || '',
-    barcode: product?.barcode || '',
-    expiryDate: product?.expiryDate?.split('T')[0] || '',
-    is_public: product?.is_public === 1 || product?.is_public === true || false,
+    categoryId:    product?.category_id  || '',
+    supplierId:    product?.supplier_id  || prefillData?.supplierId || '',
+    barcode:       product?.barcode      || '',
+    expiryDate:    product?.expiryDate?.split('T')[0] || '',
+    is_public:     product?.is_public === 1 || product?.is_public === true || false,
     image: null,
   });
 
@@ -201,6 +210,17 @@ function ProductFormModal({ title, product = null, categories = [], suppliers = 
             <Icon name="x" size={20} />
           </button>
         </div>
+
+        {fromOrder && (
+          <div className="prefill-notice">
+            <Icon name="box" size={14} />
+            <span>
+              {isEdit
+                ? `Fields pre-filled from purchase order — cost price & stock updated with received quantity (+${prefillData?.quantity}).`
+                : 'Fields pre-filled from purchase order. Review and complete remaining details before saving.'}
+            </span>
+          </div>
+        )}
 
         <form className="product-form" onSubmit={handleSubmit}>
           <div className="product-form__content">
@@ -519,6 +539,11 @@ export default function Inventory() {
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [filterType, setFilterType] = useState('all');
+  const [prefillData, setPrefillData] = useState(null);
+
+  const location = useLocation();
+  // Guard: only process the addFromOrder state once (prevents re-open after save)
+  const orderHandledRef = useRef(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -530,24 +555,64 @@ export default function Inventory() {
         getCategories(),
         getSuppliers(),
       ]);
-      if (prodRes.success) setProducts(prodRes.data);
+      const loadedProducts = prodRes.success ? prodRes.data : [];
+      const loadedSuppliers = supRes.success ? supRes.data : [];
+      if (prodRes.success) setProducts(loadedProducts);
       if (catRes.success) setCategories(catRes.data);
-      if (supRes.success) setSuppliers(supRes.data);
+      if (supRes.success) setSuppliers(loadedSuppliers);
+
+      // ── Handle "Add to Inventory" navigation from B2B purchase orders ──
+      const orderItem = location.state?.addFromOrder;
+      if (orderItem && !orderHandledRef.current) {
+        orderHandledRef.current = true; // never re-trigger for this mount
+        const matchedSupplier = loadedSuppliers.find(
+          s => s.supplier_id === orderItem.supplierDbName ||
+               s.supplier_id === orderItem.supplierId || 
+               (s.name && orderItem.supplierName && s.name.trim().toLowerCase() === orderItem.supplierName.trim().toLowerCase())
+        );
+        const enriched = {
+          ...orderItem,
+          supplierId: matchedSupplier?.supplier_id || '',
+        };
+        setPrefillData(enriched);
+
+        // Check if product already exists (case-insensitive name match)
+        const existing = loadedProducts.find(
+          p => p.name?.trim().toLowerCase() === orderItem.name?.trim().toLowerCase()
+        );
+        if (existing) {
+          setSelected(existing);
+          setPrefillData({ ...enriched, isEditMode: true });
+          setShowEdit(true);
+        } else {
+          setShowAdd(true);
+        }
+      }
     } catch (err) {
       console.error('Inventory fetch error:', err.message);
     } finally {
       setLoading(false);
     }
   };
+  // Helper: mark a B2B order item as added in localStorage
+  const markB2BItemAdded = (data) => {
+    if (data?.orderId && data?.itemId) {
+      const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
+      stored[`${data.orderId}_${data.itemId}`] = true;
+      localStorage.setItem('b2b_added_items', JSON.stringify(stored));
+    }
+  };
+
   const handleAdd = async (formData) => {
     await createProduct(formData);
+    markB2BItemAdded(prefillData);
+    setPrefillData(null);
     setShowAdd(false);
     fetchAll();
   };
 
   const handleEdit = async (formData) => {
     try {
-      // Send plain JSON — no FormData for edit
       const payload = {
         name: formData.get('name'),
         sellingPrice: formData.get('sellingPrice'),
@@ -565,6 +630,8 @@ export default function Inventory() {
 
       const res = await updateProduct(selected.product_id, payload);
       if (res.success) {
+        markB2BItemAdded(prefillData);
+        setPrefillData(null);
         setShowEdit(false);
         setSelected(null);
         fetchAll();
@@ -790,7 +857,8 @@ export default function Inventory() {
       {showAdd && (
         <ProductFormModal title="Add New Product"
           categories={categories} suppliers={suppliers}
-          onClose={() => setShowAdd(false)}
+          prefillData={prefillData}
+          onClose={() => { setShowAdd(false); setPrefillData(null); }}
           onSave={handleAdd}
           onCategoriesUpdate={setCategories} />
       )}
@@ -799,7 +867,8 @@ export default function Inventory() {
       {showEdit && selected && (
         <ProductFormModal title="Edit Product"
           product={selected} categories={categories} suppliers={suppliers}
-          onClose={() => { setShowEdit(false); setSelected(null); }}
+          prefillData={prefillData?.isEditMode ? prefillData : null}
+          onClose={() => { setShowEdit(false); setSelected(null); setPrefillData(null); }}
           onSave={handleEdit}
           onCategoriesUpdate={setCategories} />
       )}

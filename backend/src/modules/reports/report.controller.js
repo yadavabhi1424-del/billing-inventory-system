@@ -1,61 +1,166 @@
-const getDateRange = (req) => {
-  const start = req.query.startDate
-    ? `${req.query.startDate} 00:00:00`
-    : new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-        .toISOString().slice(0, 19).replace("T", " ");
-  const end = req.query.endDate
-    ? `${req.query.endDate} 23:59:59`
-    : new Date().toISOString().slice(0, 19).replace("T", " ");
-  return { start, end };
+import { masterPool } from "../../config/masterDatabase.js";
+
+// Standardized condition generator matching dashboard.controller.js
+const getCondition = (col, req, params = []) => {
+  const { startDate, endDate, period } = req.query;
+
+  if (startDate && endDate) {
+    params.push(`${startDate} 00:00:00`, `${endDate} 23:59:59`);
+    return `${col} BETWEEN ? AND ?`;
+  }
+
+  if (period === 'today') return `DATE(${col}) = CURDATE()`;
+  if (period === 'week') return `${col} >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
+  if (period === 'month') return `MONTH(${col}) = MONTH(CURDATE()) AND YEAR(${col}) = YEAR(CURDATE())`;
+
+  return "1=1";
 };
 
 const getSalesReport = async (req, res, next) => {
   try {
-    const { start, end } = getDateRange(req);
     const userType = req.user.userType || 'shop';
-    
-    // Suppliers include PENDING (B2B orders), Shops only COMPLETED (POS)
-    const statusFilter = userType === 'supplier' 
-      ? "status IN ('COMPLETED', 'PENDING')" 
+    const statusFilter = userType === 'supplier'
+      ? "status IN ('COMPLETED', 'PENDING')"
       : "status = 'COMPLETED'";
+
+    const salesParams = [];
+    const salesCond = getCondition('createdAt', req, salesParams);
 
     const [[summary]] = await req.db.execute(
       `SELECT COUNT(*) as totalTransactions,
-              COALESCE(SUM(totalAmount),0)    as totalSales,
-              COALESCE(SUM(taxAmount),0)      as totalTax,
-              COALESCE(SUM(discountAmount),0) as totalDiscount,
-              COALESCE(AVG(totalAmount),0)    as avgOrderValue
-       FROM transactions WHERE createdAt BETWEEN ? AND ? AND ${statusFilter}`,
-      [start, end]
+              COALESCE(SUM(totalAmount), 0)    as totalSales,
+              COALESCE(SUM(taxAmount), 0)      as totalTax,
+              COALESCE(AVG(totalAmount), 0)    as avgOrderValue
+       FROM transactions WHERE ${salesCond} AND ${statusFilter}`,
+      salesParams
     );
 
-    const [byPaymentMethod] = await req.db.execute(
-      `SELECT paymentMethod, COUNT(*) as count, SUM(totalAmount) as total
-       FROM transactions WHERE createdAt BETWEEN ? AND ? AND ${statusFilter}
-       GROUP BY paymentMethod`,
-      [start, end]
-    );
-
+    const productsParams = [];
+    const productsCond = getCondition('t.createdAt', req, productsParams);
     const [topProducts] = await req.db.execute(
-      `SELECT ti.productName, ti.product_id,
-              SUM(ti.quantity) as totalQty, SUM(ti.totalAmount) as totalRevenue
+      `SELECT ti.productName, SUM(ti.quantity) as totalQty, SUM(ti.totalAmount) as totalRevenue
        FROM transaction_items ti
        JOIN transactions t ON t.transaction_id = ti.transaction_id
-       WHERE t.createdAt BETWEEN ? AND ? AND t.${statusFilter}
+       WHERE ${productsCond} AND t.${statusFilter}
        GROUP BY ti.product_id, ti.productName
-       ORDER BY totalRevenue DESC LIMIT 10`,
-      [start, end]
+       ORDER BY totalRevenue DESC LIMIT 5`,
+      productsParams
     );
 
-    const [dailyBreakdown] = await req.db.execute(
-      `SELECT DATE(createdAt) as date, COUNT(*) as transactions,
-              SUM(totalAmount) as sales, SUM(taxAmount) as tax, SUM(discountAmount) as discount
-       FROM transactions WHERE createdAt BETWEEN ? AND ? AND ${statusFilter}
-       GROUP BY DATE(createdAt) ORDER BY date ASC`,
-      [start, end]
+    const paymentParams = [];
+    const paymentCond = getCondition('createdAt', req, paymentParams);
+    const [byPaymentMethod] = await req.db.execute(
+      `SELECT paymentMethod, SUM(totalAmount) as total
+       FROM transactions WHERE ${paymentCond} AND ${statusFilter}
+       GROUP BY paymentMethod`,
+      paymentParams
     );
 
-    res.json({ success: true, data: { summary, byPaymentMethod, topProducts, dailyBreakdown } });
+    res.json({ success: true, data: { summary, topProducts, byPaymentMethod } });
+  } catch (error) { next(error); }
+};
+
+const getCustomerReport = async (req, res, next) => {
+  try {
+    const userType = req.user.userType || 'shop';
+    let summaryQuery, topCustomersQuery;
+    const params = [];
+
+    if (userType === 'supplier') {
+      const cond = getCondition('createdAt', req, params);
+      summaryQuery = `
+        SELECT COUNT(DISTINCT customer_id) as totalCustomers,
+               COUNT(DISTINCT CASE WHEN ${cond} THEN customer_id END) as newCustomers
+        FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NOT NULL`;
+
+      topCustomersQuery = `
+        SELECT customer_id, name, phone, totalSpent, shop_tenant_id as shopId,
+               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
+        FROM customers c
+        WHERE isActive = TRUE AND shop_tenant_id IS NOT NULL AND totalSpent > 0
+        ORDER BY totalSpent DESC LIMIT 10`;
+    } else {
+      const cond = getCondition('createdAt', req, params);
+      summaryQuery = `
+        SELECT COUNT(*) as totalCustomers,
+               SUM(CASE WHEN ${cond} THEN 1 ELSE 0 END) as newCustomers
+        FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NULL`;
+
+      topCustomersQuery = `
+        SELECT customer_id, name, phone, totalSpent, loyaltyPoints,
+               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
+        FROM customers c
+        WHERE isActive = TRUE AND shop_tenant_id IS NULL AND totalSpent > 0
+        ORDER BY totalSpent DESC LIMIT 10`;
+    }
+
+    const [[summary]] = await req.db.execute(summaryQuery, params);
+    const [topCustomers] = await req.db.execute(topCustomersQuery);
+
+    res.json({ success: true, data: { summary, topCustomers } });
+  } catch (error) { next(error); }
+};
+
+const getSupplierReport = async (req, res, next) => {
+  try {
+    const dbName = req.dbName || "";
+    const slug = dbName.replace("stocksense_tenant_", "").replace("stocksense_supplier_", "").replace("shop_", "").replace("supplier_", "");
+
+    // 1. Identify the shop in master DB (UUID, db_name, or slug)
+    const [[shopMapping]] = await masterPool.execute(
+      "SELECT tenant_id FROM tenants WHERE db_name = ? OR shop_slug = ?",
+      [dbName, slug]
+    );
+    const shopUuid = shopMapping ? shopMapping.tenant_id : null;
+
+    // 2. Fetch local suppliers and their local metrics (RECEIVED/PARTIAL)
+    const localOrderParams = [];
+    const localOrderCond = getCondition('COALESCE(receivedDate, createdAt)', req, localOrderParams);
+
+    const [localSuppliers] = await req.db.execute(
+      `SELECT s.supplier_id, s.name, s.phone, s.isActive, s.slug as networkSlug,
+              (SELECT COUNT(*) FROM products WHERE supplier_id = s.supplier_id) as productCount,
+              (SELECT COUNT(*) FROM purchase_orders WHERE supplier_id = s.supplier_id 
+               AND status IN ('RECEIVED', 'PARTIAL') AND ${localOrderCond}) as localOrders,
+              (SELECT COALESCE(SUM(totalAmount), 0) FROM purchase_orders WHERE supplier_id = s.supplier_id 
+               AND status IN ('RECEIVED', 'PARTIAL') AND ${localOrderCond}) as localPurchased
+       FROM suppliers s
+       WHERE s.isActive = TRUE`,
+      [...localOrderParams, ...localOrderParams]
+    );
+
+    // 3. Fetch network B2B orders summaries for this shop (if identity found)
+    let networkOrders = [];
+    if (shopUuid || slug || dbName) {
+      const b2bParams = [shopUuid, dbName, slug];
+      const b2bCond = getCondition('o.updatedAt', req, b2bParams);
+      const b2bStatusFilter = "('ACCEPTED', 'BILLED', 'CLOSED')";
+
+      [networkOrders] = await masterPool.execute(
+        `SELECT ms.slug as networkSlug, COUNT(*) as count, SUM(o.total_amount) as total
+         FROM b2b_orders o
+         JOIN suppliers ms ON ms.supplier_id = o.supplier_id
+         WHERE (o.shop_id = ? OR o.shop_id = ? OR o.shop_id = ?)
+         AND o.status IN ${b2bStatusFilter} AND ${b2bCond}
+         GROUP BY ms.slug`,
+        b2bParams
+      );
+    }
+
+    // 4. Combine results: Local totals + Network B2B totals
+    const combined = localSuppliers.map(s => {
+      const nMatch = s.networkSlug ? networkOrders.find(no => no.networkSlug === s.networkSlug) : null;
+      return {
+        ...s,
+        totalOrders: parseInt(s.localOrders || 0) + (nMatch ? parseInt(nMatch.count) : 0),
+        totalPurchased: parseFloat(s.localPurchased || 0) + (nMatch ? parseFloat(nMatch.total) : 0)
+      };
+    });
+
+    res.json({
+      success: true,
+      data: combined.sort((a, b) => b.totalPurchased - a.totalPurchased)
+    });
   } catch (error) { next(error); }
 };
 
@@ -92,101 +197,43 @@ const getInventoryReport = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
-const getCustomerReport = async (req, res, next) => {
-  try {
-    const { start, end } = getDateRange(req);
-    const userType = req.user.userType || 'shop';
-
-    let summaryQuery, topCustomersQuery;
-
-    if (userType === 'supplier') {
-      // For Suppliers: "Customers" are Shops that placed B2B orders
-      summaryQuery = `
-        SELECT COUNT(DISTINCT customer_id) as totalCustomers,
-               COUNT(DISTINCT CASE WHEN createdAt BETWEEN ? AND ? THEN customer_id END) as newCustomers
-        FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NOT NULL`;
-      
-      topCustomersQuery = `
-        SELECT customer_id, name, phone, totalSpent, shop_tenant_id as shopId,
-               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
-        FROM customers c
-        WHERE isActive = TRUE AND shop_tenant_id IS NOT NULL AND totalSpent > 0
-        ORDER BY totalSpent DESC LIMIT 10`;
-    } else {
-      // For Shops: Normal Retail Customers
-      summaryQuery = `
-        SELECT COUNT(*) as totalCustomers,
-               SUM(CASE WHEN createdAt BETWEEN ? AND ? THEN 1 ELSE 0 END) as newCustomers
-        FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NULL`;
-      
-      topCustomersQuery = `
-        SELECT customer_id, name, phone, totalSpent, loyaltyPoints,
-               (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
-        FROM customers c
-        WHERE isActive = TRUE AND shop_tenant_id IS NULL AND totalSpent > 0
-        ORDER BY totalSpent DESC LIMIT 10`;
-    }
-
-    const [[summary]] = await req.db.execute(summaryQuery, [start, end]);
-    const [topCustomers] = await req.db.execute(topCustomersQuery);
-
-
-    res.json({ success: true, data: { summary, topCustomers } });
-  } catch (error) { next(error); }
-};
-
-const getSupplierReport = async (req, res, next) => {
-  try {
-    const { start, end } = getDateRange(req);
-
-    const [suppliers] = await req.db.execute(
-      `SELECT s.supplier_id, s.name, s.phone,
-              COUNT(DISTINCT p.product_id)     as productCount,
-              COUNT(DISTINCT po.po_id)         as totalOrders,
-              COALESCE(SUM(po.totalAmount), 0) as totalPurchased
-       FROM suppliers s
-       LEFT JOIN products        p  ON p.supplier_id  = s.supplier_id AND p.isActive = TRUE
-       LEFT JOIN purchase_orders po ON po.supplier_id = s.supplier_id
-         AND po.createdAt BETWEEN ? AND ?
-       WHERE s.isActive = TRUE
-       GROUP BY s.supplier_id, s.name, s.phone ORDER BY totalPurchased DESC`,
-      [start, end]
-    );
-
-    res.json({ success: true, data: suppliers });
-  } catch (error) { next(error); }
-};
-
 const getProfitLoss = async (req, res, next) => {
   try {
-    const { start, end } = getDateRange(req);
     const userType = req.user.userType || 'shop';
-
     const statusFilter = userType === 'supplier'
       ? "status IN ('COMPLETED', 'PENDING')"
       : "status = 'COMPLETED'";
 
-    const [[result]] = await req.db.execute(
-      `SELECT COALESCE(SUM(ti.totalAmount), 0)             as totalRevenue,
-              COALESCE(SUM(ti.costPrice * ti.quantity), 0) as totalCost,
-              COALESCE(SUM(ti.taxAmount), 0)               as totalTax,
-              COALESCE(SUM(ti.discountAmount), 0)          as totalDiscount,
-              COALESCE(SUM(ti.quantity), 0)                as totalItemsSold
+    const salesParams = [];
+    const salesCond = getCondition('t.createdAt', req, salesParams);
+
+    // Revenue & COGS logic
+    const [[revData]] = await req.db.execute(
+      `SELECT COALESCE(SUM(ti.totalAmount), 0) as revenue,
+              COALESCE(SUM(ti.costPrice * ti.quantity), 0) as cogs
        FROM transaction_items ti
        JOIN transactions t ON t.transaction_id = ti.transaction_id
-       WHERE t.createdAt BETWEEN ? AND ? AND t.${statusFilter}`,
-      [start, end]
+       WHERE ${salesCond} AND t.${statusFilter}`,
+      salesParams
     );
 
-    const grossProfit  = result.totalRevenue - result.totalCost - result.totalTax;
-    const profitMargin = result.totalRevenue > 0
-      ? ((grossProfit / result.totalRevenue) * 100).toFixed(2) : 0;
+    const revenue = parseFloat(revData.revenue);
+    const cogs = parseFloat(revData.cogs);
+    const expenses = 0; // Expenses table not yet implemented in schema
+    const grossProfit = revenue - cogs;
+    const netProfit = grossProfit;
 
     res.json({
       success: true,
-      data: { ...result, grossProfit, profitMargin: parseFloat(profitMargin) },
+      data: { revenue, cogs, expenses, grossProfit, netProfit }
     });
   } catch (error) { next(error); }
 };
 
-export { getSalesReport, getInventoryReport, getCustomerReport, getSupplierReport, getProfitLoss };
+export {
+  getSalesReport,
+  getCustomerReport,
+  getSupplierReport,
+  getInventoryReport,
+  getProfitLoss
+};

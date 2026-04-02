@@ -6,14 +6,16 @@ const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
 export default function SupplierReport() {
   const [suppliers, setSuppliers] = useState([]);
+  const [period,    setPeriod]    = useState('month');
   const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
-    getSupplierReport()
+    setLoading(true);
+    getSupplierReport({ period })
       .then(res => { if (res.success) setSuppliers(res.data); })
       .catch(err => console.error(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [period]);
 
   const totalPurchased = suppliers.reduce((s, sup) => s + parseFloat(sup.totalPurchased || 0), 0);
   const activeCount    = suppliers.filter(s => s.isActive).length;
@@ -26,6 +28,15 @@ export default function SupplierReport() {
         <div>
           <h2 className="report-heading">Supplier Overview</h2>
           <p className="report-subheading">Supplier relationships and purchase history</p>
+        </div>
+        <div className="report-period-filter">
+          {['today', 'week', 'month', 'overall'].map(p => (
+            <button key={p}
+              className={`report-period-btn ${period === p ? 'report-period-btn--active' : ''}`}
+              onClick={() => setPeriod(p)}>
+              {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : p === 'month' ? 'This Month' : 'Overall'}
+            </button>
+          ))}
         </div>
       </div>
 

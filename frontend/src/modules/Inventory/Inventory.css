@@ -640,6 +640,30 @@
   color: var(--color-danger);
 }
 
+/* Pre-fill notice banner (shown when opened from a purchase order) */
+.prefill-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 var(--space-6) var(--space-1);
+  padding: 10px 14px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-left: 3px solid #f59e0b;
+  border-radius: var(--radius-md);
+  color: #d97706;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.5;
+  margin-top: var(--space-4);
+}
+
+.prefill-notice svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: #f59e0b;
+}
+
 /* Form */
 .product-form {
   display: flex;

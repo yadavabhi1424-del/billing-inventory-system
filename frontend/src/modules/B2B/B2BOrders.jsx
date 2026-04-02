@@ -4,6 +4,7 @@ import { getB2BOrders, getB2BOrderById, updateB2BOrderStatus } from '../../servi
 import Icon from '../../components/Icon';
 import './B2BOrders.css';
 
+
 const fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const STATUS_MAP = {
@@ -19,6 +20,7 @@ export default function B2BOrders({ user }) {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [addedItems, setAddedItems] = useState({});
   
   const isSupplier = user?.userType === 'supplier';
   const navigate = useNavigate();
@@ -45,6 +47,9 @@ export default function B2BOrders({ user }) {
       if (res.success) {
         setSelectedOrder(res.data);
         setPanelOpen(true);
+        // Refresh added-items tracking for this order from localStorage
+        const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
+        setAddedItems(stored);
       }
     } catch (err) {
       alert("Failed to load details: " + err.message);
@@ -185,7 +190,7 @@ export default function B2BOrders({ user }) {
                 <h3>Ordered Items</h3>
                 <div className="items-list">
                   {selectedOrder.items?.map(item => (
-                    <div key={item.id} className="item-row">
+                    <div key={item.id} className={`item-row ${!isSupplier && selectedOrder.status === 'CLOSED' ? 'item-row--with-action' : ''}`}>
                       <div className="item-info">
                         <span className="item-name">{item.name}</span>
                         <span className="item-sku">{item.sku}</span>
@@ -194,6 +199,34 @@ export default function B2BOrders({ user }) {
                         {item.qty} × {fmt(item.price)}
                       </div>
                       <div className="item-total">{fmt(item.total)}</div>
+                      {!isSupplier && selectedOrder.status === 'CLOSED' && (() => {
+                        const itemKey = `${selectedOrder.order_id}_${item.id}`;
+                        const isAdded = !!addedItems[itemKey];
+                        return (
+                          <button
+                            className={`item-add-inventory-btn ${isAdded ? 'item-add-inventory-btn--added' : ''}`}
+                            title={isAdded ? 'Already added to inventory' : 'Add to Inventory'}
+                            disabled={isAdded}
+                            onClick={() => navigate('/inventory', {
+                              state: {
+                                addFromOrder: {
+                                  name: item.name,
+                                  costPrice: item.price,
+                                  quantity: item.qty,
+                                  supplierName: selectedOrder.supplier_name,
+                                  supplierId: selectedOrder.supplier_id,
+                                  supplierDbName: selectedOrder.supplier_db_name,
+                                  orderId: selectedOrder.order_id,
+                                  itemId: item.id,
+                                }
+                              }
+                            })}
+                          >
+                            <Icon name={isAdded ? 'check' : 'box'} size={13} />
+                            {isAdded ? 'Added' : 'Add item'}
+                          </button>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>

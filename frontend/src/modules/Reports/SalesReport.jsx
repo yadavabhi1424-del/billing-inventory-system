@@ -15,12 +15,7 @@ export default function SalesReport() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const today = new Date().toISOString().split('T')[0];
-      const params = period === 'today'
-        ? { startDate: today, endDate: today }
-        : period === 'week'
-        ? { startDate: new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0], endDate: today }
-        : { startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], endDate: today };
+      const params = { period };
 
       const [salesRes, plRes] = await Promise.all([
         getSalesReport(params),
@@ -49,11 +44,11 @@ export default function SalesReport() {
           <p className="report-subheading">Revenue and performance metrics</p>
         </div>
         <div className="report-period-filter">
-          {['today', 'week', 'month'].map(p => (
+          {['today', 'week', 'month', 'overall'].map(p => (
             <button key={p}
               className={`report-period-btn ${period === p ? 'report-period-btn--active' : ''}`}
               onClick={() => setPeriod(p)}>
-              {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : 'This Month'}
+              {p === 'today' ? 'Today' : p === 'week' ? 'This Week' : p === 'month' ? 'This Month' : 'Overall'}
             </button>
           ))}
         </div>

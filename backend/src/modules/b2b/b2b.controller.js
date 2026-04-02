@@ -136,10 +136,12 @@ export const getB2BOrderById = async (req, res, next) => {
     const [orders] = await masterPool.execute(
       `SELECT o.*, 
               p_shop.business_name as shop_name, p_shop.phone as shop_phone, p_shop.email as shop_email, p_shop.address as shop_address,
-              p_sup.business_name as supplier_name, p_sup.phone as supplier_phone, p_sup.email as supplier_email, p_sup.address as supplier_address
+              p_sup.business_name as supplier_name, p_sup.phone as supplier_phone, p_sup.email as supplier_email, p_sup.address as supplier_address,
+              s_master.db_name as supplier_db_name
        FROM b2b_orders o
        LEFT JOIN profiles p_shop ON p_shop.entity_id = o.shop_id
        LEFT JOIN profiles p_sup ON p_sup.entity_id = o.supplier_id
+       LEFT JOIN suppliers s_master ON s_master.supplier_id = o.supplier_id
        WHERE o.order_id = ?`,
       [id]
     );
