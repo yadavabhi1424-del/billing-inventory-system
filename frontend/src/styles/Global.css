@@ -285,8 +285,7 @@ body {
   color: rgba(255, 255, 255, 0.6) !important; /* Force light text for readability on dark background */
 }
 
-.receipt-printable-area,
-.invoice-modal {
+.receipt-printable-area {
   background: var(--color-bg-surface) !important;
   backdrop-filter: none !important;
 }

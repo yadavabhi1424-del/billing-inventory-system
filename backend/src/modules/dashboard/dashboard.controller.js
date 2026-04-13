@@ -31,6 +31,7 @@ const getDashboard = async (req, res, next) => {
 
     // 2. Growth (Previous Period Revenue)
     let growth = null;
+    let localPrevRev = 0;
     if (!isOverall) {
       growth = 0;
       const [[prevStats]] = await req.db.execute(
@@ -39,8 +40,8 @@ const getDashboard = async (req, res, next) => {
          WHERE ${getPrevCondition('createdAt', period)} AND status = 'COMPLETED'`
       );
       const currentRev = parseFloat(currentStats.totalRevenue);
-      const prevRev = parseFloat(prevStats.totalRevenue);
-      growth = prevRev > 0 ? (((currentRev - prevRev) / prevRev) * 100).toFixed(1) : 0;
+      localPrevRev = parseFloat(prevStats.totalRevenue);
+      growth = localPrevRev > 0 ? (((currentRev - localPrevRev) / localPrevRev) * 100).toFixed(1) : 0;
     }
 
     // 3. Net Profit (SUM(totalAmount - (costPrice * quantity)))
@@ -54,6 +55,24 @@ const getDashboard = async (req, res, next) => {
     // 4. Procurement Stats (Ultimate Consolidation: Local + Network B2B)
     let procurementSpend = 0;
     let itemsPurchased    = 0;
+    
+    // B2B Stats for Supplier
+    let b2bRevenue = 0;
+    let b2bTransactions = 0;
+    let prevB2bRevenue = 0;
+    let pendingB2B = 0;
+    let fulfilledB2B = 0;
+    
+    const isSupplier = req.user && req.user.userType === 'supplier';
+    
+    // Identify the shop/supplier by everything possible: UUID, db_name, or slug
+    const dbName   = req.dbName;
+    const slug     = req.dbName.replace('shop_', '').replace('supplier_', '');
+    const [[mapping]] = await masterPool.execute(
+      "SELECT tenant_id FROM tenants WHERE db_name = ? OR shop_slug = ?",
+      [dbName, slug]
+    );
+    const uuid = mapping?.tenant_id;
 
     try {
       // 4a. LOCAL Manual Purchase Orders (Marked Received)
@@ -71,18 +90,10 @@ const getDashboard = async (req, res, next) => {
       let networkSpend = 0;
       let networkItems = 0;
 
-      // Identify the shop by everything possible: UUID, db_name, or slug
-      const dbName   = req.dbName;
-      const slug     = req.dbName.replace('shop_', '').replace('supplier_', '');
-      const [[mapping]] = await masterPool.execute(
-        "SELECT tenant_id FROM tenants WHERE db_name = ? OR shop_slug = ?",
-        [dbName, slug]
-      );
-
-      if (mapping) {
-        const uuid = mapping.tenant_id;
+      if (uuid) {
         const b2bStatusFilter = "('ACCEPTED', 'BILLED', 'CLOSED')";
         
+        // If shop is acting as buyer
         const [[nSpend]] = await masterPool.execute(
           `SELECT COALESCE(SUM(total_amount), 0) as spend FROM b2b_orders
            WHERE (shop_id = ? OR shop_id = ? OR shop_id = ?) 
@@ -99,6 +110,40 @@ const getDashboard = async (req, res, next) => {
 
         networkSpend = parseFloat(nSpend.spend) || 0;
         networkItems = parseInt(nItems.items)    || 0;
+        
+        // If acting as supplier (get supplier revenue)
+        if (isSupplier) {
+          const [[b2bStats]] = await masterPool.execute(`
+            SELECT COUNT(*) as txn, SUM(total_amount) as rev 
+            FROM b2b_orders 
+            WHERE supplier_id = ? AND status IN ${b2bStatusFilter} 
+            AND ${getCondition('updatedAt', period)}
+          `, [uuid]);
+          b2bRevenue = parseFloat(b2bStats.rev) || 0;
+          b2bTransactions = parseInt(b2bStats.txn) || 0;
+
+          if (!isOverall) {
+            const [[prevB2bStats]] = await masterPool.execute(`
+                SELECT SUM(total_amount) as rev 
+                FROM b2b_orders 
+                WHERE supplier_id = ? AND status IN ${b2bStatusFilter} 
+                AND ${getPrevCondition('updatedAt', period)}
+            `, [uuid]);
+            prevB2bRevenue = parseFloat(prevB2bStats.rev) || 0;
+          }
+
+          const [[b2bPending]] = await masterPool.execute(`
+            SELECT COUNT(*) as count FROM b2b_orders
+            WHERE supplier_id = ? AND status IN ('PENDING', 'ACCEPTED')
+          `, [uuid]);
+          pendingB2B = parseInt(b2bPending.count) || 0;
+
+          const [[b2bFulfilled]] = await masterPool.execute(`
+            SELECT COUNT(*) as count FROM b2b_orders
+            WHERE supplier_id = ? AND status IN ('BILLED', 'CLOSED')
+          `, [uuid]);
+          fulfilledB2B = parseInt(b2bFulfilled.count) || 0;
+        }
       }
 
       procurementSpend = (parseFloat(localSpend.spend) || 0) + networkSpend;
@@ -122,20 +167,48 @@ const getDashboard = async (req, res, next) => {
        WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND status = 'COMPLETED'
        GROUP BY DATE(createdAt) ORDER BY date ASC`
     );
+    
+    let b2b7DaysRaw = [];
+    if (uuid && isSupplier) {
+      const [res] = await masterPool.execute(
+        `SELECT DATE(updatedAt) as date, SUM(total_amount) as sales
+         FROM b2b_orders
+         WHERE supplier_id = ? AND updatedAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND status IN ('ACCEPTED', 'BILLED', 'CLOSED')
+         GROUP BY DATE(updatedAt) ORDER BY date ASC`,
+        [uuid]
+      );
+      b2b7DaysRaw = res;
+    }
+    
+    const formatDateLocal = (d) => {
+      const dateObj = new Date(d);
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const formatMonthLocal = (d) => {
+      const dateObj = new Date(d);
+      const yyyy = dateObj.getFullYear();
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      return `${yyyy}-${mm}`;
+    };
+
     const last7Days = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
-      const match = last7DaysRaw.find(r => {
-        const rDate = new Date(r.date);
-        return rDate.toISOString().split('T')[0] === dateStr;
-      });
-      const sales = match ? parseFloat(match.sales) : 0;
+      const dateStr = formatDateLocal(d);
+      
+      const match = last7DaysRaw.find(r => formatDateLocal(r.date) === dateStr);
+      const b2bMatch = b2b7DaysRaw.find(r => formatDateLocal(r.date) === dateStr);
+      
+      const sales = (match ? parseFloat(match.sales) : 0) + (b2bMatch ? parseFloat(b2bMatch.sales) : 0);
       const prevSales = last7Days[last7Days.length - 1]?.sales || 0;
       let barGrowth = 0;
       if (prevSales > 0) barGrowth = ((sales - prevSales) / prevSales) * 100;
-      else if (sales > 0) barGrowth = 100;
+      else if (sales > 0 && last7Days.length > 0) barGrowth = 100; // only show 100% if not the first bar and previous was 0
 
       last7Days.push({ date: dateStr, sales, growth: parseFloat(barGrowth.toFixed(1)) });
     }
@@ -147,17 +220,32 @@ const getDashboard = async (req, res, next) => {
        WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH) AND status = 'COMPLETED'
        GROUP BY date ORDER BY date ASC`
     );
+    
+    let b2b12MonthsRaw = [];
+    if (uuid && isSupplier) {
+      const [res] = await masterPool.execute(
+        `SELECT DATE_FORMAT(updatedAt, '%Y-%m') as date, SUM(total_amount) as sales
+         FROM b2b_orders
+         WHERE supplier_id = ? AND updatedAt >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH) AND status IN ('ACCEPTED', 'BILLED', 'CLOSED')
+         GROUP BY date ORDER BY date ASC`,
+        [uuid]
+      );
+      b2b12MonthsRaw = res;
+    }
+    
     const last12Months = [];
     for (let i = 11; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      const dateStr = d.toISOString().split('T')[0].substring(0, 7);
+      const dateStr = formatMonthLocal(d);
       const match = last12MonthsRaw.find(r => r.date === dateStr);
-      const sales = match ? parseFloat(match.sales) : 0;
+      const b2bMatch = b2b12MonthsRaw.find(r => r.date === dateStr);
+      
+      const sales = (match ? parseFloat(match.sales) : 0) + (b2bMatch ? parseFloat(b2bMatch.sales) : 0);
       const prevSales = last12Months[last12Months.length - 1]?.sales || 0;
       let barGrowth = 0;
       if (prevSales > 0) barGrowth = ((sales - prevSales) / prevSales) * 100;
-      else if (sales > 0) barGrowth = 100;
+      else if (sales > 0 && last12Months.length > 0) barGrowth = 100;
 
       last12Months.push({ date: dateStr, sales, growth: parseFloat(barGrowth.toFixed(1)) });
     }
@@ -174,11 +262,25 @@ const getDashboard = async (req, res, next) => {
          GROUP BY week ORDER BY week ASC`,
         [drillDownMonth]
       );
+      let b2bDrillDownRaw = [];
+      if (uuid && isSupplier) {
+        const [res] = await masterPool.execute(
+          `SELECT WEEK(updatedAt, 1) - WEEK(DATE_FORMAT(updatedAt, '%Y-%m-01'), 1) + 1 as week,
+                  SUM(total_amount) as sales
+           FROM b2b_orders
+           WHERE supplier_id = ? AND DATE_FORMAT(updatedAt, '%Y-%m') = ? AND status IN ('ACCEPTED', 'BILLED', 'CLOSED')
+           GROUP BY week ORDER BY week ASC`,
+          [uuid, drillDownMonth]
+        );
+        b2bDrillDownRaw = res;
+      }
+      
       // Pad to 5 weeks for safety
       weekDrilldown = Array.from({ length: 5 }, (_, i) => {
         const weekNum = i + 1;
         const match = drillDownRaw.find(r => r.week === weekNum);
-        const sales = match ? parseFloat(match.sales) : 0;
+        const b2bMatch = b2bDrillDownRaw.find(r => r.week === weekNum);
+        const sales = (match ? parseFloat(match.sales) : 0) + (b2bMatch ? parseFloat(b2bMatch.sales) : 0);
         return { week: `Week ${weekNum}`, sales };
       });
     }
@@ -202,18 +304,27 @@ const getDashboard = async (req, res, next) => {
        ORDER BY t.createdAt DESC LIMIT 4`
     );
 
+    // Consolidate Growth
+    if (!isOverall) {
+      const totalCurrent = parseFloat(currentStats.totalRevenue) + b2bRevenue;
+      const totalPrev = localPrevRev + prevB2bRevenue;
+      growth = totalPrev > 0 ? (((totalCurrent - totalPrev) / totalPrev) * 100).toFixed(1) : 0;
+    }
+
     res.json({
       success: true,
       data: {
         stats: {
-          revenue: parseFloat(currentStats.totalRevenue),
-          transactions: currentStats.totalTransactions,
-          netProfit: parseFloat(profitData.netProfit),
+          revenue: parseFloat(currentStats.totalRevenue) + b2bRevenue,
+          transactions: currentStats.totalTransactions + b2bTransactions,
+          netProfit: parseFloat(profitData.netProfit) + b2bRevenue, // Supplier's B2B is pure revenue/profit here for simplicity, or we can leave netProfit as POS only unless we calculate B2B cost
           salesGrowth: isOverall ? null : parseFloat(growth),
           itemsPurchased: itemsPurchased,
           procurementSpend: procurementSpend,
           totalProducts: inventoryStats.totalProducts,
           lowStockCount: inventoryStats.lowStockCount,
+          pendingB2B: pendingB2B,
+          fulfilledB2B: fulfilledB2B,
         },
         charts: { last7Days, last12Months, topProducts, weekDrilldown },
         recentTransactions,

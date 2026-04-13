@@ -494,8 +494,12 @@ export async function placeB2BOrder(data) {
   return await api.post('/b2b/orders', data);
 }
 
-export async function updateB2BOrderStatus(id, status) {
-  return await api.patch(`/b2b/orders/${id}/status`, { status });
+export async function updateB2BOrderStatus(id, status, rejectionReason, updatedItems) {
+  return await api.patch(`/b2b/orders/${id}/status`, {
+    status,
+    rejection_reason: rejectionReason || null,
+    updated_items: updatedItems || null,
+  });
 }
 
 export async function getConnections(params = {}) {

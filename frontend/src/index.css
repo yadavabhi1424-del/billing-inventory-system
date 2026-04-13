@@ -22,4 +22,14 @@ a {
 a:hover {
   text-decoration: underline;
 }
-  
+
+/* Hide default arrows on number inputs globally */
+input[type="number"].hide-spinners::-webkit-outer-spin-button,
+input[type="number"].hide-spinners::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"].hide-spinners {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+} 

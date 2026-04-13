@@ -1,8 +1,12 @@
 const AI_SERVICE = 'http://localhost:5001';
 
-const proxy = async (res, url, method = 'GET') => {
+const proxy = async (req, res, url, method = 'GET') => {
   try {
-    const response = await fetch(`${AI_SERVICE}${url}`, { method });
+    const headers = { 'Content-Type': 'application/json' };
+    if (req.dbName) {
+      headers['X-Database-Name'] = req.dbName;
+    }
+    const response = await fetch(`${AI_SERVICE}${url}`, { method, headers });
     const data = await response.json();
     res.json(data);
   } catch (err) {
@@ -10,8 +14,8 @@ const proxy = async (res, url, method = 'GET') => {
   }
 };
 
-export const getHealth          = (req, res) => proxy(res, '/health');
-export const trainModels        = (req, res) => proxy(res, '/train', 'POST');
-export const getRecommendations = (req, res) => proxy(res, '/recommendations');
-export const getPredictAll      = (req, res) => proxy(res, '/predict-all');
-export const getPrediction      = (req, res) => proxy(res, `/predict/${req.params.productId}`);
+export const getHealth          = (req, res) => proxy(req, res, '/health');
+export const trainModels        = (req, res) => proxy(req, res, '/train', 'POST');
+export const getRecommendations = (req, res) => proxy(req, res, '/recommendations');
+export const getPredictAll      = (req, res) => proxy(req, res, '/predict-all');
+export const getPrediction      = (req, res) => proxy(req, res, `/predict/${req.params.productId}`);

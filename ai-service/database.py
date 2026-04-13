@@ -6,11 +6,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_connection():
+    db_name = os.getenv('DB_NAME', 'inventory')
+    
+    try:
+        from flask import has_request_context, request
+        if has_request_context():
+            header_db = request.headers.get('X-Database-Name')
+            if header_db:
+                db_name = header_db
+    except ImportError:
+        pass
+
     return mysql.connector.connect(
         host     = os.getenv('DB_HOST',     'localhost'),
         user     = os.getenv('DB_USER',     'root'),
         password = os.getenv('DB_PASSWORD', 'Abhi@1424'),
-        database = os.getenv('DB_NAME',     'inventory'),
+        database = db_name,
         port     = int(os.getenv('DB_PORT', 3306)),
     )
 
@@ -83,7 +94,21 @@ def fetch_all_products():
     """Fetch all active products with extended fields"""
     conn   = get_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
+
+    cursor.execute("SHOW COLUMNS FROM products LIKE 'lead_time_days'")
+    has_lead = bool(cursor.fetchone())
+
+    cursor.execute("SHOW COLUMNS FROM products LIKE 'min_order_qty'")
+    has_moq = bool(cursor.fetchone())
+
+    cursor.execute("SHOW COLUMNS FROM products LIKE 'industry_tags'")
+    has_tags = bool(cursor.fetchone())
+
+    lead_col = "p.lead_time_days" if has_lead else "1 as lead_time_days"
+    moq_col  = "p.min_order_qty"  if has_moq  else "1 as min_order_qty"
+    tags_col = "p.industry_tags"  if has_tags else "NULL as industry_tags"
+
+    cursor.execute(f"""
         SELECT
             p.product_id,
             p.name,
@@ -92,9 +117,9 @@ def fetch_all_products():
             p.sellingPrice,
             p.costPrice,
             p.inventory_type,
-            p.lead_time_days,
-            p.min_order_qty,
-            p.industry_tags,
+            {lead_col},
+            {moq_col},
+            {tags_col},
             c.name as category_name
         FROM products p
         LEFT JOIN categories c ON c.category_id = p.category_id

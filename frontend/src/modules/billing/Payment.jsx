@@ -36,9 +36,6 @@ function InvoiceModal({ invoice, onClose, shopInfo }) {
           <button className="invoice-action-btn" onClick={() => window.print()}>
             <Icon name="billing" size={15} /> Print Bill
           </button>
-          <button className="invoice-action-btn" onClick={() => window.print()}>
-            <Icon name="reports" size={15} /> Save PDF
-          </button>
           <button className="invoice-action-btn invoice-action-btn--close" onClick={onClose}>
             <Icon name="x" size={15} />
           </button>
@@ -419,10 +416,13 @@ export default function Payment({ user }) {
       const res = await createTransaction(transactionData);
 
       if (res.success) {
-        // If this was a B2B order fulfillment, mark it as BILLED
+        // If this was a B2B order fulfillment, mark it as BILLED and sync updated quantities
         if (b2bOrderId) {
           try {
-            await updateB2BOrderStatus(b2bOrderId, 'BILLED');
+            await updateB2BOrderStatus(b2bOrderId, 'BILLED', null, cart.map(item => ({
+              product_id: item.product_id,
+              qty: parseInt(item.qty) || 1,
+            })));
           } catch (err) {
             console.error("Failed to update B2B order status:", err);
           }

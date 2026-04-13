@@ -71,16 +71,22 @@ export async function seedMasterData() {
   // ── Phase 7: B2B Order Lifecycle (Cross-Tenant) ─────────────
   await masterPool.execute(`
     CREATE TABLE IF NOT EXISTS b2b_orders (
-      order_id      VARCHAR(36)  PRIMARY KEY,
-      shop_id       VARCHAR(36)  NOT NULL,
-      supplier_id   VARCHAR(36)  NOT NULL,
-      status        ENUM('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED') DEFAULT 'PENDING',
-      total_amount  DECIMAL(12,2) DEFAULT 0,
-      notes         TEXT,
-      createdAt     DATETIME     DEFAULT CURRENT_TIMESTAMP,
-      updatedAt     DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      order_id       VARCHAR(36)  PRIMARY KEY,
+      shop_id        VARCHAR(36)  NOT NULL,
+      supplier_id    VARCHAR(36)  NOT NULL,
+      status         ENUM('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED') DEFAULT 'PENDING',
+      total_amount   DECIMAL(12,2) DEFAULT 0,
+      notes          TEXT,
+      rejection_reason TEXT,
+      createdAt      DATETIME     DEFAULT CURRENT_TIMESTAMP,
+      updatedAt      DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )
   `);
+
+  // Migration: add rejection_reason to existing tables if missing
+  try {
+    await masterPool.execute(`ALTER TABLE b2b_orders ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
+  } catch (_) { /* column may already exist */ }
 
   await masterPool.execute(`
     CREATE TABLE IF NOT EXISTS b2b_order_items (

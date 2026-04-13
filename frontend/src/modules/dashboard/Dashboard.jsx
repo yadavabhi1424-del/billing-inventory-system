@@ -240,12 +240,7 @@ export default function Dashboard({ user }) {
                     onClick={() => handleBarClick(item)}
                   >
                     <div className="bar-chart__bars">
-                      {item.growth !== 0 && (
-                        <div className={`bar-chart__growth-tag bar-chart__growth-tag--${item.growth > 0 ? 'up' : 'down'}`}>
-                          <Icon name={item.growth > 0 ? 'zigzagUp' : 'zigzagDown'} size={14} />
-                          <span>{Math.abs(item.growth)}%</span>
-                        </div>
-                      )}
+
                       <div
                         className="bar-chart__bar bar-chart__bar--revenue"
                         style={{ height: `${barHeight}%` }}

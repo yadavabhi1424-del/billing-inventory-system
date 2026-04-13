@@ -54,6 +54,7 @@ function ProductFormModal({ title, product = null, prefillData = null, categorie
   const [imagePreview, setImagePreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [predictedSku, setPredictedSku] = useState('Generating...');
+  const imageInputRef = useRef(null);
 
   useEffect(() => {
     if (!isEdit) {
@@ -229,9 +230,19 @@ function ProductFormModal({ title, product = null, prefillData = null, categorie
             <div className="product-form__image-section">
               <label className="product-form__label">Product Image</label>
               <div className="product-form__image-upload">
-                <input type="file" accept="image/*" onChange={handleImage}
-                  className="product-form__image-input" id="product-image" />
-                <label htmlFor="product-image" className="product-form__image-label">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImage}
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                />
+                <div
+                  className="product-form__image-label"
+                  onClick={() => imageInputRef.current && imageInputRef.current.click()}
+                  style={{ cursor: 'pointer' }}
+                >
                   {imagePreview ? (
                     <img src={imagePreview} alt="Preview" className="product-form__image-preview" />
                   ) : (
@@ -241,7 +252,7 @@ function ProductFormModal({ title, product = null, prefillData = null, categorie
                       <span className="product-form__image-hint">Max 2MB (JPG, PNG)</span>
                     </div>
                   )}
-                </label>
+                </div>
               </div>
               {errors.image && <span className="product-form__error">{errors.image}</span>}
             </div>
@@ -252,7 +263,7 @@ function ProductFormModal({ title, product = null, prefillData = null, categorie
               <div className="product-form__field product-form__field--full">
                 <label className="product-form__label">Product Name *</label>
                 <input type="text" className={`product-form__input ${errors.name ? 'product-form__input--error' : ''}`}
-                  placeholder="e.g., Rice" value={form.name}
+                  placeholder="e.g." value={form.name}
                   onChange={e => set('name', e.target.value)} />
                 {errors.name && <span className="product-form__error">{errors.name}</span>}
               </div>

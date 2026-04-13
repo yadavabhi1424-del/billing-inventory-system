@@ -337,7 +337,7 @@ function MyAccount({ user }) {
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     setPassError('');
-    if (passwords.newPass.length < 6) return setPassError('Min 6 characters.');
+    if (passwords.newPass.length < 8) return setPassError('Minimum 8 characters required.');
     if (passwords.newPass !== passwords.confirm) return setPassError('Passwords do not match.');
     try {
       setSaving(true);
@@ -394,7 +394,7 @@ function MyAccount({ user }) {
       <div className="settings-card">
         <div className="settings-card__header">
           <h3>Change Password</h3>
-          <p>Use a strong password with letters, numbers and symbols</p>
+          <p>Use a strong password with at least 8 characters (letters, numbers and symbols)</p>
         </div>
         <form onSubmit={handlePasswordChange}>
           <div className="settings-grid">
@@ -407,7 +407,7 @@ function MyAccount({ user }) {
             <div className="settings-field">
               <label className="settings-label">New Password</label>
               <input className="settings-input" type="password"
-                value={passwords.newPass} placeholder="Min 6 characters"
+                value={passwords.newPass} placeholder="Min 8 characters"
                 onChange={e => setPasswords(p => ({ ...p, newPass: e.target.value }))} />
             </div>
             <div className="settings-field">

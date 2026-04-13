@@ -42,11 +42,17 @@ async function syncSupplierProduct(req, isUpdate, productData) {
              productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
              productData.image || null, 1]
            );
+        } else {
+          // If toggled off, also remove from master/set inactive robustly
+          await masterPool.execute(
+            "UPDATE supplier_products SET is_active = 0 WHERE supplier_id = ? AND product_id = ?",
+            [supplier_id, productData.product_id]
+          );
         }
       }
     } else {
-      // For creation, default to Private (0) unless explicitly marked public
-      const finalActive = productData.is_public ? 1 : 0;
+      // For creation: only insert if explicitly marked public (use strict string comparison)
+      const finalActive = isPublic ? 1 : 0;
       
       if (finalActive === 1) {
         await masterPool.execute(

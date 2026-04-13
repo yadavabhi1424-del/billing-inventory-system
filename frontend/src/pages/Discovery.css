@@ -1,3 +1,5 @@
+@import '../modules/Suppliers/Suppliers.css';
+
 /* Full Screen Overlays */
 .discovery-modal-overlay {
   position: fixed;
@@ -292,100 +294,7 @@
   margin-left: auto;
 }
 
-/* Discovery Map Modal */
-.discovery-map-modal {
-  background: var(--color-bg-elevated);
-  width: 90%;
-  max-width: 1000px;
-  height: 80vh;
-  border-radius: 30px;
-  border: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: var(--shadow-xl);
-  position: relative;
-  transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
-  animation: modalSlide 0.4s ease;
-}
 
-@keyframes modalSlide {
-  from { transform: translateY(30px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-.discovery-map-modal.maximized {
-  width: 100vw;
-  height: 100vh;
-  max-width: none;
-  border-radius: 0;
-  border: none;
-}
-
-.map-modal-header {
-  padding: 20px 30px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.map-modal-header h2 { font-size: 1.2rem; margin: 0; color: var(--color-text-primary); }
-
-.map-modal-actions {
-  display: flex;
-  gap: 15px;
-  align-items: center;
-}
-
-.maximize-btn {
-  background: var(--color-bg-overlay);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-primary);
-  padding: 8px 16px;
-  border-radius: 10px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.maximize-btn:hover { background: var(--color-bg-input); }
-
-.close-btn-inline {
-  background: transparent;
-  border: none;
-  color: var(--color-text-primary);
-  font-size: 1.8rem;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.5;
-}
-.close-btn-inline:hover { opacity: 1; }
-
-.discovery__map-container-modal {
-  flex: 1;
-  position: relative;
-}
-
-.map-overlay-modal {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  width: 280px;
-  pointer-events: none;
-}
-.map-overlay-modal .map-info-panel {
-  pointer-events: auto;
-  background: var(--color-bg-surface);
-  backdrop-filter: blur(12px);
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lg);
-  color: var(--color-text-primary);
-}
-.map-overlay-modal p { margin-top: 0; font-size: 0.85rem; color: var(--color-text-secondary); }
 
 /* Grid cleanup */
 .discovery__loading {
@@ -441,19 +350,7 @@
   color: var(--color-text-secondary);
 }
 
-.google-maps-link {
-  display: block;
-  text-align: center;
-  padding: 14px;
-  background: #334155;
-  border-radius: 14px;
-  color: white;
-  text-decoration: none;
-  font-weight: 600;
-  margin-bottom: 30px;
-  transition: all 0.2s;
-}
-.google-maps-link:hover { background: #475569; }
+
 
 .modal-actions {
   display: grid;

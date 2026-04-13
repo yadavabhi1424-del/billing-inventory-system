@@ -134,7 +134,7 @@ export const getB2BOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const [orders] = await masterPool.execute(
-      `SELECT o.*, 
+      `SELECT o.*, o.rejection_reason,
               p_shop.business_name as shop_name, p_shop.phone as shop_phone, p_shop.email as shop_email, p_shop.address as shop_address,
               p_sup.business_name as supplier_name, p_sup.phone as supplier_phone, p_sup.email as supplier_email, p_sup.address as supplier_address,
               s_master.db_name as supplier_db_name
@@ -160,15 +160,22 @@ export const getB2BOrderById = async (req, res, next) => {
 export const updateB2BOrderStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, rejection_reason, updated_items } = req.body;
 
     const [order] = await masterPool.execute("SELECT * FROM b2b_orders WHERE order_id = ?", [id]);
     if (!order.length) return res.status(404).json({ success: false, message: "Order not found." });
 
-    await masterPool.execute(
-      "UPDATE b2b_orders SET status = ? WHERE order_id = ?",
-      [status, id]
-    );
+    if (status === 'REJECTED' && rejection_reason) {
+      await masterPool.execute(
+        "UPDATE b2b_orders SET status = ?, rejection_reason = ? WHERE order_id = ?",
+        [status, rejection_reason, id]
+      );
+    } else {
+      await masterPool.execute(
+        "UPDATE b2b_orders SET status = ? WHERE order_id = ?",
+        [status, id]
+      );
+    }
 
     // If order is ACCEPTED, also ensure relationship is ACCEPTED
     if (status === 'ACCEPTED') {
@@ -176,6 +183,18 @@ export const updateB2BOrderStatus = async (req, res, next) => {
         "UPDATE shop_supplier_map SET status = 'ACCEPTED' WHERE shop_id = ? AND supplier_id = ?",
         [order[0].shop_id, order[0].supplier_id]
       );
+    }
+
+    // If order is BILLED, sync updated item quantities
+    if (status === 'BILLED' && Array.isArray(updated_items) && updated_items.length > 0) {
+      for (const item of updated_items) {
+        if (item.product_id && item.qty > 0) {
+          await masterPool.execute(
+            "UPDATE b2b_order_items SET qty = ?, total = price * ? WHERE order_id = ? AND product_id = ?",
+            [item.qty, item.qty, id, item.product_id]
+          );
+        }
+      }
     }
 
     res.json({ success: true, message: `Order status updated to ${status}` });

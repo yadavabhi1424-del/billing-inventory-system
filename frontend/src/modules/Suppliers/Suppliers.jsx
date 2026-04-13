@@ -3,12 +3,12 @@
 //  StockSense Pro
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '../../components/Icon';
 import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
   getCustomers, createCustomer, updateCustomer, deleteCustomer,
-  getConnections, updateConnectionStatus, disconnectPartner, // new B2B networking APIs
+  getConnections, updateConnectionStatus, disconnectPartner,
   getCatalog, placeB2BOrder
 } from '../../services/api';
 import B2BOrders from '../B2B/B2BOrders';
@@ -28,9 +28,8 @@ export default function Suppliers({ user }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
 
-  // Tabs: 'crm' | 'requests' | 'orders'
+  // Tabs: 'crm' | 'orders'
   const [activeTab, setActiveTab] = useState('crm');
-  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Catalog / Ordering State
@@ -42,7 +41,6 @@ export default function Suppliers({ user }) {
 
   useEffect(() => {
     fetchSuppliers();
-    fetchRequests();
   }, []);
 
   const fetchSuppliers = async () => {
@@ -57,17 +55,6 @@ export default function Suppliers({ user }) {
     }
   };
 
-  const fetchRequests = async () => {
-    try {
-      if (activeTab === 'requests') setLoading(true);
-      const res = await getConnections({ status: 'PENDING' });
-      if (res.success) setRequests(res.data);
-    } catch (err) {
-      console.error("Requests fetch error:", err.message);
-    } finally {
-      if (activeTab === 'requests') setLoading(false);
-    }
-  };
 
   const handleDelete = async (e, supplier) => {
     e.stopPropagation();
@@ -165,10 +152,6 @@ export default function Suppliers({ user }) {
     (s.phone || '').includes(search)
   );
 
-  const filteredRequests = requests.filter(r =>
-    (r.name || r.business_name || '').toLowerCase().includes(search.toLowerCase())
-  );
-
   const activeCount = suppliers.filter(s => s.isActive).length;
   const totalProducts = suppliers.reduce((sum, s) => sum + (s.productCount || 0), 0);
 
@@ -209,15 +192,6 @@ export default function Suppliers({ user }) {
             onClick={() => setActiveTab('crm')}
           >
             My CRM
-          </button>
-          <button
-            className={`suppliers-tab ${activeTab === 'requests' ? 'active' : ''}`}
-            onClick={() => setActiveTab('requests')}
-          >
-            Network Requests
-            {requests.length > 0 && (
-              <span className="request-badge">{requests.length}</span>
-            )}
           </button>
           {!isSupplier && (
             <button
@@ -301,66 +275,6 @@ export default function Suppliers({ user }) {
         </div>
       )}
 
-      {/* Network Requests Table */}
-      {activeTab === 'requests' && (
-        <div className="suppliers-table-wrapper">
-          <table className="suppliers-table">
-            <thead>
-              <tr>
-                <th>Business Name</th>
-                <th>Location</th>
-                <th>Initiated By</th>
-                <th>Date</th>
-                <th style={{ width: 190 }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRequests.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="suppliers-empty">
-                    <p>No pending requests.</p>
-                  </td>
-                </tr>
-              ) : filteredRequests.map(r => (
-                <tr key={r.map_id} className="suppliers-row">
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      {r.logo ? <img src={r.logo} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
-                        : <div style={{ width: 32, height: 32, borderRadius: 6, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🏢</div>}
-                      <span className="suppliers-name">{r.name || r.business_name}</span>
-                    </div>
-                  </td>
-                  <td>{r.city || '—'}</td>
-                  <td>
-                    <span style={{ textTransform: 'capitalize', fontSize: '0.85rem' }}>
-                      {r.initiated_by} {r.initiated_by === user?.userType ? '(You)' : ''}
-                    </span>
-                  </td>
-                  <td>{new Date(r.createdAt).toLocaleDateString()}</td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {(r.initiated_by === user?.userType) ? (
-                      <span style={{ color: '#f59e0b', fontSize: '0.85rem' }}>Awaiting Acceptance</span>
-                    ) : (
-                      <div className="suppliers-actions">
-                        <button className="suppliers-action-btn" title="Accept"
-                          style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', padding: '6px 12px', width: 'auto', borderRadius: '6px' }}
-                          onClick={() => handleRequestStatus(r.map_id, 'ACCEPTED')}>
-                          Accept
-                        </button>
-                        <button className="suppliers-action-btn" title="Reject"
-                          style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', padding: '6px 12px', width: 'auto', borderRadius: '6px' }}
-                          onClick={() => handleRequestStatus(r.map_id, 'REJECTED')}>
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {/* Purchase Orders Table */}
       {activeTab === 'orders' && (
@@ -507,7 +421,18 @@ export default function Suppliers({ user }) {
                             <span className="catalog-card__price">{fmt(p.price)}</span>
                             <div className="catalog-card__qty-control">
                               <button onClick={() => updateCart(p, -1)} disabled={!cart[p.product_id]}>-</button>
-                              <span className="qty-val">{cart[p.product_id]?.qty || 0}</span>
+                              <input 
+                                type="number"
+                                min="0"
+                                className="hide-spinners"
+                                value={cart[p.product_id]?.qty || 0}
+                                onChange={e => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  const current = cart[p.product_id]?.qty || 0;
+                                  updateCart(p, val - current);
+                                }}
+                                style={{ width: '40px', textAlign: 'center', background: 'transparent', border: '1px solid rgba(150,150,150,0.3)', color: 'inherit', borderRadius: '4px', fontWeight: 'bold', margin: '0 5px' }}
+                              />
                               <button onClick={() => updateCart(p, 1)}>+</button>
                             </div>
                           </div>

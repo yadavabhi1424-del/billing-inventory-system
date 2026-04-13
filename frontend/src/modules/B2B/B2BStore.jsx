@@ -67,10 +67,13 @@ const B2BStore = ({ user }) => {
     setCart(prev => prev.filter(item => item.product_id !== productId));
   };
 
-  const updateQuantity = (productId, delta) => {
+  const updateQuantity = (productId, newQty) => {
+    if (newQty <= 0) {
+      removeFromCart(productId);
+      return;
+    }
     setCart(prev => prev.map(item => {
       if (item.product_id === productId) {
-        const newQty = Math.max(1, item.quantity + delta);
         return { ...item, quantity: newQty };
       }
       return item;
@@ -162,12 +165,33 @@ const B2BStore = ({ user }) => {
                     <span className="b2b-card__price">₹{parseFloat(product.price).toLocaleString()}</span>
                     <span className="b2b-card__unit">per {product.unit || 'pcs'}</span>
                   </div>
-                  <button 
-                    className="b2b-card__add-btn"
-                    onClick={() => addToCart(product)}
-                  >
-                    Add to Order
-                  </button>
+                  {(() => {
+                    const cartItem = cart.find(c => c.product_id === product.product_id);
+                    if (!cartItem) {
+                      return (
+                        <button 
+                          className="b2b-card__add-btn"
+                          onClick={() => addToCart(product)}
+                        >
+                          Add to Order
+                        </button>
+                      );
+                    }
+                    return (
+                      <div className="qty-picker">
+                        <button onClick={() => updateQuantity(product.product_id, cartItem.quantity - 1)}>−</button>
+                        <input 
+                          type="number"
+                          min="0"
+                          className="hide-spinners"
+                          value={cartItem.quantity}
+                          onChange={(e) => updateQuantity(product.product_id, parseInt(e.target.value) || 0)}
+                          style={{ width: '40px', textAlign: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}
+                        />
+                        <button onClick={() => updateQuantity(product.product_id, cartItem.quantity + 1)}>+</button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             ))}
@@ -194,9 +218,15 @@ const B2BStore = ({ user }) => {
                 </div>
                 <div className="cart-item__actions">
                   <div className="qty-picker">
-                    <button onClick={() => updateQuantity(item.product_id, -1)}>−</button>
-                    <span>{item.quantity}</span>
-                    <button onClick={() => updateQuantity(item.product_id, 1)}>+</button>
+                    <button onClick={() => updateQuantity(item.product_id, item.quantity - 1)}>−</button>
+                    <input 
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => updateQuantity(item.product_id, parseInt(e.target.value) || 1)}
+                      style={{ width: '40px', textAlign: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}
+                    />
+                    <button onClick={() => updateQuantity(item.product_id, item.quantity + 1)}>+</button>
                   </div>
                   <button className="remove-btn" onClick={() => removeFromCart(item.product_id)}>🗑️</button>
                 </div>

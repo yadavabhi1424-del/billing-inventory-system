@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { getB2BOrders, getB2BOrderById, updateB2BOrderStatus } from '../../services/api';
@@ -10,7 +10,7 @@ const fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const STATUS_MAP = {
   PENDING:  { label: 'Pending',   cls: 'status--pending' },
-  ACCEPTED: { label: 'Placed',    cls: 'status--accepted' },
+  ACCEPTED: { label: 'Accepted',  cls: 'status--accepted' },
   BILLED:   { label: 'Billed',    cls: 'status--billed' },
   CLOSED:   { label: 'Closed',    cls: 'status--closed' },
   REJECTED: { label: 'Rejected',  cls: 'status--rejected' }
@@ -22,6 +22,8 @@ export default function B2BOrders({ user }) {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [addedItems, setAddedItems] = useState({});
+  const [rejectModal, setRejectModal] = useState(null); // { orderId }
+  const [rejectReason, setRejectReason] = useState('');
   
   const isSupplier = user?.userType === 'supplier';
   const navigate = useNavigate();
@@ -61,19 +63,55 @@ export default function B2BOrders({ user }) {
     setTimeout(() => setSelectedOrder(null), 300);
   };
 
-  const handleAction = async (id, status) => {
+  const handleAction = async (id, status, reason) => {
     try {
-      const res = await updateB2BOrderStatus(id, status);
+      const res = await updateB2BOrderStatus(id, status, reason);
       if (res.success) {
         fetchOrders();
         if (selectedOrder?.order_id === id) {
-          setSelectedOrder(prev => ({ ...prev, status }));
+          setSelectedOrder(prev => ({ ...prev, status, rejection_reason: reason || prev?.rejection_reason }));
         }
         if (panelOpen && status === 'REJECTED') handleClosePanel();
       }
     } catch (err) {
       alert(err.message);
     }
+  };
+
+  const handleRejectClick = (orderId) => {
+    setRejectReason('');
+    setRejectModal({ orderId });
+  };
+
+  const handleConfirmReject = async () => {
+    if (!rejectModal) return;
+    await handleAction(rejectModal.orderId, 'REJECTED', rejectReason.trim());
+    setRejectModal(null);
+    setRejectReason('');
+  };
+
+  const handleAddAllToInventory = () => {
+    if (!selectedOrder?.items?.length) return;
+    // Navigate to inventory with first un-added item; user adds remaining one by one
+    // Find first not-yet-added item
+    const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
+    const pending = selectedOrder.items.filter(item => !stored[`${selectedOrder.order_id}_${item.id}`]);
+    if (!pending.length) { alert('All items already added to inventory.'); return; }
+    // Navigate with batch flag
+    navigate('/inventory', {
+      state: {
+        addFromOrder: {
+          name: pending[0].name,
+          costPrice: pending[0].price,
+          quantity: pending[0].qty,
+          supplierName: selectedOrder.supplier_name,
+          supplierId: selectedOrder.supplier_id,
+          supplierDbName: selectedOrder.supplier_db_name,
+          orderId: selectedOrder.order_id,
+          itemId: pending[0].id,
+        }
+      }
+    });
   };
 
   return (
@@ -134,7 +172,7 @@ export default function B2BOrders({ user }) {
                           <button className="icon-btn btn-accept" title="Accept" onClick={() => handleAction(o.order_id, 'ACCEPTED')}>
                             <Icon name="check" size={16} />
                           </button>
-                          <button className="icon-btn btn-reject" title="Reject" onClick={() => handleAction(o.order_id, 'REJECTED')}>
+                          <button className="icon-btn btn-reject" title="Reject" onClick={() => handleRejectClick(o.order_id)}>
                             <Icon name="x" size={16} />
                           </button>
                         </>
@@ -180,10 +218,24 @@ export default function B2BOrders({ user }) {
                         <Icon name="box" size={14} />
                         <strong>{isSupplier ? selectedOrder.shop_name : selectedOrder.supplier_name}</strong>
                       </div>
-                      <div className="info-card__row">
-                        <Icon name="payment" size={14} />
-                        <span>{isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone}</span>
-                      </div>
+                      {(isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone) && (
+                        <div className="info-card__row">
+                          <Icon name="payment" size={14} />
+                          <span>{isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone}</span>
+                        </div>
+                      )}
+                      {(isSupplier ? selectedOrder.shop_email : selectedOrder.supplier_email) && (
+                        <div className="info-card__row">
+                          <Icon name="mail" size={14} />
+                          <span>{isSupplier ? selectedOrder.shop_email : selectedOrder.supplier_email}</span>
+                        </div>
+                      )}
+                      {(isSupplier ? selectedOrder.shop_address : selectedOrder.supplier_address) && (
+                        <div className="info-card__row">
+                          <Icon name="location" size={14} />
+                          <span>{isSupplier ? selectedOrder.shop_address : selectedOrder.supplier_address}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -233,6 +285,12 @@ export default function B2BOrders({ user }) {
                     </div>
                   </div>
                   
+                  {selectedOrder.rejection_reason && (
+                    <div className="notes-section" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '0.75rem 1rem' }}>
+                      <h3 style={{ color: '#ef4444', marginBottom: 4 }}>Rejection Reason</h3>
+                      <p style={{ color: '#ef4444', opacity: 0.85 }}>{selectedOrder.rejection_reason}</p>
+                    </div>
+                  )}
                   {selectedOrder.notes && (
                     <div className="notes-section">
                       <h3>Notes</h3>
@@ -256,7 +314,7 @@ export default function B2BOrders({ user }) {
                         <button className="panel-btn btn-accept" onClick={() => handleAction(selectedOrder.order_id, 'ACCEPTED')}>
                           Accept Order
                         </button>
-                        <button className="panel-btn btn-reject" onClick={() => handleAction(selectedOrder.order_id, 'REJECTED')}>
+                        <button className="panel-btn btn-reject" onClick={() => handleRejectClick(selectedOrder.order_id)}>
                           Reject
                         </button>
                       </div>
@@ -274,6 +332,16 @@ export default function B2BOrders({ user }) {
                       </button>
                     )}
 
+                    {!isSupplier && selectedOrder.status === 'CLOSED' && (() => {
+                      const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
+                      const pendingCount = (selectedOrder.items || []).filter(item => !stored[`${selectedOrder.order_id}_${item.id}`]).length;
+                      return pendingCount > 0 ? (
+                        <button className="panel-btn btn-primary" onClick={handleAddAllToInventory}>
+                          <Icon name="box" size={15} /> Add All to Inventory ({pendingCount})
+                        </button>
+                      ) : null;
+                    })()}
+
                     <button className="panel-btn btn-outline" onClick={handleClosePanel}>
                       Close
                     </button>
@@ -283,6 +351,43 @@ export default function B2BOrders({ user }) {
             )}
           </div>
         </>,
+        document.body
+      )}
+
+      {/* Rejection Reason Modal */}
+      {rejectModal && createPortal(
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => setRejectModal(null)}>
+          <div style={{
+            background: 'var(--color-bg-elevated)', border: '1px solid var(--color-border)',
+            borderRadius: 16, padding: '2rem', width: 420, maxWidth: '90vw',
+            boxShadow: 'var(--shadow-lg)'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 0.5rem', color: 'var(--color-text-primary)' }}>Reject Order</h3>
+            <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.25rem' }}>
+              Optionally provide a reason. This will be visible to the shop.
+            </p>
+            <textarea
+              placeholder="Reason for rejection (optional)..."
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              rows={3}
+              style={{
+                width: '100%', padding: '0.75rem', borderRadius: 8, resize: 'vertical',
+                border: '1px solid var(--color-border)', background: 'var(--color-bg-input)',
+                color: 'var(--color-text-primary)', fontFamily: 'inherit', fontSize: '0.9rem',
+                boxSizing: 'border-box', outline: 'none'
+              }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 10, marginTop: '1.25rem', justifyContent: 'flex-end' }}>
+              <button className="panel-btn btn-outline" onClick={() => setRejectModal(null)}>Cancel</button>
+              <button className="panel-btn btn-reject" onClick={handleConfirmReject}>Confirm Reject</button>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
     </div>

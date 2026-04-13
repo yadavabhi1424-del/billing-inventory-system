@@ -20,6 +20,20 @@ MIN_REAL_DAYS     = 7
 MIN_TRAINING_ROWS = 5
 
 # ── Shop-type seasonal config ────────────────────────────────
+
+def get_db_prefix():
+    db_name = os.getenv('DB_NAME', 'inventory')
+    try:
+        from flask import has_request_context, request
+        if has_request_context() and request.headers.get('X-Database-Name'):
+            return request.headers.get('X-Database-Name')
+    except ImportError:
+        pass
+    return db_name
+
+def get_model_path(product_id):
+    prefix = get_db_prefix()
+    return os.path.join(MODELS_DIR, f"{prefix}_{product_id}.pkl")
 # These are STARTING POINTS — actual patterns override from data
 SHOP_SEASONALITY = {
     'general_store':  { 'weekly': True,  'yearly': False },
@@ -127,7 +141,7 @@ def train_product(product, shop_profile=None):
         )
         model.fit(df)
 
-        model_path = os.path.join(MODELS_DIR, f"{pid}.pkl")
+        model_path = get_model_path(pid)
         with open(model_path, 'wb') as f:
             pickle.dump({
                 'model':            model,
@@ -170,7 +184,7 @@ def train_all():
 
 def predict_product(product_id):
     """Get 7-day prediction for a product"""
-    model_path = os.path.join(MODELS_DIR, f"{product_id}.pkl")
+    model_path = get_model_path(product_id)
     if not os.path.exists(model_path):
         return None
 
