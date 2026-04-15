@@ -105,10 +105,7 @@ export default function SupplierReport() {
         </>
       )}
 
-      <div className="report-actions">
-        <button className="report-export-btn"><Icon name="reports" size={16} /> Export to PDF</button>
-        <button className="report-export-btn report-export-btn--secondary"><Icon name="inventory" size={16} /> Export to Excel</button>
-      </div>
+
 
       {selectedSupplier && (
         <SupplierHistoryModal 

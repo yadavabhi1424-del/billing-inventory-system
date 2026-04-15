@@ -27,13 +27,14 @@ import DiscoveryPage from './pages/Discovery';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  admin: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
-  owner: ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery'],
-  cashier: ['dashboard', 'billing', 'discovery', 'settings'],
+  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
+  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
+  manager: ['dashboard','inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery'],
+  cashier: ['dashboard', 'billing', 'settings'],
 };
 
 function canAccess(role, page) {
-  return PERMISSIONS[role]?.includes(page) ?? false;
+  return PERMISSIONS[role?.toLowerCase()]?.includes(page) ?? false;
 }
 
 // ── Simple auth hook ────────────────────────────────────────

@@ -166,6 +166,20 @@
   margin-top: 44px;
 }
 
+/* ──────────────────────────────────────────────────────────── */
+/* B2B ORDERS CONTAINER (Removes CRM constraints)               */
+/* ──────────────────────────────────────────────────────────── */
+.b2b-orders-container {
+  background: transparent;
+  width: 100%;
+}
+
+.b2b-orders-container .orders-table-container {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+
 .suppliers-table {
   width: 100%;
   border-collapse: collapse;

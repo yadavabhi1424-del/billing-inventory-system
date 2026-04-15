@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
   email               VARCHAR(100) UNIQUE NOT NULL,
   password            VARCHAR(255),
   provider            ENUM('local','google') DEFAULT 'local',
-  role                ENUM('OWNER','ADMIN','MANAGER','CASHIER','STAFF') DEFAULT 'CASHIER',
+  role                ENUM('OWNER','ADMIN','MANAGER','CASHIER') DEFAULT 'CASHIER',
   phone               VARCHAR(20),
   avatar              VARCHAR(255),
   status              ENUM('PENDING','APPROVED','REJECTED','DELETED') DEFAULT 'PENDING',
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS invitations (
   invite_id     VARCHAR(36)  PRIMARY KEY,
   email         VARCHAR(100) NOT NULL,
-  role          ENUM('ADMIN','MANAGER','CASHIER','STAFF') DEFAULT 'CASHIER',
+  role          ENUM('ADMIN','MANAGER','CASHIER') DEFAULT 'CASHIER',
   token         VARCHAR(100) UNIQUE NOT NULL,
   invited_by    VARCHAR(36),
   status        ENUM('PENDING','ACCEPTED','EXPIRED') DEFAULT 'PENDING',

@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
-import { getProducts, createTransaction, getShopProfile, getMe, getB2BOrderById, updateB2BOrderStatus } from '../../services/api';
+import { getProducts, createTransaction, getShopProfile, getMe, getB2BOrderById, updateB2BOrderStatus, getTransactions } from '../../services/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { STORE_INFO } from './paymentData';
 import './Payment.css';
@@ -161,11 +161,15 @@ function ScanToast({ product, onClose }) {
   );
 }
 
+const ITEMS_PER_PAGE = 16;
+
 // ══════════════════════════════════════════════════════════
 //  MAIN PAYMENT / POS COMPONENT
 // ══════════════════════════════════════════════════════════
 export default function Payment({ user }) {
   const [products,      setProducts]      = useState([]);
+  const [sortedProducts, setSortedProducts] = useState([]);
+  const [page,          setPage]          = useState(0);
   const [searchResults, setSearchResults] = useState([]);
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -245,8 +249,46 @@ export default function Payment({ user }) {
 
   const loadProducts = async () => {
     try {
-      const res = await getProducts({ limit: 12, isActive: 'true' });
-      if (res.success) setProducts(res.data);
+      // Fetch all active products
+      const res = await getProducts({ limit: 500, isActive: 'true' });
+      if (!res.success) return;
+      const allProducts = res.data;
+      setProducts(allProducts);
+
+      // Fetch recent transactions to determine sort order
+      try {
+        const txRes = await getTransactions({ limit: 50 });
+        if (txRes.success && txRes.data?.length > 0) {
+          // Build ordered list of product_ids from most recent transactions
+          const seen = new Set();
+          const recentIds = [];
+          for (const tx of txRes.data) {
+            if (Array.isArray(tx.items)) {
+              for (const item of tx.items) {
+                const pid = item.product_id || item.productId;
+                if (pid && !seen.has(pid)) {
+                  seen.add(pid);
+                  recentIds.push(pid);
+                }
+              }
+            }
+          }
+          // Sort: recently transacted first, then rest alphabetically
+          const sorted = [...allProducts].sort((a, b) => {
+            const ai = recentIds.indexOf(a.product_id);
+            const bi = recentIds.indexOf(b.product_id);
+            if (ai >= 0 && bi >= 0) return ai - bi;
+            if (ai >= 0) return -1;
+            if (bi >= 0) return 1;
+            return a.name.localeCompare(b.name);
+          });
+          setSortedProducts(sorted);
+        } else {
+          setSortedProducts(allProducts);
+        }
+      } catch {
+        setSortedProducts(allProducts);
+      }
     } catch (err) {
       console.error('Products load error:', err.message);
     }
@@ -521,34 +563,69 @@ export default function Payment({ user }) {
             )}
           </div>
 
-          {/* Product cards */}
-          <div className="pos-products__grid">
-            {products.length === 0 ? (
-              <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', padding: '1rem' }}>
-                No products found. Add products in Inventory first.
-              </div>
-            ) : products.map(p => (
-              <div
-                key={p.product_id}
-                className="product-card"
-                onClick={() => p.stock > 0 && addToCart(p)}
-                style={{ opacity: p.stock === 0 ? 0.5 : 1, cursor: p.stock === 0 ? 'not-allowed' : 'pointer' }}
-              >
-                <span 
-                  className={`product-card__badge product-card__badge--${
-                    p.stock === 0 ? 'danger' : p.stock <= p.minStockLevel ? 'warning' : 'success'
-                  }`}
-                  title={p.stock === 0 ? 'Out of Stock' : p.stock <= p.minStockLevel ? 'Low Stock' : 'In Stock'}
-                  style={{ padding: '0.25rem 0.5rem', minWidth: 'unset', fontSize: '0.8rem' }}
-                >
-                  {p.stock === 0 ? '✕' : p.stock <= p.minStockLevel ? '⚠' : '✓'}
-                </span>
-                <div className="product-card__name">{p.name}</div>
-                <div className="product-card__sku">{p.sku}</div>
-                <div className="product-card__price">₹{p.sellingPrice}</div>
-              </div>
-            ))}
-          </div>
+          {/* Product cards with pagination */}
+          {(() => {
+            const totalPages = Math.ceil(sortedProducts.length / ITEMS_PER_PAGE);
+            const pageItems  = sortedProducts.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+            return (
+              <>
+                <div className="pos-products__grid">
+                  {sortedProducts.length === 0 ? (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', padding: '1rem' }}>
+                      No products found. Add products in Inventory first.
+                    </div>
+                  ) : pageItems.map(p => (
+                    <div
+                      key={p.product_id}
+                      className="product-card"
+                      onClick={() => p.stock > 0 && addToCart(p)}
+                      style={{ opacity: p.stock === 0 ? 0.5 : 1, cursor: p.stock === 0 ? 'not-allowed' : 'pointer' }}
+                    >
+                      <span
+                        className={`product-card__badge product-card__badge--${
+                          p.stock === 0 ? 'danger' : p.stock <= p.minStockLevel ? 'warning' : 'success'
+                        }`}
+                        title={p.stock === 0 ? 'Out of Stock' : p.stock <= p.minStockLevel ? 'Low Stock' : 'In Stock'}
+                        style={{ padding: '0.25rem 0.5rem', minWidth: 'unset', fontSize: '0.8rem' }}
+                      >
+                        {p.stock === 0 ? '✕' : p.stock <= p.minStockLevel ? '⚠' : '✓'}
+                      </span>
+                      <div className="product-card__name">{p.name}</div>
+                      <div className="product-card__sku">{p.sku}</div>
+                      <div className="product-card__price">₹{p.sellingPrice}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination bar */}
+                {totalPages > 1 && (
+                  <div className="pos-pagination">
+                    <button
+                      className="pos-page-btn"
+                      disabled={page === 0}
+                      onClick={() => setPage(p => p - 1)}
+                    >‹ Prev</button>
+
+                    <div className="pos-page-numbers">
+                      {Array.from({ length: totalPages }, (_, i) => (
+                        <button
+                          key={i}
+                          className={`pos-page-dot ${page === i ? 'is-active' : ''}`}
+                          onClick={() => setPage(i)}
+                        >{i + 1}</button>
+                      ))}
+                    </div>
+
+                    <button
+                      className="pos-page-btn"
+                      disabled={page >= totalPages - 1}
+                      onClick={() => setPage(p => p + 1)}
+                    >Next ›</button>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* ── RIGHT: Bill Panel ──────────────────────── */}

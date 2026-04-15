@@ -313,7 +313,33 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
 
       <div className="header-search">
         <span className="header-search__icon"><Icon name="search" size={16} /></span>
-        <input type="search" className="header-search__input" placeholder="Search anything..." />
+        <input 
+          type="search" 
+          className="header-search__input" 
+          placeholder="Search anything (menus, settings)..." 
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              const val = e.target.value.toLowerCase().trim();
+              if (!val) return;
+
+              if (val.includes('report')) navigate('/reports');
+              else if (val.includes('appear') || val.includes('theme') || val.includes('background') || val.includes('color')) navigate('/settings?tab=appearance');
+              else if (val.includes('account') || val.includes('profile') || val.includes('password')) navigate('/settings?tab=account');
+              else if (val.includes('user') || val.includes('staff') || val.includes('team')) navigate('/settings?tab=users');
+              else if (val.includes('shop') || val.includes('busines')) navigate('/settings?tab=shop');
+              else if (val.includes('bill') || val.includes('invoice') || val.includes('pos') || val.includes('order')) navigate('/billing');
+              else if (val.includes('inventor') || val.includes('product') || val.includes('item') || val.includes('stock')) navigate('/inventory');
+              else if (val.includes('predict') || val.includes('ai')) navigate('/ai-predict');
+              else if (val.includes('supplier') || val.includes('customer') || val.includes('manufactur')) navigate('/manufacturers');
+              else if (val.includes('network') || val.includes('discover') || val.includes('b2b') || val.includes('connect')) navigate('/discovery');
+              else if (val.includes('setting')) navigate('/settings');
+              else if (val.includes('dash') || val.includes('home')) navigate('/dashboard');
+
+              e.target.value = '';
+              e.target.blur();
+            }
+          }}
+        />
       </div>
 
       <div className="header-actions">

@@ -89,7 +89,7 @@ export default function SetupWizard({ user, onComplete }) {
               <label>Shop Name *</label>
               <input
                 type="text"
-                placeholder="e.g. Ramesh Electronics"
+                placeholder="e.g. ABC Electronics"
                 value={form.shop_name}
                 onChange={e => update('shop_name', e.target.value)}
               />

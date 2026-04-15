@@ -343,10 +343,13 @@ export default function Dashboard({ user }) {
               <div key={tx.transaction_id} className="recent-tx__item">
                 <div style={{ flex: 1 }}>
                   <div className="recent-tx__customer">{tx.customerName || 'Walk-in Customer'}</div>
-                  <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                     <span className="recent-tx__id">{tx.invoiceNumber}</span>
+                    <span>·</span>
+                    <span className="recent-tx__cashier">By {tx.cashierName || 'Unknown'}</span>
+                    <span>·</span>
                     <span className="recent-tx__time">
-                      · {new Date(tx.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(tx.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                 </div>

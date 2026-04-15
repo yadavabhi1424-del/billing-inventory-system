@@ -61,7 +61,7 @@ export default function Billing({ user }) {
         )}
 
         {activeTab === 'transactions' && (
-          <Transactions />
+          <Transactions user={user} />
         )}
 
         {activeTab === 'orders' && (

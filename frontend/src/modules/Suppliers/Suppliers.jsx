@@ -278,7 +278,7 @@ export default function Suppliers({ user }) {
 
       {/* Purchase Orders Table */}
       {activeTab === 'orders' && (
-        <div className="suppliers-table-wrapper" style={{ flex: 1, padding: 0 }}>
+        <div className="b2b-orders-container" style={{ flex: 1, padding: 0 }}>
           <B2BOrders user={user} />
         </div>
       )}

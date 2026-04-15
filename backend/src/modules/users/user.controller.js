@@ -86,7 +86,7 @@ const createUser = async (req, res, next) => {
 
     const hashed = await bcrypt.hash(password, 12);
     const userId = uuidv4();
-    let dbMarker = req.tenant ? `${req.tenant.db_name}::` : '';
+    let dbMarker = req.dbName ? `${req.dbName}::` : '';
     const token = dbMarker + crypto.randomBytes(32).toString('hex');
 
     await req.db.execute(
@@ -210,7 +210,7 @@ const inviteUser = async (req, res, next) => {
 
     await req.db.execute("DELETE FROM invitations WHERE email = ?", [email]);
 
-    let dbMarker = req.tenant ? `${req.tenant.db_name}::` : '';
+    let dbMarker = req.dbName ? `${req.dbName}::` : '';
     const token = dbMarker + crypto.randomBytes(32).toString('hex');
     const inviteId = uuidv4();
 

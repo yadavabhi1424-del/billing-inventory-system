@@ -4,18 +4,16 @@ import { getUsers, createUser, updateUser, deleteUser, inviteUser } from '../../
 import './UserManagement.css';
 
 const ROLE_COLORS = {
-  OWNER: 'um-badge--owner',
-  ADMIN: 'um-badge--admin',
+  OWNER:   'um-badge--owner',
+  ADMIN:   'um-badge--admin',
   MANAGER: 'um-badge--manager',
   CASHIER: 'um-badge--cashier',
-  STAFF: 'um-badge--staff',
 };
 
 const ROLES = [
-  { value: 'ADMIN', label: 'Admin', desc: 'Full access except billing' },
-  { value: 'MANAGER', label: 'Manager', desc: 'Products, inventory, reports' },
+  { value: 'ADMIN',   label: 'Admin',   desc: 'Full access, cannot touch Owner/other Admins' },
+  { value: 'MANAGER', label: 'Manager', desc: 'Inventory, reports, suppliers — no billing' },
   { value: 'CASHIER', label: 'Cashier', desc: 'Billing & POS only' },
-  { value: 'STAFF', label: 'Staff', desc: 'View only' },
 ];
 
 // ══════════════════════════════════════════════════════════
@@ -380,7 +378,18 @@ export default function UserManagement({ user: currentUser }) {
                     {new Date(u.createdAt).toLocaleDateString('en-IN')}
                   </td>
                   <td className="um-td">
-                    {u.user_id !== currentUser?.user_id && u.role !== 'OWNER' ? (
+                  {u.user_id !== currentUser?.user_id && (() => {
+                    const targetRole = u.role?.toUpperCase();
+                    const currentRole = currentUser?.role?.toUpperCase();
+                    // Nobody can act on Owner
+                    if (targetRole === 'OWNER') {
+                      return <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>—</span>;
+                    }
+                    // Admin cannot act on other Admins
+                    if (currentRole === 'ADMIN' && targetRole === 'ADMIN') {
+                      return <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>—</span>;
+                    }
+                    return (
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           className={`um-icon-btn ${u.isActive ? 'um-icon-btn--danger' : 'um-icon-btn--success'}`}
@@ -395,9 +404,8 @@ export default function UserManagement({ user: currentUser }) {
                           <Icon name="x" size={13} />
                         </button>
                       </div>
-                    ) : (
-                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>—</span>
-                    )}
+                    );
+                  })()}
                   </td>
                 </tr>
               ))}

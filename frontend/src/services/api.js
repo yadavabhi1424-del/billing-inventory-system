@@ -502,6 +502,24 @@ export async function updateB2BOrderStatus(id, status, rejectionReason, updatedI
   });
 }
 
+export async function createB2BReturn(orderId, items, reason) {
+  return await api.post(`/b2b/orders/${orderId}/return`, { items, reason });
+}
+
+export async function getB2BReturns(orderId) {
+  return await api.get(`/b2b/orders/${orderId}/returns`);
+}
+
+export async function processB2BReturn(orderId, returnId, finalItems) {
+  return await api.patch(`/b2b/orders/${orderId}/returns/${returnId}/process`, {
+    final_items: finalItems
+  });
+}
+
+export async function rejectB2BReturn(orderId, returnId, reason) {
+  return await api.patch(`/b2b/orders/${orderId}/returns/${returnId}/reject`, { reason });
+}
+
 export async function getConnections(params = {}) {
   return await api.get('/network/connections', { params });
 }

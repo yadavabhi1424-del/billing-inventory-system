@@ -83,10 +83,25 @@ export async function seedMasterData() {
     )
   `);
 
-  // Migration: add rejection_reason to existing tables if missing
+  // Migration: add rejection_reason to b2b_orders if missing (MySQL 5.7+ compatible)
   try {
-    await masterPool.execute(`ALTER TABLE b2b_orders ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
-  } catch (_) { /* column may already exist */ }
+    const [cols] = await masterPool.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'b2b_orders' AND COLUMN_NAME = 'rejection_reason'`
+    );
+    if (cols.length === 0) {
+      await masterPool.execute(`ALTER TABLE b2b_orders ADD COLUMN rejection_reason TEXT`);
+      console.log('✅ Migration: Added rejection_reason column to b2b_orders');
+    }
+  } catch (e) { console.warn('Migration warning (rejection_reason):', e.message); }
+
+  // Migration: expand status ENUM to include RETURN_REQUESTED
+  try {
+    await masterPool.execute(
+      `ALTER TABLE b2b_orders MODIFY COLUMN status 
+       ENUM('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED','RETURN_REQUESTED') DEFAULT 'PENDING'`
+    );
+  } catch (e) { console.warn('Migration warning (RETURN_REQUESTED enum):', e.message); }
 
   await masterPool.execute(`
     CREATE TABLE IF NOT EXISTS b2b_order_items (
@@ -99,6 +114,36 @@ export async function seedMasterData() {
       qty           INT          DEFAULT 1,
       total         DECIMAL(12,2) DEFAULT 0,
       FOREIGN KEY (order_id) REFERENCES b2b_orders(order_id) ON DELETE CASCADE
+    )
+  `);
+
+  // ── Phase 9: B2B Returns ──────────────────────────────────
+  await masterPool.execute(`
+    CREATE TABLE IF NOT EXISTS b2b_returns (
+      return_id           VARCHAR(36)   PRIMARY KEY,
+      order_id            VARCHAR(36)   NOT NULL,
+      shop_id             VARCHAR(36)   NOT NULL,
+      supplier_id         VARCHAR(36)   NOT NULL,
+      status              ENUM('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+      total_refund_amount DECIMAL(12,2) DEFAULT 0,
+      reason              TEXT,
+      createdAt           DATETIME      DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (order_id) REFERENCES b2b_orders(order_id) ON DELETE CASCADE
+    )
+  `);
+
+  await masterPool.execute(`
+    CREATE TABLE IF NOT EXISTS b2b_return_items (
+      id             VARCHAR(36)   PRIMARY KEY,
+      return_id      VARCHAR(36)   NOT NULL,
+      order_item_id  VARCHAR(36)   NOT NULL,
+      product_id     VARCHAR(36)   NOT NULL,
+      name           VARCHAR(200)  NOT NULL,
+      sku            VARCHAR(100)  NOT NULL,
+      return_qty     INT           DEFAULT 1,
+      unit_price     DECIMAL(10,2) DEFAULT 0,
+      refund_amount  DECIMAL(12,2) DEFAULT 0,
+      FOREIGN KEY (return_id) REFERENCES b2b_returns(return_id) ON DELETE CASCADE
     )
   `);
 

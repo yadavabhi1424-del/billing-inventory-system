@@ -540,12 +540,29 @@ function ProductFormModal({ title, product = null, prefillData = null, categorie
 // ══════════════════════════════════════════════════════════
 //  MAIN INVENTORY
 // ══════════════════════════════════════════════════════════
+const ROWS_PER_PAGE = 10;
+
+const SORT_OPTIONS = [
+  { value: 'latest',      label: 'Latest Added' },
+  { value: 'oldest',      label: 'Oldest Added' },
+  { value: 'name_asc',    label: 'Name A → Z' },
+  { value: 'name_desc',   label: 'Name Z → A' },
+  { value: 'price_high',  label: 'Price: High → Low' },
+  { value: 'price_low',   label: 'Price: Low → High' },
+  { value: 'stock_high',  label: 'Stock: High → Low' },
+  { value: 'stock_low',   label: 'Stock: Low → High' },
+];
+
 export default function Inventory() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('latest');
+  const [sortOpen, setSortOpen] = useState(false);
+  const sortRef = useRef(null);
+  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -555,6 +572,15 @@ export default function Inventory() {
   const location = useLocation();
   // Guard: only process the addFromOrder state once (prevents re-open after save)
   const orderHandledRef = useRef(false);
+
+  // Close sort dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -660,21 +686,34 @@ export default function Inventory() {
     fetchAll();
   };
 
-  const filtered = products.filter(p => {
-    const matchesSearch = 
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase()) ||
-      (p.categoryName || '').toLowerCase().includes(search.toLowerCase());
+  const filtered = (() => {
+    const base = products.filter(p => {
+      const matchesSearch =
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        p.sku.toLowerCase().includes(search.toLowerCase()) ||
+        (p.categoryName || '').toLowerCase().includes(search.toLowerCase());
+      if (!matchesSearch) return false;
+      if (filterType === 'low') return p.stock > 0 && p.stock <= p.minStockLevel;
+      if (filterType === 'out') return p.stock === 0;
+      if (filterType === 'expiring')
+        return p.expiryDate && new Date(p.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      return true;
+    });
 
-    if (!matchesSearch) return false;
-
-    if (filterType === 'low') return p.stock > 0 && p.stock <= p.minStockLevel;
-    if (filterType === 'out') return p.stock === 0;
-    if (filterType === 'expiring') {
-      return p.expiryDate && new Date(p.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    }
-    return true;
-  });
+    return [...base].sort((a, b) => {
+      switch (sortBy) {
+        case 'latest':     return new Date(b.createdAt) - new Date(a.createdAt);
+        case 'oldest':     return new Date(a.createdAt) - new Date(b.createdAt);
+        case 'name_asc':   return a.name.localeCompare(b.name);
+        case 'name_desc':  return b.name.localeCompare(a.name);
+        case 'price_high': return Number(b.sellingPrice) - Number(a.sellingPrice);
+        case 'price_low':  return Number(a.sellingPrice) - Number(b.sellingPrice);
+        case 'stock_high': return Number(b.stock) - Number(a.stock);
+        case 'stock_low':  return Number(a.stock) - Number(b.stock);
+        default:           return 0;
+      }
+    });
+  })();
 
   // Stats
   const lowStock = products.filter(p => p.stock > 0 && p.stock <= p.minStockLevel).length;
@@ -686,6 +725,9 @@ export default function Inventory() {
     const s = getStatus(stock, min);
     return { good: 'Good', low: 'Low', out: 'Out' }[s];
   };
+
+  // Reset to page 0 whenever filters/sort/search change
+  useEffect(() => { setPage(0); }, [search, filterType, sortBy]);
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
@@ -729,6 +771,30 @@ export default function Inventory() {
             placeholder="Search by name, SKU or category..."
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
+
+        {/* Sort Dropdown */}
+        <div className={`inventory-sort-wrapper ${sortOpen ? 'is-open' : ''}`} ref={sortRef}>
+          <button className="inventory-sort-btn" onClick={() => setSortOpen(o => !o)}>
+            <Icon name="reports" size={15} />
+            <span>{SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort'}</span>
+            <Icon name="chevronDown" size={13} />
+          </button>
+          {sortOpen && (
+            <div className="inventory-sort-menu">
+              {SORT_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  className={`inventory-sort-item ${sortBy === opt.value ? 'is-active' : ''}`}
+                  onClick={() => { setSortBy(opt.value); setSortOpen(false); }}
+                >
+                  {sortBy === opt.value && <Icon name="check" size={13} />}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <button className="inventory-add-btn" onClick={() => setShowAdd(true)}>
           <Icon name="box" size={16} /> Add Item
         </button>
@@ -757,7 +823,7 @@ export default function Inventory() {
                   <p>{products.length === 0 ? 'No products yet. Add your first product!' : 'No products found'}</p>
                 </td>
               </tr>
-            ) : filtered.map(p => {
+            ) : filtered.slice(page * ROWS_PER_PAGE, (page + 1) * ROWS_PER_PAGE).map(p => {
               const status = getStatus(p.stock, p.minStockLevel);
               return (
                 <tr key={p.product_id} className="inventory-row" onClick={() => setSelected(p)}>
@@ -796,6 +862,41 @@ export default function Inventory() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {(() => {
+        const totalPages = Math.ceil(filtered.length / ROWS_PER_PAGE);
+        if (totalPages <= 1) return null;
+        return (
+          <div className="inventory-pagination">
+            <button
+              className="inv-page-btn"
+              disabled={page === 0}
+              onClick={() => setPage(p => p - 1)}
+            >‹ Prev</button>
+
+            <div className="inv-page-numbers">
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  className={`inv-page-dot ${page === i ? 'is-active' : ''}`}
+                  onClick={() => setPage(i)}
+                >{i + 1}</button>
+              ))}
+            </div>
+
+            <span className="inv-page-info">
+              {page * ROWS_PER_PAGE + 1}–{Math.min((page + 1) * ROWS_PER_PAGE, filtered.length)} of {filtered.length}
+            </span>
+
+            <button
+              className="inv-page-btn"
+              disabled={page >= totalPages - 1}
+              onClick={() => setPage(p => p + 1)}
+            >Next ›</button>
+          </div>
+        );
+      })()}
 
       {/* Side Panel */}
       {selected && !showEdit && (
@@ -839,6 +940,7 @@ export default function Inventory() {
                     ['Supplier', selected.supplierName || '—'],
                     ['Barcode', selected.barcode || '—'],
                     ['Expiry', selected.expiryDate ? new Date(selected.expiryDate).toLocaleDateString('en-IN') : 'N/A'],
+                    ['Date Added', selected.createdAt ? new Date(selected.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'],
                   ]
                 },
               ].map(section => (

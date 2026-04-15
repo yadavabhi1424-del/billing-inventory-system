@@ -807,29 +807,37 @@ function About() {
 //  MAIN SETTINGS
 // ══════════════════════════════════════════════════════════
 const TABS = [
-  { id: 'shop', label: 'Shop Profile', icon: 'manufacturers' },
-  { id: 'billing', label: 'Billing', icon: 'billing' },
-  { id: 'account', label: 'My Account', icon: 'customers' },
-  { id: 'team', label: 'Team', icon: 'users' },
-  { id: 'inventory', label: 'Inventory', icon: 'inventory' },
-  { id: 'notif', label: 'Notifications', icon: 'dashboard' },
-  { id: 'appearance', label: 'Appearance', icon: 'settings' },
-  { id: 'about', label: 'About', icon: 'settings' },
+  { id: 'shop',       label: 'Shop Profile',   icon: 'manufacturers' },
+  { id: 'billing',    label: 'Billing',         icon: 'billing' },
+  { id: 'account',    label: 'My Account',      icon: 'customers' },
+  { id: 'team',       label: 'Team',            icon: 'users' },
+  { id: 'inventory',  label: 'Inventory',       icon: 'inventory' },
+  { id: 'notif',      label: 'Notifications',   icon: 'dashboard' },
+  { id: 'appearance', label: 'Appearance',      icon: 'settings' },
+  { id: 'about',      label: 'About',           icon: 'settings' },
 ];
+
+// Tabs visible to each role
+const ROLE_TABS = {
+  owner:   ['shop', 'account', 'team', 'inventory', 'notif', 'appearance', 'about'],
+  admin:   ['shop', 'billing', 'account', 'team', 'inventory', 'notif', 'appearance', 'about'],
+  manager: ['account', 'appearance'],
+  cashier: ['account', 'appearance'],
+};
 
 export default function Settings({ user }) {
   const [searchParams] = useSearchParams();
-  const isAdmin = user?.role === 'admin' || user?.role === 'owner';
+  const role = user?.role?.toLowerCase() || 'cashier';
 
-  const filteredTabs = TABS.filter(t => {
-    if (isAdmin) return true;
-    return ['billing', 'account', 'appearance', 'about'].includes(t.id);
-  });
+  const allowedTabIds = ROLE_TABS[role] || ['account', 'appearance'];
+  const filteredTabs = TABS.filter(t => allowedTabIds.includes(t.id));
+
+  const defaultTab = filteredTabs[0]?.id || 'account';
 
   const [activeTab, setActiveTab] = useState(() => {
     const t = searchParams.get('tab');
     if (t && filteredTabs.some(tab => tab.id === t)) return t;
-    return isAdmin ? 'shop' : 'billing';
+    return defaultTab;
   });
 
   useEffect(() => {
@@ -837,7 +845,7 @@ export default function Settings({ user }) {
     if (t && filteredTabs.some(tab => tab.id === t)) {
       setActiveTab(t);
     }
-  }, [searchParams, filteredTabs]);
+  }, [searchParams]);
 
   return (
     <div className="settings-page">

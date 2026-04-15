@@ -263,3 +263,235 @@
 .transactions-empty p {
   font-size: 0.875rem;
 }
+
+/* Transaction Details Modal (Order Style) */
+.txn-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.txn-modal {
+  background: #fff;
+  border-radius: 8px;
+  width: 900px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.txn-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.txn-modal__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.txn-modal__close {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.txn-modal__close:hover {
+  color: #0f172a;
+}
+
+.txn-modal__body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  color: #1e293b;
+}
+
+.txn-modal__info-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.txn-modal__card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.txn-modal__card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.txn-modal__card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.txn-modal__card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.txn-modal__card-label {
+  color: #64748b;
+  min-width: 65px;
+}
+
+.txn-modal__card-value {
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.txn-modal__status-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.txn-modal__table-wrapper {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.txn-modal__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.txn-modal__table th {
+  background: #f1f5f9;
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.txn-modal__table td {
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.txn-modal__table-total-row td {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.txn-modal__bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.txn-modal__payment-card {
+  width: 300px;
+}
+
+.txn-modal__summary {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.txn-modal__summary-row {
+  display: flex;
+  justify-content: space-between;
+  color: #475569;
+}
+
+.txn-modal__summary-val {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.txn-modal__summary-total {
+  display: flex;
+  justify-content: space-between;
+  background: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 4px;
+  margin-top: 4px;
+  font-weight: 600;
+  color: #0f172a;
+  align-items: center;
+}
+
+.txn-modal__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.txn-modal__btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+}
+
+.txn-modal__btn--secondary {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.txn-modal__btn--secondary:hover {
+  background: #e2e8f0;
+}
+
+.txn-modal__btn--primary {
+  background: #10b981;
+  color: white;
+}
+
+.txn-modal__btn--primary:hover {
+  background: #059669;
+}
+
+/* Print is handled via isolated window (handlePrint) - no @media print needed here */
