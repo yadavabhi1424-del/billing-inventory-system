@@ -14,6 +14,13 @@ const timeAgo = (dateStr) => {
   return new Date(dateStr).toLocaleDateString('en-IN');
 };
 
+const getLocalDateStr = (d = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function Transactions({ user }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,18 +42,20 @@ export default function Transactions({ user }) {
       if (filterPayment !== 'all') params.paymentMethod = filterPayment.toUpperCase();
 
       if (filterDate === 'today') {
-        params.startDate = new Date().toISOString().split('T')[0];
-        params.endDate = new Date().toISOString().split('T')[0];
+        const todayStr = getLocalDateStr();
+        params.startDate = todayStr;
+        params.endDate = todayStr;
       } else if (filterDate === 'yesterday') {
         const y = new Date();
         y.setDate(y.getDate() - 1);
-        const yStr = y.toISOString().split('T')[0];
+        const yStr = getLocalDateStr(y);
         params.startDate = yStr;
         params.endDate = yStr;
       } else if (filterDate === 'week') {
         const w = new Date();
         w.setDate(w.getDate() - 7);
-        params.startDate = w.toISOString().split('T')[0];
+        params.startDate = getLocalDateStr(w);
+        params.endDate = getLocalDateStr(); // Explicit end date for range
       }
 
       if (search) params.search = search;

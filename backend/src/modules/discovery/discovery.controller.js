@@ -50,7 +50,7 @@ export const getDiscovery = async (req, res, next) => {
     if (lat && lng) {
       distanceSelect = `, (ST_Distance_Sphere(POINT(?, ?), POINT(p.longitude, p.latitude)) / 1000) AS distance`;
       params.unshift(Number(lng), Number(lat));
-      distanceHaving = `HAVING distance <= ${Number(radius)}`;
+      distanceHaving = `HAVING distance <= ${Number(radius)} OR distance IS NULL`;
     }
 
     const where = conditions.join(" AND ");
@@ -71,7 +71,7 @@ export const getDiscovery = async (req, res, next) => {
          ( ? = 'supplier' AND m.supplier_id = ? AND m.shop_id = p.entity_id )
        WHERE ${where}
        ${distanceHaving}
-       ORDER BY ${distanceSelect ? 'distance ASC' : 'p.createdAt DESC'}
+       ORDER BY ${distanceSelect ? 'distance IS NULL, distance ASC' : 'p.createdAt DESC'}
        LIMIT ${Number(limit)} OFFSET ${offset}`,
       [userType, myId, userType, myId, ...params]
     );

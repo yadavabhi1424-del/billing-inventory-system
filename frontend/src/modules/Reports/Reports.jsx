@@ -42,7 +42,7 @@ export default function Reports({ user }) {
 
       {/* Content Area */}
       <div className="reports-content">
-        {activeTab === 'sales' && <SalesReport />}
+        {activeTab === 'sales' && <SalesReport user={user} />}
         {activeTab === 'customers' && isSupplier && <CustomerReport user={user} />}
         {activeTab === 'suppliers' && !isSupplier && <SupplierReport />}
       </div>

@@ -1,13 +1,14 @@
 B2B Order: {
-  "order_id": "baeaf1e3-074f-4a50-a3b1-d429d1dae575",
-  "order_number": 2,
+  "order_id": "a736ecff-a34c-41b8-b8f5-fbcaeb706cbd",
+  "order_number": 4,
   "shop_id": "inventory",
   "supplier_id": "9ed4e45d-6be8-4d39-b578-4bbd37b6e122",
   "status": "CLOSED",
-  "total_amount": "1400.00",
+  "total_amount": "300.00",
   "notes": null,
-  "createdAt": "2026-03-31T20:51:54.000Z",
-  "updatedAt": "2026-03-31T20:55:33.000Z"
+  "createdAt": "2026-04-02T16:41:14.000Z",
+  "updatedAt": "2026-04-15T18:16:30.000Z",
+  "rejection_reason": null
 }
 Suppliers in shop db: [
   {

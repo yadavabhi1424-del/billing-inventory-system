@@ -384,6 +384,18 @@ export async function getSalesReport(params = {}) {
   return await api.get('/reports/sales', { params });
 }
 
+export async function getDetailedSalesReport(params = {}) {
+  return await api.get('/reports/sales/detailed', { params });
+}
+
+export async function getCategoryAnalytics(params = {}) {
+  return await api.get('/reports/sales/categories', { params });
+}
+
+export async function getReturnsAnalysis(params = {}) {
+  return await api.get('/reports/returns', { params });
+}
+
 export async function getInventoryReport() {
   return await api.get('/reports/inventory');
 }
@@ -510,6 +522,10 @@ export async function getB2BReturns(orderId) {
   return await api.get(`/b2b/orders/${orderId}/returns`);
 }
 
+export async function getAllB2BReturns() {
+  return await api.get('/b2b/returns');
+}
+
 export async function processB2BReturn(orderId, returnId, finalItems) {
   return await api.patch(`/b2b/orders/${orderId}/returns/${returnId}/process`, {
     final_items: finalItems
@@ -518,6 +534,10 @@ export async function processB2BReturn(orderId, returnId, finalItems) {
 
 export async function rejectB2BReturn(orderId, returnId, reason) {
   return await api.patch(`/b2b/orders/${orderId}/returns/${returnId}/reject`, { reason });
+}
+
+export async function markB2BItemSynced(orderId, itemId) {
+  return await api.post(`/b2b/orders/${orderId}/items/${itemId}/mark-synced`);
 }
 
 export async function getConnections(params = {}) {

@@ -8,7 +8,8 @@ import { useLocation } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import {
   getProducts, createProduct, updateProduct,
-  deleteProduct, getCategories, getSuppliers, createCategory, getNextSkuSeq
+  deleteProduct, getCategories, getSuppliers, createCategory, getNextSkuSeq,
+  markB2BItemSynced,
 } from '../../services/api';
 import './Inventory.css';
 
@@ -20,7 +21,18 @@ const getStatus = (stock, min) =>
 // ══════════════════════════════════════════════════════════
 //  PRODUCT FORM MODAL
 // ══════════════════════════════════════════════════════════
-function ProductFormModal({ title, product = null, prefillData = null, categories = [], suppliers = [], onClose, onSave, onCategoriesUpdate }) {
+function ProductFormModal({ 
+  title, 
+  product = null, 
+  prefillData = null, 
+  reviewQueueLength = 0,
+  categories = [], 
+  suppliers = [], 
+  onClose, 
+  onSave, 
+  onSkip,
+  onCategoriesUpdate 
+}) {
   const isEdit = !!product;
   const user = JSON.parse(localStorage.getItem('stocksense_user') || '{}');
   const isSupplier = user?.userType === 'supplier';
@@ -522,13 +534,20 @@ function ProductFormModal({ title, product = null, prefillData = null, categorie
             </div>
           </div>
 
-          <div className="product-form__footer">
-            <button type="button" className="product-form__btn product-form__btn--secondary" onClick={onClose}>
-              Cancel
-            </button>
+<div className="product-form__footer">
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" className="product-form__btn product-form__btn--secondary" onClick={onClose}>
+                Cancel
+              </button>
+              {fromOrder && reviewQueueLength > 0 && (
+                <button type="button" className="product-form__btn product-form__btn--outline" onClick={onSkip} style={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}>
+                  Skip to Next ({reviewQueueLength})
+                </button>
+              )}
+            </div>
             <button type="submit" className="product-form__btn product-form__btn--primary" disabled={saving}>
               <Icon name="check" size={16} />
-              {saving ? 'Saving...' : isEdit ? 'Update Product' : 'Add Product'}
+              {saving ? 'Saving...' : isEdit ? (fromOrder ? 'Confirm & Next' : 'Update Product') : (fromOrder ? 'Add & Next' : 'Add Product')}
             </button>
           </div>
         </form>
@@ -568,6 +587,8 @@ export default function Inventory() {
   const [showEdit, setShowEdit] = useState(false);
   const [filterType, setFilterType] = useState('all');
   const [prefillData, setPrefillData] = useState(null);
+  const [reviewQueue, setReviewQueue] = useState([]);
+  const [currentOrderInfo, setCurrentOrderInfo] = useState(null);
 
   const location = useLocation();
   // Guard: only process the addFromOrder state once (prevents re-open after save)
@@ -581,6 +602,53 @@ export default function Inventory() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
+  
+  const handleReviewNext = () => {
+    if (reviewQueue.length <= 1) {
+      setReviewQueue([]);
+      setPrefillData(null);
+      setCurrentOrderInfo(null);
+      setShowAdd(false);
+      setShowEdit(false);
+      return;
+    }
+    const nextQueue = reviewQueue.slice(1);
+    setReviewQueue(nextQueue);
+    startReview(nextQueue[0], currentOrderInfo, products, suppliers);
+  };
+
+  const startReview = (item, orderInfo, loadedProducts, loadedSuppliers) => {
+    const matchedSupplier = (loadedSuppliers || []).find(
+      s => (s.supplier_id === orderInfo.supplierDbName) ||
+           (s.supplier_id === orderInfo.supplierId) || 
+           (s.name && orderInfo.supplierName && s.name.trim().toLowerCase() === orderInfo.supplierName.trim().toLowerCase())
+    );
+
+    const enriched = {
+      name: item.name,
+      costPrice: item.price,
+      quantity: item.finalQty,
+      supplierId: matchedSupplier?.supplier_id || orderInfo.supplierId || '',
+      orderId: orderInfo.orderId,
+      itemId: item.id
+    };
+
+    const existing = (loadedProducts || []).find(
+      p => p.name?.trim().toLowerCase() === item.name?.trim().toLowerCase()
+    );
+
+    if (existing) {
+      setSelected(existing);
+      setPrefillData({ ...enriched, isEditMode: true });
+      setShowEdit(true);
+      setShowAdd(false);
+    } else {
+      setSelected(null);
+      setPrefillData(enriched);
+      setShowAdd(true);
+      setShowEdit(false);
+    }
+  };
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -598,32 +666,15 @@ export default function Inventory() {
       if (catRes.success) setCategories(catRes.data);
       if (supRes.success) setSuppliers(loadedSuppliers);
 
-      // ── Handle "Add to Inventory" navigation from B2B purchase orders ──
-      const orderItem = location.state?.addFromOrder;
-      if (orderItem && !orderHandledRef.current) {
-        orderHandledRef.current = true; // never re-trigger for this mount
-        const matchedSupplier = loadedSuppliers.find(
-          s => s.supplier_id === orderItem.supplierDbName ||
-               s.supplier_id === orderItem.supplierId || 
-               (s.name && orderItem.supplierName && s.name.trim().toLowerCase() === orderItem.supplierName.trim().toLowerCase())
-        );
-        const enriched = {
-          ...orderItem,
-          supplierId: matchedSupplier?.supplier_id || '',
-        };
-        setPrefillData(enriched);
-
-        // Check if product already exists (case-insensitive name match)
-        const existing = loadedProducts.find(
-          p => p.name?.trim().toLowerCase() === orderItem.name?.trim().toLowerCase()
-        );
-        if (existing) {
-          setSelected(existing);
-          setPrefillData({ ...enriched, isEditMode: true });
-          setShowEdit(true);
-        } else {
-          setShowAdd(true);
-        }
+      // ── Handle sequential B2B review queue ──
+      const queue = location.state?.reviewQueue;
+      const orderInfo = location.state?.orderInfo;
+      
+      if (queue && queue.length > 0 && !orderHandledRef.current) {
+        orderHandledRef.current = true;
+        setReviewQueue(queue);
+        setCurrentOrderInfo(orderInfo);
+        startReview(queue[0], orderInfo, loadedProducts, loadedSuppliers);
       }
     } catch (err) {
       console.error('Inventory fetch error:', err.message);
@@ -631,47 +682,53 @@ export default function Inventory() {
       setLoading(false);
     }
   };
-  // Helper: mark a B2B order item as added in localStorage
-  const markB2BItemAdded = (data) => {
-    if (data?.orderId && data?.itemId) {
-      const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
-      stored[`${data.orderId}_${data.itemId}`] = true;
-      localStorage.setItem('b2b_added_items', JSON.stringify(stored));
+
+  const handleAdd = async (formData) => {
+    try {
+      const res = await createProduct(formData);
+      if (res.success) {
+        // If coming from an order review queue, mark synced and advance
+        if (prefillData?.orderId && prefillData?.itemId) {
+          try { await markB2BItemSynced(prefillData.orderId, prefillData.itemId); } catch(e){}
+          handleReviewNext();
+        } else {
+          setPrefillData(null);
+          setShowAdd(false);
+          fetchAll();
+        }
+      }
+    } catch (err) {
+      alert('Failed: ' + err.message);
     }
   };
 
-  const handleAdd = async (formData) => {
-    await createProduct(formData);
-    markB2BItemAdded(prefillData);
-    setPrefillData(null);
-    setShowAdd(false);
-    fetchAll();
-  };
-
   const handleEdit = async (formData) => {
-    try {
-      const payload = {
-        name: formData.get('name'),
-        sellingPrice: formData.get('sellingPrice'),
-        costPrice: formData.get('costPrice'),
-        stock: formData.get('stock'),
-        unit: formData.get('unit'),
-        taxRate: formData.get('taxRate'),
-        minStockLevel: formData.get('minStockLevel'),
-        categoryId: formData.get('categoryId'),
-        supplierId: formData.get('supplierId'),
-        barcode: formData.get('barcode'),
-        expiryDate: formData.get('expiryDate'),
-        is_public: formData.get('is_public') === 'true' || formData.get('is_public') === '1'
-      };
+    const payload = {
+      name: formData.get('name'),
+      sellingPrice: formData.get('sellingPrice'),
+      costPrice: formData.get('costPrice'),
+      stock: formData.get('stock'),
+      unit: formData.get('unit'),
+      taxRate: formData.get('taxRate'),
+      minStockLevel: formData.get('minStockLevel'),
+      categoryId: formData.get('categoryId'),
+      supplierId: formData.get('supplierId'),
+      barcode: formData.get('barcode'),
+      expiryDate: formData.get('expiryDate'),
+      is_public: formData.get('is_public') === 'true' || formData.get('is_public') === '1'
+    };
 
+    try {
       const res = await updateProduct(selected.product_id, payload);
       if (res.success) {
-        markB2BItemAdded(prefillData);
-        setPrefillData(null);
-        setShowEdit(false);
-        setSelected(null);
-        fetchAll();
+        if (prefillData?.orderId && prefillData?.itemId) {
+          try { await markB2BItemSynced(prefillData.orderId, prefillData.itemId); } catch(e){}
+          handleReviewNext();
+        } else {
+          setPrefillData(null);
+          setShowEdit(false);
+          fetchAll();
+        }
       }
     } catch (err) {
       console.error('Update error:', err.message);
@@ -968,22 +1025,32 @@ export default function Inventory() {
 
       {/* Add Modal */}
       {showAdd && (
-        <ProductFormModal title="Add New Product"
-          categories={categories} suppliers={suppliers}
+        <ProductFormModal
+          title="Add Product"
           prefillData={prefillData}
-          onClose={() => { setShowAdd(false); setPrefillData(null); }}
+          reviewQueueLength={reviewQueue.length > 1 ? reviewQueue.length - 1 : 0}
+          categories={categories}
+          suppliers={suppliers}
+          onClose={() => { setShowAdd(false); setPrefillData(null); setReviewQueue([]); }}
           onSave={handleAdd}
-          onCategoriesUpdate={setCategories} />
+          onSkip={handleReviewNext}
+          onCategoriesUpdate={setCategories}
+        />
       )}
 
-      {/* Edit Modal */}
       {showEdit && selected && (
-        <ProductFormModal title="Edit Product"
-          product={selected} categories={categories} suppliers={suppliers}
-          prefillData={prefillData?.isEditMode ? prefillData : null}
-          onClose={() => { setShowEdit(false); setSelected(null); setPrefillData(null); }}
+        <ProductFormModal
+          title="Edit Product"
+          product={selected}
+          prefillData={prefillData}
+          reviewQueueLength={reviewQueue.length > 1 ? reviewQueue.length - 1 : 0}
+          categories={categories}
+          suppliers={suppliers}
+          onClose={() => { setShowEdit(false); setSelected(null); setPrefillData(null); setReviewQueue([]); }}
           onSave={handleEdit}
-          onCategoriesUpdate={setCategories} />
+          onSkip={handleReviewNext}
+          onCategoriesUpdate={setCategories}
+        />
       )}
     </div>
   );

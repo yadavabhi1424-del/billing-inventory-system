@@ -4,6 +4,7 @@ import Overview from './Overview';
 import Transactions from './Transactions';
 import Payment from '../billing/Payment';
 import B2BOrders from '../B2B/B2BOrders';
+import B2BReturns from '../B2B/B2BReturns';
 import './Billing.css';
 
 export default function Billing({ user }) {
@@ -36,12 +37,20 @@ export default function Billing({ user }) {
             Transactions
           </button>
           {(user?.userType === 'supplier') && (
-            <button
-              className={`billing-tab ${activeTab === 'orders' ? 'billing-tab--active' : ''}`}
-              onClick={() => setActiveTab('orders')}
-            >
-              Orders
-            </button>
+            <>
+              <button
+                className={`billing-tab ${activeTab === 'orders' ? 'billing-tab--active' : ''}`}
+                onClick={() => setActiveTab('orders')}
+              >
+                Orders
+              </button>
+              <button
+                className={`billing-tab ${activeTab === 'returns' ? 'billing-tab--active' : ''}`}
+                onClick={() => setActiveTab('returns')}
+              >
+                Returns
+              </button>
+            </>
           )}
         </div>
         
@@ -66,6 +75,10 @@ export default function Billing({ user }) {
 
         {activeTab === 'orders' && (
           <B2BOrders user={user} />
+        )}
+
+        {activeTab === 'returns' && (
+          <B2BReturns user={user} />
         )}
 
         {activeTab === 'newbill' && (

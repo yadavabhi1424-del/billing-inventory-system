@@ -184,6 +184,7 @@ export default function Payment({ user }) {
   const [invoiceNo,     setInvoiceNo]     = useState('INV-...');
   const [shopInfo,      setShopInfo]      = useState(STORE_INFO);
   const [b2bOrderId,    setB2BOrderId]    = useState(null);
+  const [b2bOriginalItems, setB2bOriginalItems] = useState([]);
 
   const searchInputRef = useRef(null);
   const location = useLocation();
@@ -217,6 +218,7 @@ export default function Payment({ user }) {
           taxRate:      item.taxRate || 0,
         }));
         setCart(mappedItems);
+        setB2bOriginalItems(order.items);
       }
     } catch (err) {
       console.error("Failed to load B2B order", err);
@@ -433,9 +435,25 @@ export default function Payment({ user }) {
     if (!customerName.trim()) return alert('Please enter customer name');
     if (cart.length === 0)    return alert('Please add items to the bill');
     
-    // Phone validation
     if (customerPhone && customerPhone.length !== 10) {
       return alert('Phone number must be exactly 10 digits.');
+    }
+
+    // [CAUTION] B2B Quantity Validation
+    if (b2bOrderId && b2bOriginalItems.length > 0) {
+      const mismatches = [];
+      b2bOriginalItems.forEach(orig => {
+        const inCart = cart.find(c => c.product_id === orig.product_id);
+        const cartQty = inCart ? (parseInt(inCart.qty) || 0) : 0;
+        if (cartQty !== orig.qty) {
+          mismatches.push(`• ${orig.name}: Requested ${orig.qty}, Billing ${cartQty}`);
+        }
+      });
+
+      if (mismatches.length > 0) {
+        const confirmMsg = `CAUTION: Billing quantities differ from the B2B Order request:\n\n${mismatches.join('\n')}\n\nDo you want to proceed with this bill anyway?`;
+        if (!window.confirm(confirmMsg)) return;
+      }
     }
 
     try {
@@ -461,10 +479,19 @@ export default function Payment({ user }) {
         // If this was a B2B order fulfillment, mark it as BILLED and sync updated quantities
         if (b2bOrderId) {
           try {
-            await updateB2BOrderStatus(b2bOrderId, 'BILLED', null, cart.map(item => ({
+            const updated_items = cart.map(item => ({
               product_id: item.product_id,
-              qty: parseInt(item.qty) || 1,
-            })));
+              qty: parseInt(item.qty) || 0, // Allow 0 for explicitly zeroed out items
+            }));
+            
+            // Allow explicit rejection of missing items
+            for (const orig of b2bOriginalItems) {
+              if (!cart.find(c => c.product_id === orig.product_id)) {
+                updated_items.push({ product_id: orig.product_id, qty: 0 });
+              }
+            }
+            
+            await updateB2BOrderStatus(b2bOrderId, 'BILLED', null, updated_items);
           } catch (err) {
             console.error("Failed to update B2B order status:", err);
           }
@@ -503,6 +530,7 @@ export default function Payment({ user }) {
     setPayMethod('cash');
     setInvoiceNo('INV-...');
     setB2BOrderId(null);
+    setB2bOriginalItems([]);
     // Clear URL params
     navigate('/billing', { replace: true });
   };

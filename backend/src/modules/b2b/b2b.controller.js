@@ -160,13 +160,54 @@ export const updateB2BOrderStatus = async (req, res, next) => {
 
     if (status === 'BILLED' && Array.isArray(updated_items) && updated_items.length > 0) {
       for (const item of updated_items) {
-        if (item.product_id && item.qty > 0) {
+        if (item.product_id && item.qty >= 0) {
           await masterPool.execute(
             "UPDATE b2b_order_items SET qty = ?, total = price * ? WHERE order_id = ? AND product_id = ?",
             [item.qty, item.qty, id, item.product_id]
           );
         }
       }
+    }
+
+    if (status === 'CLOSED') {
+      const unsyncedItems = [];
+      try {
+        // Just identify items that haven't been synced so the frontend can handle them manually
+        const [items] = await masterPool.execute("SELECT * FROM b2b_order_items WHERE order_id = ?", [id]);
+        const [returns] = await masterPool.execute(
+           "SELECT ri.product_id, ri.return_qty FROM b2b_returns r JOIN b2b_return_items ri ON r.return_id = ri.return_id WHERE r.order_id = ? AND r.status = 'APPROVED'", 
+           [id]
+        );
+        
+        for (const item of items) {
+          if (item.inventory_synced) continue;
+
+          let returnedQty = 0;
+          returns.forEach(r => {
+             if (r.product_id === item.product_id) returnedQty += Number(r.return_qty);
+          });
+          const finalQty = item.qty - returnedQty;
+          
+          if (finalQty > 0) {
+            unsyncedItems.push({
+              id: item.id,
+              name: item.name,
+              sku: item.sku,
+              price: item.price,
+              finalQty: finalQty
+            });
+          } else {
+             // Mark as synced if fully returned
+             await masterPool.execute("UPDATE b2b_order_items SET inventory_synced = 1 WHERE id = ?", [item.id]);
+          }
+        }
+      } catch (e) { console.error("Identity unsynced error:", e.message); }
+      
+      return res.json({ 
+        success: true, 
+        message: `Order marked as received. Please review and update stock for ${unsyncedItems.length} items.`,
+        unsyncedItems 
+      });
     }
 
     res.json({ success: true, message: `Order status updated to ${status}` });
@@ -260,6 +301,7 @@ export const processB2BReturn = async (req, res, next) => {
     const { id, returnId } = req.params;
     const { final_items } = req.body;
     // final_items: [{ return_item_id, return_qty }] — supplier's confirmed quantities
+    const isSupplier = req.user.userType === 'supplier';
 
     const [ret] = await masterPool.execute(
       `SELECT r.*, s_sup.db_name as supplier_db_name, s_shop.db_name as shop_db_name
@@ -312,10 +354,11 @@ export const processB2BReturn = async (req, res, next) => {
       "UPDATE b2b_orders SET status = 'CLOSED' WHERE order_id = ?", [id]
     );
 
-    // Update SUPPLIER inventory — restock returned items
-    if (returnRec.supplier_db_name) {
+    // Update SUPPLIER inventory — restock returned items and record refund transaction
+    const supDbName = returnRec.supplier_db_name || (isSupplier ? req.dbName : null);
+    if (supDbName) {
       try {
-        const supPool = await getTenantPool(returnRec.supplier_db_name);
+        const supPool = await getTenantPool(supDbName);
         for (const ri of finalReturnItems) {
           if (ri.product_id) {
             await supPool.execute(
@@ -325,7 +368,36 @@ export const processB2BReturn = async (req, res, next) => {
           }
         }
         console.log(`✅ Supplier inventory restocked for return ${returnId}`);
-      } catch (e) { console.warn("⚠️ Supplier inventory update failed:", e.message); }
+        
+        if (totalRefund > 0 && req.user && req.user.user_id) {
+          // Find original invoice number
+          const [txRows] = await supPool.execute("SELECT invoiceNumber FROM transactions WHERE notes LIKE ? LIMIT 1", [`%B2B Order: ${id}%`]);
+          let baseInvoiceNo = txRows.length > 0 ? txRows[0].invoiceNumber : `RET-${id.substring(0,8).toUpperCase()}`;
+          let returnInvoiceNo = baseInvoiceNo + (txRows.length > 0 ? '-RET' : '');
+          
+          const refundTxId = uuidv4();
+          await supPool.execute(
+            `INSERT INTO transactions
+              (transaction_id, invoiceNumber, user_id, paymentMethod, paymentStatus, subtotal, 
+               totalAmount, amountPaid, notes, status)
+             VALUES (?, ?, ?, 'CASH', 'REFUNDED', ?, ?, ?, ?, 'RETURNED')`,
+            [refundTxId, returnInvoiceNo, req.user.user_id, -totalRefund, -totalRefund, -totalRefund, `Refund for B2B Order ${id}`, 'RETURNED']
+          );
+          
+          // Insert returned items for supplier's record
+          for (const ri of finalReturnItems) {
+            await supPool.execute(
+               `INSERT INTO transaction_items
+                 (item_id, transaction_id, product_id, productName, sku, quantity, 
+                  unit, costPrice, sellingPrice, totalAmount)
+                VALUES (?, ?, ?, ?, ?, ?, 'pcs', 0, ?, ?)`,
+                [uuidv4(), refundTxId, ri.product_id, ri.name, ri.sku, -ri.return_qty,
+                 ri.unit_price, -ri.refund_amount]
+            );
+          }
+          console.log(`✅ Supplier refund transaction created ${returnInvoiceNo}`);
+        }
+      } catch (e) { console.warn("⚠️ Supplier inventory/transaction update failed:", e.message); }
     }
 
     // Update SHOP inventory — add back any rejected/reduced differences
@@ -397,6 +469,15 @@ export const rejectB2BReturn = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// POST /api/b2b/orders/:id/items/:itemId/mark-synced — Just flip the flag (used when manual creation is done)
+export const markB2BItemSynced = async (req, res, next) => {
+  try {
+    const { id, itemId } = req.params;
+    await masterPool.execute("UPDATE b2b_order_items SET inventory_synced = 1 WHERE id = ? AND order_id = ?", [itemId, id]);
+    res.json({ success: true, message: "Item marked as synced." });
+  } catch (error) { next(error); }
+};
+
 // GET /api/b2b/orders/:id/returns — List returns for an order
 export const getB2BReturns = async (req, res, next) => {
   try {
@@ -409,5 +490,52 @@ export const getB2BReturns = async (req, res, next) => {
       r.items = items;
     }
     res.json({ success: true, data: returns });
+  } catch (error) { next(error); }
+};
+// GET /api/b2b/returns — List all returns for the logged-in user (supplier see incoming, shop see outgoing)
+export const getAllB2BReturns = async (req, res, next) => {
+  try {
+    const myDbName = req.dbName;
+    const userType = req.user.userType;
+
+    // Resolve my supplier_id from master pool
+    let finalMyId = null;
+    const [selfRows] = await masterPool.execute(
+      "SELECT s.supplier_id FROM suppliers s WHERE s.db_name = ?", [myDbName]
+    );
+    if (selfRows.length > 0) finalMyId = selfRows[0].supplier_id;
+
+    if (!finalMyId) return res.json({ success: true, data: [] });
+
+    let query, params;
+    if (userType === 'supplier') {
+      // Supplier sees returns requested BY shops
+      query = `SELECT r.*, o.createdAt as order_date, p.business_name as shop_name, p.logo as shop_logo
+               FROM b2b_returns r
+               JOIN b2b_orders o ON o.order_id = r.order_id
+               JOIN profiles p ON p.entity_id = r.shop_id
+               WHERE r.supplier_id = ? 
+               ORDER BY r.createdAt DESC`;
+      params = [finalMyId];
+    } else {
+      // Shop sees returns they requested
+      query = `SELECT r.*, o.createdAt as order_date, p.business_name as supplier_name, p.logo as supplier_logo
+               FROM b2b_returns r
+               JOIN b2b_orders o ON o.order_id = r.order_id
+               JOIN profiles p ON p.entity_id = r.supplier_id
+               WHERE r.shop_id = ? 
+               ORDER BY r.createdAt DESC`;
+      params = [finalMyId];
+    }
+
+    const [rows] = await masterPool.execute(query, params);
+    
+    // Fetch items for each return
+    for (const r of rows) {
+      const [items] = await masterPool.execute("SELECT * FROM b2b_return_items WHERE return_id = ?", [r.return_id]);
+      r.items = items;
+    }
+
+    res.json({ success: true, data: rows });
   } catch (error) { next(error); }
 };

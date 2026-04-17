@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -30,7 +30,6 @@ export default function B2BOrders({ user }) {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [addedItems, setAddedItems] = useState({});
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -88,8 +87,6 @@ export default function B2BOrders({ user }) {
       if (res.success) {
         setSelectedOrder(res.data);
         setPanelOpen(true);
-        const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
-        setAddedItems(stored);
       }
     } catch (err) {
       alert("Failed to load details: " + err.message);
@@ -105,12 +102,32 @@ export default function B2BOrders({ user }) {
     try {
       const res = await updateB2BOrderStatus(id, status, reason);
       if (res.success) {
+        // Redirection logic for Inventory Review
+        if (status === 'CLOSED' && res.unsyncedItems && res.unsyncedItems.length > 0) {
+          const item = res.unsyncedItems[0];
+          alert(`Order received. ${res.unsyncedItems.length} item(s) need review in your inventory. Opening review sequence...`);
+          
+          navigate('/inventory', {
+            state: {
+              reviewQueue: res.unsyncedItems, // Pass the whole list
+              orderInfo: {
+                supplierName: selectedOrder?.supplier_name,
+                supplierId: selectedOrder?.supplier_id,
+                supplierDbName: selectedOrder?.supplier_db_name,
+                orderId: id,
+              }
+            }
+          });
+          return;
+        }
+
         fetchOrders();
         if (selectedOrder?.order_id === id) {
           const detail = await getB2BOrderById(id);
           if (detail.success) setSelectedOrder(detail.data);
         }
         if (panelOpen && status === 'REJECTED') handleClosePanel();
+        if (status === 'CLOSED') alert("Order received successfully.");
       }
     } catch (err) {
       alert(err.message);
@@ -232,6 +249,11 @@ export default function B2BOrders({ user }) {
   const processTotalRefund = processItems.reduce((sum, i) => sum + (i.current_qty * Number(i.unit_price)), 0);
 
   const handleConfirmProcess = async () => {
+    if (processItems.every(i => i.current_qty === 0)) {
+      alert("Cannot process return with 0 quantities for all items. Did you mean to use 'Reject Entire Return'?");
+      return;
+    }
+
     setProcessLoading(true);
     try {
       const payload = processItems.map(i => ({
@@ -249,8 +271,8 @@ export default function B2BOrders({ user }) {
           if (detail.success) setSelectedOrder(detail.data);
         }
       }
-    } catch (e) {
-      alert(e.message);
+    } catch (error) {
+      alert(error.message);
     } finally {
       setProcessLoading(false);
     }
@@ -274,27 +296,6 @@ export default function B2BOrders({ user }) {
     } finally {
       setProcessLoading(false);
     }
-  };
-
-  const handleAddAllToInventory = () => {
-    if (!selectedOrder?.items?.length) return;
-    const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
-    const pending = selectedOrder.items.filter(item => !stored[`${selectedOrder.order_id}_${item.id}`]);
-    if (!pending.length) { alert('All items already added to inventory.'); return; }
-    navigate('/inventory', {
-      state: {
-        addFromOrder: {
-          name: pending[0].name,
-          costPrice: pending[0].price,
-          quantity: pending[0].qty,
-          supplierName: selectedOrder.supplier_name,
-          supplierId: selectedOrder.supplier_id,
-          supplierDbName: selectedOrder.supplier_db_name,
-          orderId: selectedOrder.order_id,
-          itemId: pending[0].id,
-        }
-      }
-    });
   };
 
   return (
@@ -460,27 +461,10 @@ export default function B2BOrders({ user }) {
                     <h3>Ordered Items</h3>
                     <div className="items-list">
                       {selectedOrder.items?.map(item => (
-                        <div key={item.id} className={`item-row ${!isSupplier && selectedOrder.status === 'CLOSED' ? 'item-row--with-action' : ''}`}>
+                        <div key={item.id} className="item-row">
                           <div className="item-info"><span className="item-name">{item.name}</span><span className="item-sku">{item.sku}</span></div>
                           <div className="item-qty">{item.qty} × {fmt(item.price)}</div>
                           <div className="item-total">{fmt(item.total)}</div>
-                          {!isSupplier && selectedOrder.status === 'CLOSED' && getDisplayStatus(selectedOrder) !== 'RETURNED' && (() => {
-                            const itemKey = `${selectedOrder.order_id}_${item.id}`;
-                            const isAdded = !!addedItems[itemKey];
-                            return (
-                              <button
-                                className={`item-add-inventory-btn ${isAdded ? 'item-add-inventory-btn--added' : ''}`}
-                                disabled={isAdded}
-                                onClick={() => navigate('/inventory', {
-                                  state: {
-                                    addFromOrder: { name: item.name, costPrice: item.price, quantity: item.qty, supplierName: selectedOrder.supplier_name, supplierId: selectedOrder.supplier_id, supplierDbName: selectedOrder.supplier_db_name, orderId: selectedOrder.order_id, itemId: item.id }
-                                  }
-                                })}
-                              >
-                                <Icon name={isAdded ? 'check' : 'box'} size={13} />{isAdded ? 'Added' : 'Add item'}
-                              </button>
-                            );
-                          })()}
                         </div>
                       ))}
                     </div>
@@ -541,16 +525,57 @@ export default function B2BOrders({ user }) {
 
                     {/* Shop marks billed order as received */}
                     {!isSupplier && selectedOrder.status === 'BILLED' && (
-                      <button className="panel-btn btn-success" onClick={() => handleAction(selectedOrder.order_id, 'CLOSED')}>Mark Received</button>
+                      <button className="panel-btn btn-success" onClick={() => handleAction(selectedOrder.order_id, 'CLOSED')}>
+                         <Icon name="check" size={15} /> Mark Received & Review Stock
+                      </button>
                     )}
 
-                    {/* Shop adds closed order to inventory */}
-                    {!isSupplier && selectedOrder.status === 'CLOSED' && getDisplayStatus(selectedOrder) !== 'RETURNED' && (() => {
-                      const stored = JSON.parse(localStorage.getItem('b2b_added_items') || '{}');
-                      const pendingCount = (selectedOrder.items || []).filter(item => !stored[`${selectedOrder.order_id}_${item.id}`]).length;
-                      return pendingCount > 0 ? (
-                        <button className="panel-btn btn-primary" onClick={handleAddAllToInventory}><Icon name="box" size={15} /> Add All to Inventory ({pendingCount})</button>
-                      ) : null;
+                    {/* Shop reviews closed order items */}
+                    {!isSupplier && selectedOrder.status === 'CLOSED' && (() => {
+                      const pending = (selectedOrder.items || []).filter(i => !i.inventory_synced);
+                      // Deduct returns for sanity
+                      const actualPending = pending.filter(item => {
+                        let returnedQty = 0;
+                        if (selectedOrder.returns) {
+                           selectedOrder.returns.forEach(r => {
+                              if (r.status === 'APPROVED') {
+                                 const ri = r.items?.find(ri => ri.product_id === item.product_id);
+                                 if (ri) returnedQty += Number(ri.return_qty);
+                              }
+                           });
+                        }
+                        return (item.qty - returnedQty) > 0;
+                      });
+
+                      if (actualPending.length > 0) {
+                        return (
+                          <button 
+                            className="panel-btn btn-primary" 
+                            onClick={() => {
+                              navigate('/inventory', {
+                                state: {
+                                  reviewQueue: actualPending.map(ap => ({
+                                    id: ap.id,
+                                    name: ap.name,
+                                    sku: ap.sku,
+                                    price: ap.price,
+                                    finalQty: ap.qty // Note: simplified for manual trigger from drawer
+                                  })),
+                                  orderInfo: {
+                                    supplierName: selectedOrder?.supplier_name,
+                                    supplierId: selectedOrder?.supplier_id,
+                                    supplierDbName: selectedOrder?.supplier_db_name,
+                                    orderId: selectedOrder.order_id,
+                                  }
+                                }
+                              });
+                            }}
+                          >
+                             <Icon name="refresh" size={15} /> Review & Update Stock ({actualPending.length})
+                          </button>
+                        );
+                      }
+                      return null;
                     })()}
 
                     {/* Shop requests return */}

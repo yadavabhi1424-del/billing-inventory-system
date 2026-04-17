@@ -226,10 +226,11 @@ const verifyEmail = async (req, res, next) => {
         `INSERT IGNORE INTO global_users (email, db_name, user_type) VALUES (?, ?, ?)`,
         [email, dbName, userType]
       );
+      const profileEntityId = userType === 'supplier' ? tenantId : dbName;
       await masterPool.execute(
-        `INSERT IGNORE INTO profiles (profile_id, entity_id, entity_type, business_name, slug, is_public)
-         VALUES (?, ?, ?, ?, ?, TRUE)`,
-        [uuidv4(), dbName, userType, displayName, slug]
+        `INSERT IGNORE INTO profiles (profile_id, entity_id, entity_type, business_name, slug, business_type, is_public)
+         VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+        [uuidv4(), profileEntityId, userType, displayName, slug, shopType || 'general']
       );
     }
 
@@ -367,10 +368,11 @@ const googleAuth = async (req, res, next) => {
 
       // NEW: Create basic Discovery Profile
       const profileSlug = buildSlug(userType === 'supplier' ? `${userName}'s Business` : `${userName}'s Shop`, newId);
+      const profileEntityId = userType === 'supplier' ? newId : dbName;
       await masterPool.execute(
-        `INSERT IGNORE INTO profiles (profile_id, entity_id, entity_type, business_name, slug, is_public)
-         VALUES (?, ?, ?, ?, ?, TRUE)`,
-        [uuidv4(), dbName, userType, userType === 'supplier' ? `${userName}'s Business` : `${userName}'s Shop`, profileSlug]
+        `INSERT IGNORE INTO profiles (profile_id, entity_id, entity_type, business_name, slug, business_type, is_public)
+         VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
+        [uuidv4(), profileEntityId, userType, userType === 'supplier' ? `${userName}'s Business` : `${userName}'s Shop`, profileSlug, 'general']
       );
 
       db  = await getTenantPool(dbName);

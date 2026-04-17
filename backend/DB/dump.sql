@@ -43,7 +43,7 @@ CREATE TABLE `b2b_order_items` (
 
 LOCK TABLES `b2b_order_items` WRITE;
 /*!40000 ALTER TABLE `b2b_order_items` DISABLE KEYS */;
-INSERT INTO `b2b_order_items` VALUES ('13696db5-23f5-4665-be3b-4a0c81a3aaca','fd1d2a1f-9faa-4b3f-a626-637732b6a169','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('373092dd-bfdd-4db6-868d-f6fa38557735','d5ad577a-1463-4afc-8a30-412c0dadba34','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('3ad2751f-00bb-44a1-9004-0244f36961a5','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,10,500.00),('973305a8-80c0-4e34-8bba-a83b9a20353f','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,9,900.00),('9c403cbb-68f1-4e5a-a489-13f4a42d0430','a736ecff-a34c-41b8-b8f5-fbcaeb706cbd','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,3,300.00),('b5f7cba8-e9c0-4219-9172-bb3ba0d50065','fd1d2a1f-9faa-4b3f-a626-637732b6a169','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,5,250.00);
+INSERT INTO `b2b_order_items` VALUES ('13696db5-23f5-4665-be3b-4a0c81a3aaca','fd1d2a1f-9faa-4b3f-a626-637732b6a169','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('373092dd-bfdd-4db6-868d-f6fa38557735','d5ad577a-1463-4afc-8a30-412c0dadba34','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,1,100.00),('3ad2751f-00bb-44a1-9004-0244f36961a5','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,10,500.00),('73dfda15-32dc-4709-b617-091d57534480','be07b8ca-68a1-48ad-9ba9-16fd88072748','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,5,500.00),('973305a8-80c0-4e34-8bba-a83b9a20353f','baeaf1e3-074f-4a50-a3b1-d429d1dae575','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,9,900.00),('9c403cbb-68f1-4e5a-a489-13f4a42d0430','a736ecff-a34c-41b8-b8f5-fbcaeb706cbd','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',100.00,3,300.00),('b5f7cba8-e9c0-4219-9172-bb3ba0d50065','fd1d2a1f-9faa-4b3f-a626-637732b6a169','a22615b4-0109-4e53-98c8-98e32f6d2541','Sketch Pen','SKU-002',50.00,5,250.00);
 /*!40000 ALTER TABLE `b2b_order_items` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -59,14 +59,15 @@ CREATE TABLE `b2b_orders` (
   `order_number` int NOT NULL AUTO_INCREMENT,
   `shop_id` varchar(36) NOT NULL,
   `supplier_id` varchar(36) NOT NULL,
-  `status` enum('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED') DEFAULT 'PENDING',
+  `status` enum('PENDING','ACCEPTED','BILLED','CLOSED','REJECTED','RETURN_REQUESTED') DEFAULT 'PENDING',
   `total_amount` decimal(12,2) DEFAULT '0.00',
   `notes` text,
   `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
   `updatedAt` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `rejection_reason` text,
   PRIMARY KEY (`order_id`),
   UNIQUE KEY `order_number` (`order_number`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -75,8 +76,73 @@ CREATE TABLE `b2b_orders` (
 
 LOCK TABLES `b2b_orders` WRITE;
 /*!40000 ALTER TABLE `b2b_orders` DISABLE KEYS */;
-INSERT INTO `b2b_orders` VALUES ('a736ecff-a34c-41b8-b8f5-fbcaeb706cbd',4,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',300.00,NULL,'2026-04-02 22:11:14','2026-04-02 22:13:39'),('baeaf1e3-074f-4a50-a3b1-d429d1dae575',2,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',1400.00,NULL,'2026-04-01 02:21:54','2026-04-01 02:25:33'),('d5ad577a-1463-4afc-8a30-412c0dadba34',1,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',100.00,NULL,'2026-04-01 01:30:28','2026-04-01 02:22:49'),('fd1d2a1f-9faa-4b3f-a626-637732b6a169',3,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',350.00,NULL,'2026-04-02 14:18:17','2026-04-02 14:21:26');
+INSERT INTO `b2b_orders` VALUES ('a736ecff-a34c-41b8-b8f5-fbcaeb706cbd',4,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',300.00,NULL,'2026-04-02 22:11:14','2026-04-15 23:46:30',NULL),('baeaf1e3-074f-4a50-a3b1-d429d1dae575',2,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',1400.00,NULL,'2026-04-01 02:21:54','2026-04-01 02:25:33',NULL),('be07b8ca-68a1-48ad-9ba9-16fd88072748',5,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',500.00,NULL,'2026-04-15 19:43:10','2026-04-15 23:18:52',NULL),('d5ad577a-1463-4afc-8a30-412c0dadba34',1,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',100.00,NULL,'2026-04-01 01:30:28','2026-04-01 02:22:49',NULL),('fd1d2a1f-9faa-4b3f-a626-637732b6a169',3,'inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','CLOSED',350.00,NULL,'2026-04-02 14:18:17','2026-04-02 14:21:26',NULL);
 /*!40000 ALTER TABLE `b2b_orders` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `b2b_return_items`
+--
+
+DROP TABLE IF EXISTS `b2b_return_items`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `b2b_return_items` (
+  `id` varchar(36) NOT NULL,
+  `return_id` varchar(36) NOT NULL,
+  `order_item_id` varchar(36) NOT NULL,
+  `product_id` varchar(36) NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `sku` varchar(100) NOT NULL,
+  `return_qty` int DEFAULT '1',
+  `unit_price` decimal(10,2) DEFAULT '0.00',
+  `refund_amount` decimal(12,2) DEFAULT '0.00',
+  PRIMARY KEY (`id`),
+  KEY `return_id` (`return_id`),
+  CONSTRAINT `b2b_return_items_ibfk_1` FOREIGN KEY (`return_id`) REFERENCES `b2b_returns` (`return_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `b2b_return_items`
+--
+
+LOCK TABLES `b2b_return_items` WRITE;
+/*!40000 ALTER TABLE `b2b_return_items` DISABLE KEYS */;
+INSERT INTO `b2b_return_items` VALUES ('8a9dd088-2368-4625-bba1-4ce1b2f1ef69','7aee80b9-0bdd-4777-bab5-228f615f795c','73dfda15-32dc-4709-b617-091d57534480','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',5,100.00,500.00),('bd0a9286-b2e4-4269-a5ec-3f2b1f7eca64','86191133-7fd6-4742-9680-5e34a042829c','9c403cbb-68f1-4e5a-a489-13f4a42d0430','a436f504-05ee-4d79-9ae9-715467abb767','Notebook','SKU-001',3,100.00,300.00);
+/*!40000 ALTER TABLE `b2b_return_items` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
+-- Table structure for table `b2b_returns`
+--
+
+DROP TABLE IF EXISTS `b2b_returns`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `b2b_returns` (
+  `return_id` varchar(36) NOT NULL,
+  `order_id` varchar(36) NOT NULL,
+  `shop_id` varchar(36) NOT NULL,
+  `supplier_id` varchar(36) NOT NULL,
+  `status` enum('PENDING','APPROVED','REJECTED') DEFAULT 'PENDING',
+  `total_refund_amount` decimal(12,2) DEFAULT '0.00',
+  `reason` text,
+  `createdAt` datetime DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`return_id`),
+  KEY `order_id` (`order_id`),
+  CONSTRAINT `b2b_returns_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `b2b_orders` (`order_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `b2b_returns`
+--
+
+LOCK TABLES `b2b_returns` WRITE;
+/*!40000 ALTER TABLE `b2b_returns` DISABLE KEYS */;
+INSERT INTO `b2b_returns` VALUES ('7aee80b9-0bdd-4777-bab5-228f615f795c','be07b8ca-68a1-48ad-9ba9-16fd88072748','inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','APPROVED',500.00,NULL,'2026-04-15 20:13:41'),('86191133-7fd6-4742-9680-5e34a042829c','a736ecff-a34c-41b8-b8f5-fbcaeb706cbd','inventory','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','APPROVED',300.00,NULL,'2026-04-15 23:45:37');
+/*!40000 ALTER TABLE `b2b_returns` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -174,7 +240,7 @@ CREATE TABLE `profiles` (
 
 LOCK TABLES `profiles` WRITE;
 /*!40000 ALTER TABLE `profiles` DISABLE KEYS */;
-INSERT INTO `profiles` VALUES ('5512a360-2ce9-11f1-842e-d4939063d02e','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','supplier','KSY\'s Business',NULL,'ksy_s_business_9ed4e4',NULL,NULL,NULL,NULL,NULL,'general',1,'2026-03-31 15:36:49',NULL,NULL,NULL,NULL,NULL),('7a1ed6a2-57f8-4ce3-9ede-8809cb18c34e','supplier_9ed4e45d6be84d39','shop','KSY Stationary Supplier',NULL,'ksy_stationary_supplier_e84d39','KSY Stationery Suppliers is a reliable distributor of high-quality stationery products catering to schools, offices, and retail stores. The company offers a wide range of items including notebooks, pens, pencils, files, registers, printing paper, art supplies, and office essentials. Known for consistent product quality and timely delivery, ABC Stationery Suppliers focuses on maintaining strong client relationships through competitive pricing and dependable service. Whether for bulk institutional needs or everyday office use, the supplier ensures availability of trusted brands along with cost-effective alternatives.',NULL,NULL,NULL,NULL,'stationery',1,'2026-03-31 13:22:48','Shop No. 12, First Floor, Shree Plaza Near Alambagh Bus Stand Alambagh Lucknow, Uttar Pradesh – 226005 India',NULL,NULL,NULL,NULL),('965c0575-9c45-458e-b7ee-645549d97d12','stocksense_tenant_b15d6534d0a14ed6','shop','as shop',NULL,'as_shop_a14ed6','as shop is hardware shop where you can find all types of hardware components',NULL,NULL,NULL,NULL,'hardware',1,'2026-03-28 23:20:50','2/3, local street, lucknow','tiyeb13599@smkanba.com','+9198876456789',NULL,NULL),('cb0bc51f-8cca-459f-a42a-66a418c08fbf','inventory','shop','My Shop',NULL,'my_shop_entory','My Shop is a retail shop that provides a wide range of everyday essentials required for daily living. It focuses on convenience, affordability, and quick access to commonly used products, making it a go-to place for nearby residents.\n\nProducts (Examples):\n\nGroceries (rice, flour, pulses, sugar)\nPackaged foods (biscuits, snacks, instant noodles)\nBeverages (tea, coffee, soft drinks)\nHousehold items (detergents, soaps, cleaning supplies)\nPersonal care products (shampoo, toothpaste, oils)\nStationery items (notebooks, pens, pencils)',NULL,NULL,NULL,NULL,'general_store',1,'2026-03-29 02:44:39',NULL,'yadavabhi1424@gmail.com',NULL,NULL,NULL);
+INSERT INTO `profiles` VALUES ('452b9ecb-fed3-4bd7-b2d3-f3ba4492c141','stocksense_tenant_3cffa38d513c4a58','shop','abc',NULL,'abhinav_yadav_s_shop_3cffa3',NULL,NULL,NULL,NULL,NULL,'warehouse',1,'2026-04-13 12:33:52',NULL,NULL,NULL,NULL,NULL),('5512a360-2ce9-11f1-842e-d4939063d02e','9ed4e45d-6be8-4d39-b578-4bbd37b6e122','supplier','KSY\'s Business',NULL,'ksy_s_business_9ed4e4',NULL,NULL,NULL,NULL,NULL,'general',1,'2026-03-31 15:36:49',NULL,NULL,NULL,NULL,NULL),('7a1ed6a2-57f8-4ce3-9ede-8809cb18c34e','supplier_9ed4e45d6be84d39','shop','KSY Stationary Supplier',NULL,'ksy_stationary_supplier_e84d39','KSY Stationery Suppliers is a reliable distributor of high-quality stationery products catering to schools, offices, and retail stores. The company offers a wide range of items including notebooks, pens, pencils, files, registers, printing paper, art supplies, and office essentials. Known for consistent product quality and timely delivery, ABC Stationery Suppliers focuses on maintaining strong client relationships through competitive pricing and dependable service. Whether for bulk institutional needs or everyday office use, the supplier ensures availability of trusted brands along with cost-effective alternatives.',NULL,NULL,NULL,NULL,'stationery',1,'2026-03-31 13:22:48','Shop No. 12, First Floor, Shree Plaza Near Alambagh Bus Stand Alambagh Lucknow, Uttar Pradesh – 226005 India',NULL,NULL,NULL,NULL),('965c0575-9c45-458e-b7ee-645549d97d12','stocksense_tenant_b15d6534d0a14ed6','shop','as shop',NULL,'as_shop_a14ed6','as shop is hardware shop where you can find all types of hardware components',NULL,NULL,NULL,NULL,'hardware',1,'2026-03-28 23:20:50','2/3, local street, lucknow','tiyeb13599@smkanba.com','+9198876456789',NULL,NULL),('cb0bc51f-8cca-459f-a42a-66a418c08fbf','inventory','shop','My Shop',NULL,'my_shop_entory','My Shop is a retail shop that provides a wide range of everyday essentials required for daily living. It focuses on convenience, affordability, and quick access to commonly used products, making it a go-to place for nearby residents.\n\nProducts (Examples):\n\nGroceries (rice, flour, pulses, sugar)\nPackaged foods (biscuits, snacks, instant noodles)\nBeverages (tea, coffee, soft drinks)\nHousehold items (detergents, soaps, cleaning supplies)\nPersonal care products (shampoo, toothpaste, oils)\nStationery items (notebooks, pens, pencils)',NULL,NULL,NULL,NULL,'general_store',1,'2026-03-29 02:44:39',NULL,'yadavabhi1424@gmail.com',NULL,NULL,NULL);
 /*!40000 ALTER TABLE `profiles` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -382,4 +448,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-04-02 22:38:03
+-- Dump completed on 2026-04-16  0:12:15
