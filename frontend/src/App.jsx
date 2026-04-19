@@ -24,13 +24,14 @@ import { getShopProfile } from './services/api';
 import VerifyEmail from './pages/VerifyEmail';
 import AcceptInvite from './pages/AcceptInvite';
 import DiscoveryPage from './pages/Discovery';
+import NotificationsPage from './modules/Notifications/Notifications';
 
 // ── Role permissions (what each role can access) ────────────
 const PERMISSIONS = {
-  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
-  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery'],
-  manager: ['dashboard','inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery'],
-  cashier: ['dashboard', 'billing', 'settings'],
+  owner:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'notifications'],
+  admin:   ['dashboard', 'billing', 'inventory', 'reports', 'manufacturers', 'users', 'settings', 'ai-predict', 'discovery', 'notifications'],
+  manager: ['dashboard', 'inventory', 'reports', 'manufacturers', 'settings', 'ai-predict', 'discovery', 'notifications'],
+  cashier: ['dashboard', 'billing', 'settings', 'notifications'],
 };
 
 function canAccess(role, page) {
@@ -217,6 +218,13 @@ function AuthenticatedApp({ user, logout }) {
             <DiscoveryPage user={user} />
           </ProtectedRoute>
         } />
+
+        <Route path="/notifications" element={
+          <ProtectedRoute page="notifications" user={user}>
+            <NotificationsPage user={user} />
+          </ProtectedRoute>
+        } />
+
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </MainLayout>

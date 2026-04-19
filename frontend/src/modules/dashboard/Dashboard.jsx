@@ -32,6 +32,33 @@ function getChange(data, index) {
   return change;
 }
 
+// ── Custom Bar Chart Tooltip ─────────────────────────────────
+function BarTooltip({ label, revenue, count }) {
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: 'calc(100% + 8px)',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      background: '#0f172a',
+      color: '#f1f5f9',
+      borderRadius: '8px',
+      padding: '8px 12px',
+      whiteSpace: 'nowrap',
+      fontSize: '0.78rem',
+      lineHeight: 1.6,
+      zIndex: 100,
+      pointerEvents: 'none',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+      minWidth: 130,
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 2, color: 'var(--color-accent-primary)' }}>{label}</div>
+      <div>Sales:&nbsp;&nbsp;&nbsp;<strong>{count ?? 0}</strong></div>
+      <div>Revenue: <strong>{'₹' + Number(revenue || 0).toLocaleString('en-IN')}</strong></div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════
 //  STAT CARD COMPONENT
 // ══════════════════════════════════════════════════════════
@@ -71,9 +98,10 @@ export default function Dashboard({ user }) {
   const [lowStockItems, setLowStockItems] = useState([]);
   const [loading,  setLoading]       = useState(true);
   const [error,    setError]          = useState('');
-  const [chartView, setChartView] = useState('weekly'); // 'weekly' or 'monthly'
+  const [chartView, setChartView] = useState('weekly');
   const [drilldown, setDrilldown] = useState(null);
   const [maximized, setMaximized] = useState(false);
+  const [hoveredBar, setHoveredBar] = useState(null); // { label, revenue, count }
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -229,27 +257,32 @@ export default function Dashboard({ user }) {
               {chartData.map((item) => {
                 const maxVal = Math.max(...chartData.map(d => d.sales || 0), 1);
                 const barHeight = ((item.sales || 0) / maxVal) * 100;
-                const label = chartView === 'weekly'
-                  ? new Date(item.date).toLocaleDateString('en-IN', { weekday: 'short' })
-                  : new Date(item.date).toLocaleDateString('en-IN', { month: 'short' });
+                  const label = chartView === 'weekly'
+                    ? new Date(item.date).toLocaleDateString('en-IN', { weekday: 'short' })
+                    : new Date(item.date).toLocaleDateString('en-IN', { month: 'short' });
 
-                return (
-                  <div
-                    key={item.date}
-                    className={`bar-chart__bar-group ${chartView === 'monthly' ? 'bar-chart__bar-group--clickable' : ''}`}
-                    onClick={() => handleBarClick(item)}
-                  >
-                    <div className="bar-chart__bars">
-
-                      <div
-                        className="bar-chart__bar bar-chart__bar--revenue"
-                        style={{ height: `${barHeight}%` }}
-                        title={`${label}: ${fmt(item.sales || 0)}`}
-                      />
+                  return (
+                    <div
+                      key={item.date}
+                      className={`bar-chart__bar-group ${chartView === 'monthly' ? 'bar-chart__bar-group--clickable' : ''}`}
+                      style={{ position: 'relative' }}
+                      onClick={() => handleBarClick(item)}
+                      onMouseEnter={() => setHoveredBar({ key: item.date, label, revenue: item.sales, count: item.txCount })}
+                      onMouseLeave={() => setHoveredBar(null)}
+                    >
+                      {/* Custom tooltip */}
+                      {hoveredBar?.key === item.date && (
+                        <BarTooltip label={label} revenue={hoveredBar.revenue} count={hoveredBar.count} />
+                      )}
+                      <div className="bar-chart__bars">
+                        <div
+                          className="bar-chart__bar bar-chart__bar--revenue"
+                          style={{ height: `${barHeight}%` }}
+                        />
+                      </div>
+                      <span className="bar-chart__label">{label}</span>
                     </div>
-                    <span className="bar-chart__label">{label}</span>
-                  </div>
-                );
+                  );
               })}
             </div>
           </div>
@@ -395,12 +428,20 @@ export default function Dashboard({ user }) {
                 {drilldown.data.map((item) => {
                   const maxVal = Math.max(...drilldown.data.map(d => d.sales || 0), 1);
                   return (
-                    <div key={item.week} className="bar-chart__bar-group">
+                    <div
+                      key={item.week}
+                      className="bar-chart__bar-group"
+                      style={{ position: 'relative' }}
+                      onMouseEnter={() => setHoveredBar({ key: `drill-${item.week}`, label: item.week, revenue: item.sales, count: item.txCount })}
+                      onMouseLeave={() => setHoveredBar(null)}
+                    >
+                      {hoveredBar?.key === `drill-${item.week}` && (
+                        <BarTooltip label={item.week} revenue={hoveredBar.revenue} count={hoveredBar.count} />
+                      )}
                       <div className="bar-chart__bars">
                         <div
                           className="bar-chart__bar bar-chart__bar--revenue"
                           style={{ height: `${((item.sales || 0) / maxVal) * 100}%` }}
-                          title={`${item.week}: ${fmt(item.sales || 0)}`}
                         />
                       </div>
                       <span className="bar-chart__label">{item.week}</span>

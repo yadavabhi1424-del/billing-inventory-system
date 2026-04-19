@@ -162,7 +162,7 @@ const getDashboard = async (req, res, next) => {
     // 6. Charts logic
     // 6a. 7-Day Revenue (Always 7 days padded)
     const [last7DaysRaw] = await req.db.execute(
-      `SELECT DATE(createdAt) as date, SUM(totalAmount) as sales
+      `SELECT DATE(createdAt) as date, SUM(totalAmount) as sales, COUNT(*) as txCount
        FROM transactions
        WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND status = 'COMPLETED'
        GROUP BY DATE(createdAt) ORDER BY date ASC`
@@ -171,7 +171,7 @@ const getDashboard = async (req, res, next) => {
     let b2b7DaysRaw = [];
     if (uuid && isSupplier) {
       const [res] = await masterPool.execute(
-        `SELECT DATE(updatedAt) as date, SUM(total_amount) as sales
+        `SELECT DATE(updatedAt) as date, SUM(total_amount) as sales, COUNT(*) as txCount
          FROM b2b_orders
          WHERE supplier_id = ? AND updatedAt >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) AND status IN ('ACCEPTED', 'BILLED', 'CLOSED')
          GROUP BY DATE(updatedAt) ORDER BY date ASC`,
@@ -205,17 +205,18 @@ const getDashboard = async (req, res, next) => {
       const b2bMatch = b2b7DaysRaw.find(r => formatDateLocal(r.date) === dateStr);
       
       const sales = (match ? parseFloat(match.sales) : 0) + (b2bMatch ? parseFloat(b2bMatch.sales) : 0);
+      const txCount = (match ? parseInt(match.txCount) : 0);
       const prevSales = last7Days[last7Days.length - 1]?.sales || 0;
       let barGrowth = 0;
       if (prevSales > 0) barGrowth = ((sales - prevSales) / prevSales) * 100;
-      else if (sales > 0 && last7Days.length > 0) barGrowth = 100; // only show 100% if not the first bar and previous was 0
+      else if (sales > 0 && last7Days.length > 0) barGrowth = 100;
 
-      last7Days.push({ date: dateStr, sales, growth: parseFloat(barGrowth.toFixed(1)) });
+      last7Days.push({ date: dateStr, sales, txCount, growth: parseFloat(barGrowth.toFixed(1)) });
     }
 
     // 6b. 12-Month Revenue (Padded)
     const [last12MonthsRaw] = await req.db.execute(
-      `SELECT DATE_FORMAT(createdAt, '%Y-%m') as date, SUM(totalAmount) as sales
+      `SELECT DATE_FORMAT(createdAt, '%Y-%m') as date, SUM(totalAmount) as sales, COUNT(*) as txCount
        FROM transactions
        WHERE createdAt >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH) AND status = 'COMPLETED'
        GROUP BY date ORDER BY date ASC`
@@ -224,7 +225,7 @@ const getDashboard = async (req, res, next) => {
     let b2b12MonthsRaw = [];
     if (uuid && isSupplier) {
       const [res] = await masterPool.execute(
-        `SELECT DATE_FORMAT(updatedAt, '%Y-%m') as date, SUM(total_amount) as sales
+        `SELECT DATE_FORMAT(updatedAt, '%Y-%m') as date, SUM(total_amount) as sales, COUNT(*) as txCount
          FROM b2b_orders
          WHERE supplier_id = ? AND updatedAt >= DATE_SUB(CURDATE(), INTERVAL 11 MONTH) AND status IN ('ACCEPTED', 'BILLED', 'CLOSED')
          GROUP BY date ORDER BY date ASC`,
@@ -242,12 +243,13 @@ const getDashboard = async (req, res, next) => {
       const b2bMatch = b2b12MonthsRaw.find(r => r.date === dateStr);
       
       const sales = (match ? parseFloat(match.sales) : 0) + (b2bMatch ? parseFloat(b2bMatch.sales) : 0);
+      const txCount = (match ? parseInt(match.txCount) : 0);
       const prevSales = last12Months[last12Months.length - 1]?.sales || 0;
       let barGrowth = 0;
       if (prevSales > 0) barGrowth = ((sales - prevSales) / prevSales) * 100;
       else if (sales > 0 && last12Months.length > 0) barGrowth = 100;
 
-      last12Months.push({ date: dateStr, sales, growth: parseFloat(barGrowth.toFixed(1)) });
+      last12Months.push({ date: dateStr, sales, txCount, growth: parseFloat(barGrowth.toFixed(1)) });
     }
 
     // 6c. Drilldown Handle (Weekly breakdown of a specific month)
@@ -256,7 +258,7 @@ const getDashboard = async (req, res, next) => {
     if (drillDownMonth) {
       const [drillDownRaw] = await req.db.execute(
         `SELECT WEEK(createdAt, 1) - WEEK(DATE_FORMAT(createdAt, '%Y-%m-01'), 1) + 1 as week,
-                SUM(totalAmount) as sales
+                SUM(totalAmount) as sales, COUNT(*) as txCount
          FROM transactions
          WHERE DATE_FORMAT(createdAt, '%Y-%m') = ? AND status = 'COMPLETED'
          GROUP BY week ORDER BY week ASC`,
@@ -266,7 +268,7 @@ const getDashboard = async (req, res, next) => {
       if (uuid && isSupplier) {
         const [res] = await masterPool.execute(
           `SELECT WEEK(updatedAt, 1) - WEEK(DATE_FORMAT(updatedAt, '%Y-%m-01'), 1) + 1 as week,
-                  SUM(total_amount) as sales
+                  SUM(total_amount) as sales, COUNT(*) as txCount
            FROM b2b_orders
            WHERE supplier_id = ? AND DATE_FORMAT(updatedAt, '%Y-%m') = ? AND status IN ('ACCEPTED', 'BILLED', 'CLOSED')
            GROUP BY week ORDER BY week ASC`,
@@ -281,7 +283,8 @@ const getDashboard = async (req, res, next) => {
         const match = drillDownRaw.find(r => r.week === weekNum);
         const b2bMatch = b2bDrillDownRaw.find(r => r.week === weekNum);
         const sales = (match ? parseFloat(match.sales) : 0) + (b2bMatch ? parseFloat(b2bMatch.sales) : 0);
-        return { week: `Week ${weekNum}`, sales };
+        const txCount = (match ? parseInt(match.txCount) : 0) + (b2bMatch ? parseInt(b2bMatch.txCount) : 0);
+        return { week: `Week ${weekNum}`, sales, txCount };
       });
     }
 

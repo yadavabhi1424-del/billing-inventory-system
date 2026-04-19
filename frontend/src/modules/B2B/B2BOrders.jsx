@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   getB2BOrders, 
   getB2BOrderById, 
@@ -50,6 +50,17 @@ export default function B2BOrders({ user }) {
 
   const isSupplier = user?.userType === 'supplier';
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link: auto-open panel when orderId is in URL
+  useEffect(() => {
+    const orderId = searchParams.get('orderId');
+    if (orderId) {
+      handleOpenPanel(orderId);
+      // Clean URL after opening (remove orderId param)
+      setSearchParams(prev => { prev.delete('orderId'); return prev; }, { replace: true });
+    }
+  }, []);
 
   const getDisplayStatus = (order) => {
     const retStatus = order.latest_return_status || (order.returns?.[0]?.status);

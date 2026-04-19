@@ -360,6 +360,10 @@ const updateProduct = async (req, res, next) => {
       );
     }
 
+    // Safely evaluate boolean strings from FormData
+    const evalActive = isActive !== undefined ? (isActive === 'true' || isActive === true || isActive === 1) : !!existing[0].isActive;
+    const evalPublic = is_public !== undefined ? (is_public === 'true' || is_public === true || is_public === 1) : !!existing[0].is_public;
+
     // Phase 5: Sync to Master DB
     // We pass all current fields to ensure robust synchronization
     await syncSupplierProduct(req, true, {
@@ -369,8 +373,8 @@ const updateProduct = async (req, res, next) => {
       unit: unit || existing[0].unit,
       sku: existing[0].sku,
       sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : existing[0].sellingPrice,
-      isActive: isActive !== undefined ? !!isActive : !!existing[0].isActive,
-      is_public: is_public !== undefined ? !!is_public : !!existing[0].is_public,
+      isActive: evalActive,
+      is_public: evalPublic,
       image: existing[0].image
     });
 

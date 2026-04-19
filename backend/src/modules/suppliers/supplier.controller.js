@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { AppError }      from "../../middleware/errorHandler.js";
+import { masterPool }    from "../../config/masterDatabase.js";
 
 const getAllSuppliers = async (req, res, next) => {
   try {
@@ -28,6 +29,38 @@ const getAllSuppliers = async (req, res, next) => {
     const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM suppliers s WHERE ${where}`, params
     );
+
+    const allIds = suppliers.map(s => s.supplier_id);
+    if (allIds.length > 0) {
+      const placeholders = allIds.map(() => '?').join(',');
+      try {
+        const [masterData] = await masterPool.execute(
+          `SELECT supplier_id, db_name, owner_name, owner_email FROM suppliers 
+           WHERE supplier_id IN (${placeholders}) OR db_name IN (${placeholders})`,
+          [...allIds, ...allIds]
+        );
+        // Map both GUIDs and DB Names to ensure foolproof lookups
+        const masterMap = masterData.reduce((acc, row) => ({ 
+          ...acc, 
+          [row.supplier_id]: row,
+          [row.db_name]: row 
+        }), {});
+
+        suppliers.forEach(s => {
+          const m = masterMap[s.supplier_id];
+          if (m) {
+            s.contactPerson = m.owner_name || s.contactPerson || 'Owner';
+            s.email = m.owner_email || s.email || '—';
+            s.is_network = 1;
+          } else {
+            s.contactPerson = s.contactPerson || '—';
+            s.email = s.email || '—';
+          }
+        });
+      } catch (e) {
+        console.error("Master override failed:", e);
+      }
+    }
 
     res.json({
       success: true, data: suppliers,

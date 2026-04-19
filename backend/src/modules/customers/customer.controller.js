@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { AppError }      from "../../middleware/errorHandler.js";
+import { masterPool } from "../../config/masterDatabase.js";
+import { getTenantPool } from "../../middleware/tenant.middleware.js";
 
 const getAllCustomers = async (req, res, next) => {
   try {
@@ -23,6 +25,58 @@ const getAllCustomers = async (req, res, next) => {
     const [[{ total }]] = await req.db.execute(
       `SELECT COUNT(*) as total FROM customers c WHERE ${where}`, params
     );
+
+    const allIds = customers.map(c => c.customer_id);
+    if (allIds.length > 0) {
+      const placeholders = allIds.map(() => '?').join(',');
+      const [b2bStats] = await masterPool.execute(
+        `SELECT shop_id, 
+                COUNT(DISTINCT order_id) as orderCount,
+                (SELECT COUNT(DISTINCT product_id) FROM b2b_order_items oi JOIN b2b_orders o2 ON oi.order_id=o2.order_id WHERE o2.shop_id = o.shop_id AND (o2.supplier_id = ? OR o2.supplier_id = (SELECT supplier_id FROM suppliers WHERE db_name = ?))) as productCount
+         FROM b2b_orders o
+         WHERE (supplier_id = ? OR supplier_id = (SELECT supplier_id FROM suppliers WHERE db_name = ?)) AND shop_id IN (${placeholders})
+         GROUP BY shop_id`,
+        [req.dbName, req.dbName, req.dbName, req.dbName, ...allIds]
+      );
+
+      const [masterData] = await masterPool.execute(
+        `SELECT t.db_name, t.owner_name, p.address 
+         FROM tenants t 
+         LEFT JOIN profiles p ON p.entity_id = t.db_name 
+         WHERE t.db_name IN (${placeholders})`,
+        [...allIds]
+      );
+
+      const statsMap = b2bStats.reduce((acc, row) => ({ ...acc, [row.shop_id]: row }), {});
+      const masterMap = masterData.reduce((acc, row) => ({ ...acc, [row.db_name]: row }), {});
+      
+      // Use Promise.all to handle async tenant fallback
+      await Promise.all(customers.map(async c => {
+        const b2bOrders = statsMap[c.customer_id]?.orderCount || 0;
+        const posOrders = c.totalTransactions || 0;
+        c.orderCount = b2bOrders + posOrders;
+        c.productCount = statsMap[c.customer_id]?.productCount || 0;
+
+        const m = masterMap[c.customer_id];
+        if (m) {
+          c.contactPerson = m.owner_name || 'Owner';
+          c.address = m.address || c.address;
+          
+          // Tenant DB Fallback if out-of-sync
+          if (!c.address && c.customer_id) {
+            try {
+              const shopDb = await getTenantPool(c.customer_id);
+              const [sp] = await shopDb.execute("SELECT address FROM shop_profile LIMIT 1");
+              if (sp.length > 0 && sp[0].address) c.address = sp[0].address;
+            } catch(e) {}
+          }
+        } else {
+          c.contactPerson = c.name; 
+        }
+        
+        if (b2bOrders > 0) c.is_network = 1;
+      }));
+    }
 
     res.json({
       success: true, data: customers,

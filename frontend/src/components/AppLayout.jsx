@@ -7,14 +7,15 @@ import './AppLayout.css';
 const getNavItems = (userType) => {
   const isSupplier = userType === 'supplier';
   return [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
-    { id: 'billing', label: isSupplier ? 'Orders' : 'Billing', icon: 'billing', path: '/billing' },
-    { id: 'inventory', label: 'Inventory', icon: 'inventory', path: '/inventory' },
-    { id: 'ai-predict', label: 'AI Predict', icon: 'ai', path: '/ai-predict' },
-    { id: 'reports', label: 'Reports', icon: 'reports', path: '/reports' },
+    { id: 'dashboard',     label: 'Dashboard',                         icon: 'dashboard',    path: '/dashboard' },
+    { id: 'billing',       label: isSupplier ? 'Orders' : 'Billing',   icon: 'billing',      path: '/billing' },
+    { id: 'inventory',     label: 'Inventory',                         icon: 'inventory',    path: '/inventory' },
+    { id: 'ai-predict',   label: 'AI Predict',                        icon: 'ai',           path: '/ai-predict' },
+    { id: 'reports',       label: 'Reports',                           icon: 'reports',      path: '/reports' },
     { id: 'manufacturers', label: isSupplier ? 'Customers' : 'Suppliers', icon: 'manufacturer', path: '/manufacturers' },
-    { id: 'discovery', label: 'Network', icon: 'globe', path: '/discovery' },
-    { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings' },
+    { id: 'discovery',     label: 'Network',                           icon: 'globe',        path: '/discovery' },
+    { id: 'notifications', label: 'Notifications',                     icon: 'bell',         path: '/notifications' },
+    { id: 'settings',      label: 'Settings',                          icon: 'settings',     path: '/settings' },
   ];
 };
 
@@ -124,9 +125,11 @@ function Sidebar({ collapsed, onToggle, user, allowedRoutes, activePath, onNavig
 }
 
 // ══════════════════════════════════════════════════════════
-//  NOTIFICATION PANEL
+//  NOTIFICATION PANEL (Dropdown)
 // ══════════════════════════════════════════════════════════
-function NotificationPanel({ notifications, onClose, onMarkAllRead, onClearAll, onDismiss, onNavigate }) {
+function NotificationPanel({ notifications, onClose, onMarkAllRead, onClearAll, onDismiss, onNavigate, onViewAll }) {
+  const [tab, setTab] = useState('all'); // 'all' | 'unread'
+
   const timeAgo = (t) => {
     if (!t) return '';
     const diff = (Date.now() - new Date(t)) / 1000;
@@ -138,52 +141,92 @@ function NotificationPanel({ notifications, onClose, onMarkAllRead, onClearAll, 
 
   const iconFor = (type) => {
     if (type === 'out_of_stock') return { emoji: '🚨', cls: 'notif-icon--danger' };
-    if (type === 'low_stock') return { emoji: '⚠️', cls: 'notif-icon--warning' };
+    if (type === 'low_stock')    return { emoji: '⚠️', cls: 'notif-icon--warning' };
     return { emoji: '👤', cls: 'notif-icon--info' };
   };
 
-  const routeFor = (type) => {
+  const routeFor = (type, id) => {
     if (type === 'out_of_stock' || type === 'low_stock') return '/inventory';
-    if (type === 'member_joined') return '/settings';
+    if (type === 'member_joined') return '/users';
     return null;
   };
 
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const visible = tab === 'unread' ? notifications.filter(n => !n.read) : notifications;
+
   return (
     <div className="notif-panel">
+      {/* Header */}
       <div className="notif-panel__header">
-        <span className="notif-panel__title">Notifications</span>
+        <div className="notif-panel__header-left">
+          <span className="notif-panel__title">Notifications</span>
+          {unreadCount > 0 && (
+            <span className="notif-panel__badge">{unreadCount}</span>
+          )}
+        </div>
         <div className="notif-panel__actions">
           {notifications.some(n => !n.read) && (
             <button className="notif-panel__mark-all" onClick={onMarkAllRead}>Mark all read</button>
           )}
           {notifications.length > 0 && (
-            <button className="notif-panel__clear-all" onClick={onClearAll}>Clear all</button>
+            <button className="notif-panel__clear-all" onClick={onClearAll}>Clear</button>
           )}
         </div>
       </div>
+
+      {/* Tabs */}
+      <div className="notif-panel__tabs">
+        <button
+          className={`notif-panel__tab ${tab === 'all' ? 'notif-panel__tab--active' : ''}`}
+          onClick={() => setTab('all')}
+        >
+          All Notifications
+        </button>
+        <button
+          className={`notif-panel__tab ${tab === 'unread' ? 'notif-panel__tab--active' : ''}`}
+          onClick={() => setTab('unread')}
+        >
+          Unread {unreadCount > 0 && <span className="notif-panel__tab-count">{unreadCount}</span>}
+        </button>
+      </div>
+
+      {/* List */}
       <div className="notif-panel__list">
-        {notifications.length === 0 ? (
-          <div className="notif-empty">🎉 All caught up!</div>
-        ) : notifications.map(n => {
-          const ic = iconFor(n.type);
-          const route = routeFor(n.type);
+        {visible.length === 0 ? (
+          <div className="notif-empty">🎉 {tab === 'unread' ? 'No unread notifications!' : 'All caught up!'}</div>
+        ) : visible.map(n => {
+          const ic    = iconFor(n.type);
+          const route = routeFor(n.type, n.id);
           return (
             <div
               key={n.id}
-              className={`notif-item ${n.read ? 'notif-item--read' : ''} ${route ? 'notif-item--clickable' : ''}`}
-              onClick={() => {
-                if (route) { onNavigate(n.id, route); onClose(); }
-              }}
+              className={`notif-item ${n.read ? 'notif-item--read' : ''}`}
             >
+              {/* Icon */}
               <div className={`notif-icon ${ic.cls}`}>{ic.emoji}</div>
+
+              {/* Content */}
               <div className="notif-content">
                 <div className="notif-title">{n.title}</div>
                 <div className="notif-message">{n.message}</div>
                 {n.time && <div className="notif-time">{timeAgo(n.time)}</div>}
+
+                {/* Action buttons */}
+                <div className="notif-item__btns">
+                  {route && (
+                    <button
+                      className="notif-item__action-btn notif-item__action-btn--view"
+                      onClick={() => { onNavigate(n.id, route); onClose(); }}
+                    >
+                      View
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Right side */}
               <div className="notif-item__right">
                 {!n.read && <div className="notif-dot" />}
-                {route && <span className="notif-arrow">›</span>}
                 <button
                   className="notif-dismiss"
                   title="Dismiss"
@@ -193,6 +236,13 @@ function NotificationPanel({ notifications, onClose, onMarkAllRead, onClearAll, 
             </div>
           );
         })}
+      </div>
+
+      {/* Footer - See all */}
+      <div className="notif-panel__footer">
+        <button className="notif-panel__see-all" onClick={() => { onViewAll(); onClose(); }}>
+          See all notifications
+        </button>
       </div>
     </div>
   );
@@ -372,6 +422,7 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
               onClearAll={handleClearAll}
               onDismiss={handleDismiss}
               onNavigate={handleNotifClick}
+              onViewAll={() => navigate('/notifications')}
             />
           )}
         </div>

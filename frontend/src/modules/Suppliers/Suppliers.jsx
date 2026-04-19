@@ -4,6 +4,7 @@
 // ============================================================
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import {
   getSuppliers, createSupplier, updateSupplier, deleteSupplier,
@@ -29,7 +30,8 @@ export default function Suppliers({ user }) {
   const [selected, setSelected] = useState(null);
 
   // Tabs: 'crm' | 'orders'
-  const [activeTab, setActiveTab] = useState('crm');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') === 'orders' ? 'orders' : 'crm');
   const [loading, setLoading] = useState(false);
 
   // Catalog / Ordering State

@@ -4,7 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import Icon from '../../components/Icon';
-import { getDetailedSalesReport } from '../../services/api';
+import { getDetailedSalesReport, getTransactionById } from '../../services/api';
+import '../billing/Transactions.css';
 
 const fmt      = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 const fmtShort = (n) => {
@@ -85,11 +86,13 @@ const PeakTooltip = ({ active, payload }) => {
 const PAGE_SIZE = 10;
 
 export default function DatewiseDashboard({ filters }) {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [page,    setPage]    = useState(1);
+  const [data,        setData]        = useState(null);
+  const [loading,     setLoading]     = useState(true);
+  const [page,        setPage]        = useState(1);
   const [showPagination, setShowPagination] = useState(false);
-  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfBusy,     setPdfBusy]     = useState(false);
+  const [selectedTxn, setSelectedTxn] = useState(null);   // for detail modal
+  const [detailLoad,  setDetailLoad]  = useState(false);
   const printRef = useRef(null);
 
   useEffect(() => { setPage(1); setShowPagination(false); fetchData(); }, [filters]);
@@ -169,6 +172,21 @@ export default function DatewiseDashboard({ filters }) {
     setPdfBusy(true);
     await exportPDF(printRef);
     setPdfBusy(false);
+  };
+
+  const handleViewDetail = async (txnId) => {
+    if (!txnId) { alert("Error: Transaction ID is missing from this row."); return; }
+    try {
+      setDetailLoad(true);
+      const res = await getTransactionById(txnId);
+      if (res.success) setSelectedTxn(res.data);
+      else alert("Failed to fetch details.");
+    } catch (e) {
+      console.error("Fetch detail error:", e.message);
+      alert("Error fetching details: " + e.message);
+    } finally {
+      setDetailLoad(false);
+    }
   };
 
   return (
@@ -282,7 +300,12 @@ export default function DatewiseDashboard({ filters }) {
                   {paged.length === 0 ? (
                     <tr><td colSpan="9" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No transactions</td></tr>
                   ) : paged.map((t, i) => (
-                    <tr key={i}>
+                    <tr
+                      key={i}
+                      style={{ cursor: 'pointer' }}
+                      title="Click to view transaction details"
+                      onClick={() => handleViewDetail(t.transaction_id || t.id)}
+                    >
                       <td><span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--color-accent-primary)' }}>{t.invoiceNumber}</span></td>
                       <td><span className="report-time">{fmtDate(t.createdAt)}</span></td>
                       <td><span className="report-time">{fmtTime(t.createdAt)}</span></td>
@@ -323,6 +346,102 @@ export default function DatewiseDashboard({ filters }) {
             ) : null}
           </div>
         </>
+      )}
+
+      {/* Loading overlay */}
+      {detailLoad && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="app-loading__spinner" />
+        </div>
+      )}
+
+      {/* Transaction Details Modal */}
+      {selectedTxn && (
+        <div className="txn-modal-backdrop" onClick={() => setSelectedTxn(null)}>
+          <div className="txn-modal" onClick={e => e.stopPropagation()}>
+            <div className="txn-modal__header">
+              <h2>Transaction Details</h2>
+              <button className="txn-modal__close" onClick={() => setSelectedTxn(null)}>
+                <Icon name="x" size={20} />
+              </button>
+            </div>
+            <div className="txn-modal__body">
+              <div className="txn-modal__info-cards">
+                <div className="txn-modal__card">
+                  <div className="txn-modal__card-title">Transaction Info</div>
+                  <div className="txn-modal__card-list">
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">ID:</span><span className="txn-modal__card-value">{selectedTxn.invoiceNumber}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Status:</span><span className="txn-modal__status-badge">{selectedTxn.status || 'COMPLETED'}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Date:</span><span className="txn-modal__card-value">{new Date(selectedTxn.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Time:</span><span className="txn-modal__card-value">{new Date(selectedTxn.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                  </div>
+                </div>
+                <div className="txn-modal__card">
+                  <div className="txn-modal__card-title">Customer Info</div>
+                  <div className="txn-modal__card-list">
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Name:</span><span className="txn-modal__card-value">{selectedTxn.customerName || 'Walk-in Customer'}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Phone:</span><span className="txn-modal__card-value">{selectedTxn.customerPhone || 'N/A'}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Type:</span><span className="txn-modal__card-value">{selectedTxn.customerName ? 'Registered' : 'Walk-in'}</span></div>
+                  </div>
+                </div>
+                <div className="txn-modal__card">
+                  <div className="txn-modal__card-title">Performed By</div>
+                  <div className="txn-modal__card-list">
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">User:</span><span className="txn-modal__card-value">{selectedTxn.cashierName || 'Unknown'}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Role:</span><span className="txn-modal__card-value">Cashier</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Method:</span><span className="txn-modal__card-value">{selectedTxn.paymentMethod}</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="txn-modal__table-wrapper">
+                <table className="txn-modal__table">
+                  <thead><tr>
+                    <th>Product Name</th>
+                    <th style={{ textAlign: 'right' }}>Qty</th>
+                    <th style={{ textAlign: 'right' }}>Price</th>
+                    <th style={{ textAlign: 'right' }}>Discount</th>
+                    <th style={{ textAlign: 'right' }}>Tax</th>
+                    <th style={{ textAlign: 'right' }}>Subtotal</th>
+                  </tr></thead>
+                  <tbody>
+                    {selectedTxn.items?.map((item, i) => (
+                      <tr key={item.item_id || i}>
+                        <td>{item.productName}</td>
+                        <td style={{ textAlign: 'right' }}>{item.quantity}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(item.sellingPrice)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(item.discountAmount || 0)}</td>
+                        <td style={{ textAlign: 'right' }}>{fmt(item.taxAmount || 0)}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 500 }}>{fmt(item.totalAmount)}</td>
+                      </tr>
+                    ))}
+                    <tr className="txn-modal__table-total-row">
+                      <td colSpan="5" style={{ textAlign: 'right' }}>Total:</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(selectedTxn.totalAmount)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="txn-modal__bottom">
+                <div className="txn-modal__payment-card">
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 12 }}>Payment Details</div>
+                  <div className="txn-modal__card-list">
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Method:</span><span className="txn-modal__card-value">{selectedTxn.paymentMethod}</span></div>
+                    <div className="txn-modal__card-row"><span className="txn-modal__card-label">Status:</span><span className="txn-modal__card-value">{selectedTxn.paymentStatus}</span></div>
+                  </div>
+                </div>
+                <div className="txn-modal__summary">
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: 8 }}>Summary</div>
+                  <div className="txn-modal__summary-row"><span>Order Total:</span><span className="txn-modal__summary-val">{fmt(selectedTxn.subtotal)}</span></div>
+                  <div className="txn-modal__summary-row"><span>Discount:</span><span className="txn-modal__summary-val">{fmt(selectedTxn.discountAmount)}</span></div>
+                  <div className="txn-modal__summary-row"><span>Tax:</span><span className="txn-modal__summary-val">{fmt(selectedTxn.taxAmount)}</span></div>
+                  <div className="txn-modal__summary-total"><span>Final Amount:</span><span>{fmt(selectedTxn.totalAmount)}</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
