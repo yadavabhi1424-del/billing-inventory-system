@@ -6,16 +6,13 @@ import SalesPerformance  from './SalesPerformance';
 import DatewiseDashboard from './DatewiseDashboard';
 import CategoryAnalytics from './CategoryAnalytics';
 import InventoryInsights from './InventoryInsights';
-import CustomerInsights  from './CustomerInsights';
 import ReturnsAnalysis   from './ReturnsAnalysis';
 import Icon              from '../../components/Icon';
-
 const SECTIONS = [
   { key: 'performance', label: 'Sales Performance', icon: 'reports'   },
   { key: 'datewise',    label: 'Date-wise Report',  icon: 'billing'   },
   { key: 'categories',  label: 'Category Analytics',icon: 'inventory' },
   { key: 'inventory',   label: 'Inventory Insights',icon: 'box'       },
-  { key: 'customers',   label: 'Customer Insights',  icon: 'customers', supplierOnly: true },
   { key: 'returns',     label: 'Returns & Loss',    icon: 'refresh', supplierOnly: true },
 ];
 
@@ -61,7 +58,6 @@ export default function SalesReport({ user }) {
         {section === 'datewise'    && <DatewiseDashboard filters={filters} />}
         {section === 'categories'  && <CategoryAnalytics filters={filters} />}
         {section === 'inventory'   && <InventoryInsights />}
-        {section === 'customers'   && isSupplier && <CustomerInsights filters={filters} />}
         {section === 'returns'     && isSupplier && <ReturnsAnalysis   filters={filters} />}
       </div>
     </div>

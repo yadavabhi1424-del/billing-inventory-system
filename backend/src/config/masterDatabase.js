@@ -103,6 +103,18 @@ export async function seedMasterData() {
     );
   } catch (e) { console.warn('Migration warning (RETURN_REQUESTED enum):', e.message); }
 
+  // Migration: add closedAt column to b2b_orders
+  try {
+    const [cols] = await masterPool.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'b2b_orders' AND COLUMN_NAME = 'closedAt'`
+    );
+    if (cols.length === 0) {
+      await masterPool.execute(`ALTER TABLE b2b_orders ADD COLUMN closedAt DATETIME DEFAULT NULL`);
+      console.log('✅ Migration: Added closedAt column to b2b_orders');
+    }
+  } catch (e) { console.warn('Migration warning (closedAt):', e.message); }
+
   await masterPool.execute(`
     CREATE TABLE IF NOT EXISTS b2b_order_items (
       id            VARCHAR(36)  PRIMARY KEY,

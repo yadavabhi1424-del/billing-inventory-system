@@ -90,7 +90,7 @@ export default function CategoryAnalytics({ filters }) {
     name:        c.categoryName,
     value:       parseFloat(c.totalRevenue || 0),
     totalQty:    parseInt(c.totalQty || 0),
-    fill:        c.categoryColor || PALETTE[i % PALETTE.length],
+    fill:        PALETTE[i % PALETTE.length],
   }));
 
   if (othersVal > 0) {

@@ -329,7 +329,12 @@ export async function getTransactionByInvoice(invoiceNumber) {
 }
 
 export async function returnTransaction(id, data) {
+  // data: { returnItems: [{product_id, returnQty}], returnReason, refundMethod }
   return await api.post(`/billing/${id}/return`, data);
+}
+
+export async function getReturnsByInvoice(transactionId) {
+  return await api.get(`/billing/${transactionId}/returns`);
 }
 
 export async function getTodaySummary() {
@@ -402,6 +407,10 @@ export async function getInventoryReport() {
 
 export async function getCustomerReport(params = {}) {
   return await api.get('/reports/customers', { params });
+}
+
+export async function getCustomerDrilldown(customerId) {
+  return await api.get(`/reports/customers/${customerId}`);
 }
 
 export async function getSupplierReport(params = {}) {

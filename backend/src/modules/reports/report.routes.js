@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   getSalesReport, getDetailedSalesReport, getCategoryAnalytics, getReturnsAnalysis,
-  getInventoryReport, getCustomerReport, getSupplierReport,
+  getInventoryReport, getCustomerReport, getCustomerDrilldown, getSupplierReport,
   getProfitLoss, getSupplierOrderHistory
 } from "./report.controller.js";
 import { protect, adminOrOwner } from "../../middleware/auth.js";
@@ -14,6 +14,7 @@ router.use(protect, adminOrOwner);
 router.get("/sales",                          getSalesReport);
 router.get("/inventory",                      getInventoryReport);
 router.get("/customers",                      getCustomerReport);
+router.get("/customers/:customerId",          getCustomerDrilldown);
 router.get("/suppliers",                      getSupplierReport);
 router.get("/supplier-orders/:supplierId",    getSupplierOrderHistory);
 router.get("/profit-loss",                    getProfitLoss);

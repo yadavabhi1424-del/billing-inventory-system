@@ -805,7 +805,9 @@
   width: 100%;
   max-width: 680px;
   max-height: 90vh;
-  overflow-y: auto;
+  overflow: hidden;          /* modal itself doesn't scroll */
+  display: flex;
+  flex-direction: column;    /* header | scrollable content | return bar */
   color: #1e293b;
 }
 
@@ -853,6 +855,8 @@
   padding: var(--space-8);
   font-family: var(--font-body);
   color: #1e293b;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .invoice__header {
@@ -1073,8 +1077,9 @@
     overflow: visible !important;
   }
 
-  /* Hide action buttons */
-  .invoice-modal__actions {
+  /* Hide action buttons and return bar */
+  .invoice-modal__actions,
+  .invoice-modal__return-bar {
     display: none !important;
   }
 

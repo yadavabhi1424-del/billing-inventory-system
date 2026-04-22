@@ -171,6 +171,7 @@ const verifyEmail = async (req, res, next) => {
 
     let dbName;
     let tenantId = uuidv4();
+    let slug;
 
     if (userType === 'supplier') {
       const [existingSupplier] = await masterPool.execute(
@@ -179,8 +180,9 @@ const verifyEmail = async (req, res, next) => {
       if (existingSupplier.length > 0) {
         tenantId = existingSupplier[0].supplier_id;
         dbName   = existingSupplier[0].db_name;
+        slug     = buildSlug(displayName, tenantId);
       } else {
-        const slug = buildSlug(displayName, tenantId);
+        slug   = buildSlug(displayName, tenantId);
         dbName = `${process.env.SUPPLIER_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
         await masterPool.execute(
           `INSERT INTO suppliers (supplier_id, business_name, slug, owner_name, owner_email, owner_phone, db_name, status)
@@ -196,8 +198,9 @@ const verifyEmail = async (req, res, next) => {
       if (existingTenant.length > 0) {
         tenantId = existingTenant[0].tenant_id;
         dbName   = existingTenant[0].db_name;
+        slug     = buildSlug(displayName, tenantId);
       } else {
-        const slug = buildSlug(displayName, tenantId);
+        slug   = buildSlug(displayName, tenantId);
         dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
         await masterPool.execute(
           `INSERT INTO tenants (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)

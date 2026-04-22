@@ -346,83 +346,321 @@ const getCustomerReport = async (req, res, next) => {
   try {
     const isSupplier = req.user.userType === 'supplier';
     const dbName = req.dbName;
-    const { limit = 5, sortBy = 'spent' } = req.query;
-    const limitNum = Math.max(1, Math.min(200, parseInt(limit) || 5));
-
+    const { limit = 10, sortBy = 'spent' } = req.query;
+    const limitNum = Math.max(1, Math.min(200, parseInt(limit) || 10));
     const tenantIds = await getTenantIds(dbName);
 
-    let summary = { totalCustomers: 0, newCustomers: 0 };
-    let topCustomers = [];
-
+    // ─────────────────────────────────────────────────────────
+    // SHOP / B2B SUPPLIER path
+    // ─────────────────────────────────────────────────────────
     if (isSupplier && tenantIds.length > 0) {
-      const b2bP = [];
-      const b2bCond = getCondition('createdAt', req, b2bP);
       const idPlaceholders = tenantIds.map(() => '?').join(',');
 
-      // Summary
-      const [[realB2bSum]] = await masterPool.execute(
-        `SELECT COUNT(DISTINCT shop_id) as totalB2BShops,
-                COUNT(DISTINCT CASE WHEN ${b2bCond} THEN shop_id END) as newB2BShops
-         FROM b2b_orders WHERE supplier_id IN (${idPlaceholders})`,
-        [...b2bP, ...tenantIds]
+      // 1) Overview
+      const [[totalRow]] = await masterPool.execute(
+        `SELECT COUNT(DISTINCT shop_id) as totalCustomers FROM b2b_orders WHERE supplier_id IN (${idPlaceholders})`,
+        tenantIds
       );
-
-      const localSumP = [];
-      const localCond = getCondition('createdAt', req, localSumP);
-      const [[localSum]] = await req.db.execute(
-        `SELECT COUNT(*) as totalLocal, SUM(CASE WHEN ${localCond} THEN 1 ELSE 0 END) as newLocal
-         FROM customers WHERE isActive = TRUE AND shop_tenant_id IS NULL`, localSumP
+      const [[newTodayRow]] = await masterPool.execute(
+        `SELECT COUNT(DISTINCT shop_id) as cnt FROM b2b_orders
+         WHERE supplier_id IN (${idPlaceholders}) AND DATE(createdAt) = CURDATE()`, tenantIds
       );
+      const [[newMonthRow]] = await masterPool.execute(
+        `SELECT COUNT(DISTINCT shop_id) as cnt FROM b2b_orders
+         WHERE supplier_id IN (${idPlaceholders})
+         AND MONTH(createdAt)=MONTH(NOW()) AND YEAR(createdAt)=YEAR(NOW())`, tenantIds
+      );
+      const [[newYearRow]] = await masterPool.execute(
+        `SELECT COUNT(DISTINCT shop_id) as cnt FROM b2b_orders
+         WHERE supplier_id IN (${idPlaceholders}) AND YEAR(createdAt)=YEAR(NOW())`, tenantIds
+      );
+      const [[repeatRow]] = await masterPool.execute(
+        `SELECT COUNT(*) as cnt FROM (
+           SELECT shop_id FROM b2b_orders WHERE supplier_id IN (${idPlaceholders})
+           AND status IN ('PENDING','ACCEPTED','BILLED','CLOSED')
+           GROUP BY shop_id HAVING COUNT(order_id) > 1
+         ) x`, tenantIds
+      );
+      const totalCust = totalRow.totalCustomers || 0;
+      const repeatCust = repeatRow.cnt || 0;
 
-      summary = {
-        totalCustomers: (realB2bSum.totalB2BShops || 0) + (localSum.totalLocal || 0),
-        newCustomers:   (realB2bSum.newB2BShops   || 0) + (localSum.newLocal   || 0)
+      const overview = {
+        totalCustomers: totalCust,
+        newToday:       newTodayRow.cnt  || 0,
+        newThisMonth:   newMonthRow.cnt  || 0,
+        newThisYear:    newYearRow.cnt   || 0,
+        activeCustomers:   totalCust,
+        inactiveCustomers: 0,
+        repeatCustomers:   repeatCust,
+        oneTimeCustomers:  totalCust - repeatCust,
       };
 
-      // Top Customers
-      const b2bListP = [];
-      const b2bListCond = getCondition('o.createdAt', req, b2bListP);
-      const [b2bShops] = await masterPool.execute(
-        `SELECT o.shop_id as customer_id, p.business_name as name, p.business_phone as phone, 
-                COALESCE(SUM(o.total_amount), 0) as totalSpent, COUNT(o.order_id) as totalOrders,
+      // 2) Top Customers
+      const [topCustomers] = await masterPool.execute(
+        `SELECT o.shop_id as customer_id,
+                COALESCE(p.business_name, t.shop_name, s.business_name, o.shop_id) as name,
+                COALESCE(p.phone, t.owner_phone, s.owner_phone) as phone,
+                COALESCE(SUM(o.total_amount), 0) as totalSpent,
+                COUNT(o.order_id) as totalOrders,
+                MAX(o.createdAt) as lastPurchaseDate,
                 o.shop_id as shopId
          FROM b2b_orders o
-         JOIN profiles p ON p.entity_id = o.shop_id
-         WHERE ${b2bListCond} AND o.supplier_id IN (${idPlaceholders}) 
-         AND o.status IN ('ORDERED', 'ACCEPTED', 'BILLED', 'CLOSED')
-         GROUP BY o.shop_id, p.business_name, p.business_phone`,
-        [...b2bListP, ...tenantIds]
+         LEFT JOIN profiles p ON p.entity_id = o.shop_id
+         LEFT JOIN tenants t  ON t.db_name = o.shop_id
+         LEFT JOIN suppliers s ON s.supplier_id = o.shop_id
+         WHERE o.supplier_id IN (${idPlaceholders})
+           AND o.status IN ('PENDING','ACCEPTED','BILLED','CLOSED')
+         GROUP BY o.shop_id, p.business_name, t.shop_name, s.business_name, p.phone, t.owner_phone, s.owner_phone
+         ORDER BY ${sortBy === 'orders' ? 'totalOrders' : 'totalSpent'} DESC
+         LIMIT ${limitNum}`,
+        tenantIds
       );
 
-      const [localRetail] = await req.db.execute(
-        `SELECT customer_id, name, phone, totalSpent,
-                (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
-         FROM customers c
-         WHERE isActive = TRUE AND shop_tenant_id IS NULL AND totalSpent > 0`
+      // 3) Inactive customers (by last order date)
+      const [inactiveRaw] = await masterPool.execute(
+        `SELECT o.shop_id as customer_id,
+                COALESCE(p.business_name, t.shop_name, s.business_name, o.shop_id) as name,
+                COALESCE(p.phone, t.owner_phone, s.owner_phone) as phone,
+                MAX(o.createdAt) as lastPurchaseDate,
+                COUNT(o.order_id) as totalOrders,
+                COALESCE(SUM(o.total_amount), 0) as totalSpent,
+                DATEDIFF(NOW(), MAX(o.createdAt)) as daysSinceOrder
+         FROM b2b_orders o
+         LEFT JOIN profiles p ON p.entity_id = o.shop_id
+         LEFT JOIN tenants t  ON t.db_name = o.shop_id
+         LEFT JOIN suppliers s ON s.supplier_id = o.shop_id
+         WHERE o.supplier_id IN (${idPlaceholders})
+           AND o.status IN ('PENDING','ACCEPTED','BILLED','CLOSED')
+         GROUP BY o.shop_id, p.business_name, t.shop_name, s.business_name, p.phone, t.owner_phone, s.owner_phone
+         HAVING daysSinceOrder >= 30
+         ORDER BY daysSinceOrder DESC`,
+        tenantIds
+      );
+      const inactive30 = inactiveRaw.filter(r => r.daysSinceOrder >= 30 && r.daysSinceOrder < 60);
+      const inactive60 = inactiveRaw.filter(r => r.daysSinceOrder >= 60 && r.daysSinceOrder < 90);
+      const inactive90 = inactiveRaw.filter(r => r.daysSinceOrder >= 90);
+
+      // 4) CLV Segments — bucket by total spend
+      const [clvRaw] = await masterPool.execute(
+        `SELECT o.shop_id as customer_id,
+                COALESCE(p.business_name, t.shop_name, s.business_name, o.shop_id) as name,
+                COALESCE(SUM(o.total_amount), 0) as totalSpent,
+                COUNT(o.order_id) as totalOrders
+         FROM b2b_orders o
+         LEFT JOIN profiles p ON p.entity_id = o.shop_id
+         LEFT JOIN tenants t  ON t.db_name = o.shop_id
+         LEFT JOIN suppliers s ON s.supplier_id = o.shop_id
+         WHERE o.supplier_id IN (${idPlaceholders})
+           AND o.status IN ('PENDING','ACCEPTED','BILLED','CLOSED')
+         GROUP BY o.shop_id, p.business_name, t.shop_name, s.business_name`,
+        tenantIds
+      );
+      const spends = clvRaw.map(r => parseFloat(r.totalSpent));
+      const p33 = spends.sort((a,b)=>a-b)[Math.floor(spends.length*0.33)] || 0;
+      const p66 = spends[Math.floor(spends.length*0.66)] || 0;
+      const clvSegments = {
+        high:   clvRaw.filter(r => parseFloat(r.totalSpent) > p66).sort((a,b)=>b.totalSpent-a.totalSpent),
+        medium: clvRaw.filter(r => parseFloat(r.totalSpent) > p33 && parseFloat(r.totalSpent) <= p66).sort((a,b)=>b.totalSpent-a.totalSpent),
+        low:    clvRaw.filter(r => parseFloat(r.totalSpent) <= p33).sort((a,b)=>b.totalSpent-a.totalSpent),
+      };
+
+      // 5) Monthly activity trend (new shops per month, last 12 months)
+      const [monthlyActivity] = await masterPool.execute(
+        `SELECT DATE_FORMAT(MIN(createdAt), '%Y-%m') as month,
+                COUNT(DISTINCT shop_id) as newCustomers,
+                COUNT(order_id) as orders,
+                COALESCE(SUM(total_amount), 0) as revenue
+         FROM b2b_orders
+         WHERE supplier_id IN (${idPlaceholders})
+           AND createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+         GROUP BY DATE_FORMAT(createdAt, '%Y-%m')
+         ORDER BY month ASC`,
+        tenantIds
       );
 
-      topCustomers = [...b2bShops, ...localRetail]
-        .sort((a,b) => sortBy === 'orders' ? b.totalOrders - a.totalOrders : b.totalSpent - a.totalSpent)
-        .slice(0, limitNum);
+      // 6) Behavior stats
+      const [[behaviorRow]] = await masterPool.execute(
+        `SELECT AVG(perShop.orderCount) as avgFrequency,
+                AVG(perShop.avgOrder) as avgOrderValue
+         FROM (
+           SELECT shop_id, COUNT(*) as orderCount, AVG(total_amount) as avgOrder
+           FROM b2b_orders
+           WHERE supplier_id IN (${idPlaceholders})
+             AND status IN ('PENDING','ACCEPTED','BILLED','CLOSED')
+           GROUP BY shop_id
+         ) perShop`,
+        tenantIds
+      );
 
-    } else {
-      const localSumP = [];
-      const localCond = getCondition('createdAt', req, localSumP);
-      const [[localSum]] = await req.db.execute(
-        `SELECT COUNT(*) as totalCustomers, SUM(CASE WHEN ${localCond} THEN 1 ELSE 0 END) as newCustomers
-         FROM customers WHERE isActive = TRUE`, localSumP
-      );
-      summary = localSum;
-      const [localDist] = await req.db.execute(
-        `SELECT customer_id, name, phone, totalSpent,
-                (SELECT COUNT(*) FROM transactions WHERE customer_id = c.customer_id) as totalOrders
-         FROM customers c WHERE isActive = TRUE AND totalSpent > 0
-         ORDER BY ${sortBy === 'orders' ? 'totalOrders' : 'totalSpent'} DESC LIMIT ${limitNum}`
-      );
-      topCustomers = localDist;
+      return res.json({ success: true, data: {
+        isSupplier: true, overview, topCustomers,
+        inactiveCustomers: { buckets: { '30': inactive30, '60': inactive60, '90': inactive90 } },
+        clvSegments, monthlyActivity,
+        behavior: { avgFrequency: behaviorRow?.avgFrequency || 0, avgOrderValue: behaviorRow?.avgOrderValue || 0 },
+      }});
     }
 
-    res.json({ success: true, data: { summary, topCustomers } });
+    // ─────────────────────────────────────────────────────────
+    // RETAIL SHOP path
+    // ─────────────────────────────────────────────────────────
+    const [[totalRow]]   = await req.db.execute(`SELECT COUNT(*) as t, SUM(CASE WHEN isActive THEN 1 ELSE 0 END) as active, SUM(CASE WHEN NOT isActive THEN 1 ELSE 0 END) as inactive FROM customers`);
+    const [[newTodayRow]] = await req.db.execute(`SELECT COUNT(*) as cnt FROM customers WHERE DATE(createdAt)=CURDATE()`);
+    const [[newMonthRow]] = await req.db.execute(`SELECT COUNT(*) as cnt FROM customers WHERE MONTH(createdAt)=MONTH(NOW()) AND YEAR(createdAt)=YEAR(NOW())`);
+    const [[newYearRow]]  = await req.db.execute(`SELECT COUNT(*) as cnt FROM customers WHERE YEAR(createdAt)=YEAR(NOW())`);
+    const [[repeatRow]]   = await req.db.execute(`SELECT COUNT(*) as cnt FROM customers c WHERE (SELECT COUNT(*) FROM transactions WHERE customer_id=c.customer_id AND status='COMPLETED') > 1`);
+
+    const totalCust  = totalRow.t || 0;
+    const repeatCust = repeatRow.cnt || 0;
+    const overview = {
+      totalCustomers:    totalCust,
+      newToday:          newTodayRow.cnt || 0,
+      newThisMonth:      newMonthRow.cnt || 0,
+      newThisYear:       newYearRow.cnt  || 0,
+      activeCustomers:   totalRow.active   || 0,
+      inactiveCustomers: totalRow.inactive || 0,
+      repeatCustomers:   repeatCust,
+      oneTimeCustomers:  totalCust - repeatCust,
+    };
+
+    const [topCustomers] = await req.db.execute(
+      `SELECT c.customer_id, c.name, c.phone, c.totalSpent, c.loyaltyPoints, c.notes,
+              COUNT(t.transaction_id) as totalOrders,
+              MAX(t.createdAt) as lastPurchaseDate,
+              AVG(t.totalAmount) as avgOrderValue
+       FROM customers c
+       LEFT JOIN transactions t ON t.customer_id = c.customer_id AND t.status = 'COMPLETED'
+       WHERE c.isActive = TRUE AND c.totalSpent > 0
+       GROUP BY c.customer_id, c.name, c.phone, c.totalSpent, c.loyaltyPoints, c.notes
+       ORDER BY ${sortBy === 'orders' ? 'totalOrders' : 'c.totalSpent'} DESC
+       LIMIT ${limitNum}`
+    );
+
+    const [inactiveRaw] = await req.db.execute(
+      `SELECT c.customer_id, c.name, c.phone, c.totalSpent,
+              MAX(t.createdAt) as lastPurchaseDate,
+              COUNT(t.transaction_id) as totalOrders,
+              DATEDIFF(NOW(), MAX(t.createdAt)) as daysSince
+       FROM customers c
+       LEFT JOIN transactions t ON t.customer_id = c.customer_id AND t.status='COMPLETED'
+       WHERE c.isActive=TRUE
+       GROUP BY c.customer_id, c.name, c.phone, c.totalSpent
+       HAVING daysSince >= 30 OR lastPurchaseDate IS NULL
+       ORDER BY daysSince DESC`
+    );
+    const inactive30 = inactiveRaw.filter(r => r.daysSince >= 30 && r.daysSince < 60);
+    const inactive60 = inactiveRaw.filter(r => r.daysSince >= 60 && r.daysSince < 90);
+    const inactive90 = inactiveRaw.filter(r => r.daysSince >= 90 || r.lastPurchaseDate === null);
+
+    const [clvRaw] = await req.db.execute(
+      `SELECT c.customer_id, c.name, c.totalSpent, COUNT(t.transaction_id) as totalOrders
+       FROM customers c
+       LEFT JOIN transactions t ON t.customer_id=c.customer_id AND t.status='COMPLETED'
+       WHERE c.isActive=TRUE
+       GROUP BY c.customer_id, c.name, c.totalSpent`
+    );
+    const spends = clvRaw.map(r => parseFloat(r.totalSpent || 0));
+    const p33 = spends.sort((a,b)=>a-b)[Math.floor(spends.length*0.33)] || 0;
+    const p66 = spends[Math.floor(spends.length*0.66)] || 0;
+    const clvSegments = {
+      high:   clvRaw.filter(r => parseFloat(r.totalSpent) > p66).sort((a,b)=>b.totalSpent-a.totalSpent),
+      medium: clvRaw.filter(r => parseFloat(r.totalSpent) > p33 && parseFloat(r.totalSpent) <= p66),
+      low:    clvRaw.filter(r => parseFloat(r.totalSpent) <= p33),
+    };
+
+    const [monthlyActivity] = await req.db.execute(
+      `SELECT DATE_FORMAT(createdAt,'%Y-%m') as month,
+              COUNT(*) as newCustomers
+       FROM customers
+       WHERE createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+       GROUP BY month ORDER BY month ASC`
+    );
+    const [monthlyOrders] = await req.db.execute(
+      `SELECT DATE_FORMAT(createdAt,'%Y-%m') as month,
+              COUNT(*) as orders, COALESCE(SUM(totalAmount),0) as revenue
+       FROM transactions WHERE status='COMPLETED'
+         AND createdAt >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
+       GROUP BY month ORDER BY month ASC`
+    );
+    const activityMerged = monthlyActivity.map(m => {
+      const ord = monthlyOrders.find(o => o.month === m.month) || {};
+      return { month: m.month, newCustomers: m.newCustomers, orders: ord.orders||0, revenue: ord.revenue||0 };
+    });
+
+    const [[behaviorRow]] = await req.db.execute(
+      `SELECT AVG(orderCount) as avgFrequency, AVG(avgAmt) as avgOrderValue FROM (
+         SELECT customer_id, COUNT(*) as orderCount, AVG(totalAmount) as avgAmt
+         FROM transactions WHERE status='COMPLETED' GROUP BY customer_id
+       ) x`
+    );
+
+    res.json({ success: true, data: {
+      isSupplier: false, overview, topCustomers,
+      inactiveCustomers: { buckets: { '30': inactive30, '60': inactive60, '90': inactive90 } },
+      clvSegments, monthlyActivity: activityMerged,
+      behavior: { avgFrequency: behaviorRow?.avgFrequency || 0, avgOrderValue: behaviorRow?.avgOrderValue || 0 },
+    }});
+  } catch (error) { next(error); }
+};
+
+// ── Customer Drilldown ────────────────────────────────────────────────────────
+const getCustomerDrilldown = async (req, res, next) => {
+  try {
+    const { customerId } = req.params;
+    const isSupplier = req.user.userType === 'supplier';
+    const dbName = req.dbName;
+
+    if (isSupplier) {
+      const tenantIds = await getTenantIds(dbName);
+      const idPlaceholders = tenantIds.map(() => '?').join(',');
+      const [[custRow]] = await masterPool.execute(
+        `SELECT o.shop_id as customer_id,
+                COALESCE(p.business_name, t.shop_name, o.shop_id) as name,
+                COALESCE(p.phone, t.owner_phone) as phone,
+                COALESCE(p.address) as address,
+                COALESCE(p.email, t.owner_email) as email,
+                COUNT(o.order_id) as totalOrders,
+                COALESCE(SUM(o.total_amount),0) as totalSpent,
+                MAX(o.createdAt) as lastPurchaseDate,
+                MIN(o.createdAt) as firstPurchaseDate
+         FROM b2b_orders o
+         LEFT JOIN profiles p ON p.entity_id = o.shop_id
+         LEFT JOIN tenants t  ON t.db_name = o.shop_id
+         WHERE o.shop_id = ? AND o.supplier_id IN (${idPlaceholders})
+         GROUP BY o.shop_id, p.business_name, t.shop_name, p.phone, t.owner_phone, p.address, p.email, t.owner_email`,
+        [customerId, ...tenantIds]
+      );
+      const [orders] = await masterPool.execute(
+        `SELECT o.order_id, o.order_number, o.status, o.total_amount, o.createdAt,
+                JSON_ARRAYAGG(JSON_OBJECT('name', oi.name, 'qty', oi.qty, 'price', oi.price)) as items
+         FROM b2b_orders o
+         JOIN b2b_order_items oi ON oi.order_id = o.order_id
+         WHERE o.shop_id = ? AND o.supplier_id IN (${idPlaceholders})
+         GROUP BY o.order_id ORDER BY o.createdAt DESC LIMIT 50`,
+        [customerId, ...tenantIds]
+      );
+      return res.json({ success: true, data: { customer: custRow, orders } });
+    }
+
+    const [[customer]] = await req.db.execute(
+      `SELECT c.customer_id, c.name, c.phone, c.email, c.address, c.city, c.gstin, c.notes,
+              c.loyaltyPoints, c.totalSpent, c.createdAt as firstPurchaseDate,
+              COUNT(t.transaction_id) as totalOrders,
+              MAX(t.createdAt) as lastPurchaseDate,
+              AVG(t.totalAmount) as avgOrderValue
+       FROM customers c
+       LEFT JOIN transactions t ON t.customer_id=c.customer_id AND t.status='COMPLETED'
+       WHERE c.customer_id=?
+       GROUP BY c.customer_id`, [customerId]
+    );
+    const [transactions] = await req.db.execute(
+      `SELECT t.transaction_id, t.invoiceNumber, t.totalAmount, t.paymentMethod, t.paymentStatus, t.status, t.createdAt,
+              JSON_ARRAYAGG(JSON_OBJECT('name', ti.productName, 'qty', ti.quantity, 'price', ti.sellingPrice)) as items
+       FROM transactions t
+       JOIN transaction_items ti ON ti.transaction_id=t.transaction_id
+       WHERE t.customer_id=?
+       GROUP BY t.transaction_id ORDER BY t.createdAt DESC LIMIT 50`, [customerId]
+    );
+    res.json({ success: true, data: { customer, orders: transactions } });
   } catch (error) { next(error); }
 };
 
@@ -483,13 +721,52 @@ const getInventoryReport = async (req, res, next) => {
               SUM(CASE WHEN stock = 0 THEN 1 ELSE 0 END) as outOfStockCount
        FROM products WHERE isActive = TRUE`
     );
+
     const [categoryWise] = await req.db.execute(
       `SELECT c.name as categoryName, c.color as categoryColor, COUNT(p.product_id) as productCount,
               SUM(p.stock) as totalStock, SUM(p.stock * p.costPrice) as stockValue
        FROM categories c LEFT JOIN products p ON p.category_id = c.category_id AND p.isActive = TRUE
        WHERE c.isActive = TRUE GROUP BY c.name, c.color ORDER BY stockValue DESC`
     );
-    res.json({ success: true, data: { totals, categoryWise } });
+
+    const [lowStockItems] = await req.db.execute(
+      `SELECT p.name, p.sku, p.stock, p.minStockLevel, p.costPrice, s.name as supplierName
+       FROM products p
+       LEFT JOIN suppliers s ON s.supplier_id = p.supplier_id
+       WHERE p.isActive = TRUE AND p.stock <= p.minStockLevel AND p.stock > 0
+       ORDER BY p.stock ASC LIMIT 50`
+    );
+
+    const [outOfStockItems] = await req.db.execute(
+      `SELECT p.name, p.sku, p.stock, p.minStockLevel, p.costPrice, s.name as supplierName
+       FROM products p
+       LEFT JOIN suppliers s ON s.supplier_id = p.supplier_id
+       WHERE p.isActive = TRUE AND p.stock = 0
+       ORDER BY p.name ASC LIMIT 50`
+    );
+
+    const [expiredItems] = await req.db.execute(
+      `SELECT p.name, p.sku, p.expiryDate, p.costPrice, s.name as supplierName,
+              DATEDIFF(NOW(), p.expiryDate) as daysExpired
+       FROM products p
+       LEFT JOIN suppliers s ON s.supplier_id = p.supplier_id
+       WHERE p.isActive = TRUE AND p.expiryDate IS NOT NULL AND p.expiryDate < NOW()
+       ORDER BY p.expiryDate ASC LIMIT 50`
+    );
+
+    const [fastMoving] = await req.db.execute(
+      `SELECT p.name, p.sku, p.stock, p.costPrice, 
+              SUM(ti.quantity) as soldQty, 
+              SUM(ti.totalAmount) as revenue
+       FROM transaction_items ti
+       JOIN transactions t ON t.transaction_id = ti.transaction_id
+       JOIN products p ON p.product_id = ti.product_id
+       WHERE t.status = 'COMPLETED' AND t.createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+       GROUP BY p.product_id, p.name, p.sku, p.stock, p.costPrice
+       ORDER BY soldQty DESC LIMIT 50`
+    );
+
+    res.json({ success: true, data: { totals, categoryWise, lowStockItems, outOfStockItems, expiredItems, fastMoving } });
   } catch (error) { next(error); }
 };
 
@@ -542,5 +819,5 @@ const getSupplierOrderHistory = async (req, res, next) => {
 
 export {
   getSalesReport, getDetailedSalesReport, getCategoryAnalytics, getReturnsAnalysis,
-  getCustomerReport, getSupplierReport, getInventoryReport, getProfitLoss, getSupplierOrderHistory,
+  getCustomerReport, getCustomerDrilldown, getSupplierReport, getInventoryReport, getProfitLoss, getSupplierOrderHistory,
 };

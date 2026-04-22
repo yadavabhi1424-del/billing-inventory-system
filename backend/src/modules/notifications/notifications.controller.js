@@ -58,80 +58,100 @@ export const getNotifications = async (req, res, next) => {
       });
     }
 
-    // ── 3. B2B Orders received (supplier POV) OR placed (shop POV) ──────────
+    // ── 3. B2B Orders notifications ──
     try {
-      // Resolve my supplier_id from master pool
+      // Resolve the correct identity for both user types:
+      // - Suppliers are in the `suppliers` table → use supplier_id
+      // - Shops/tenants may NOT be in `suppliers` → fall back to db_name (which is used as shop_id in b2b_orders)
       const [selfRows] = await masterPool.execute(
         'SELECT supplier_id FROM suppliers WHERE db_name = ?', [req.dbName]
       );
+      const myId = selfRows.length > 0 ? selfRows[0].supplier_id : req.dbName;
 
-      if (selfRows.length > 0) {
-        const myId = selfRows[0].supplier_id;
+      if (userType === 'supplier' && selfRows.length > 0) {
+        // Supplier: all incoming orders
+        const [b2bRows] = await masterPool.execute(`
+          SELECT o.order_id, o.createdAt, o.closedAt, o.updatedAt, o.total_amount, o.status,
+                 p.business_name as shop_name
+          FROM   b2b_orders o
+          LEFT JOIN profiles p ON p.entity_id = o.shop_id
+          WHERE  o.supplier_id = ?
+          ORDER  BY o.createdAt DESC
+        `, [myId]);
 
-        if (userType === 'supplier') {
-          // Supplier: orders received from shops
-          const [b2bRows] = await masterPool.execute(`
-            SELECT o.order_id, o.createdAt, o.total_amount, o.status,
-                   p.business_name as shop_name
-            FROM   b2b_orders o
-            LEFT JOIN profiles p ON p.entity_id = o.shop_id
-            WHERE  o.supplier_id = ?
-            ORDER  BY o.createdAt DESC
-          `, [myId]);
+        for (const o of b2bRows) {
+          // Always push the original "Order Received" notification (at order creation time)
+          notifications.push({
+            id:      `b2b-recv-${o.order_id}`,
+            type:    'b2b_received',
+            title:   'B2B Order Received',
+            message: `New order from ${o.shop_name || 'a shop'} — ₹${Number(o.total_amount).toLocaleString('en-IN')} (${o.status})`,
+            time:    o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString(),
+            icon:    '📦',
+            link:    `/billing?tab=orders&orderId=${o.order_id}`,
+            meta:    { orderId: o.order_id, amount: o.total_amount, status: o.status },
+          });
 
-          for (const o of b2bRows) {
+          // Additionally push "Order Delivered" when shop has marked it received (CLOSED)
+          if (o.status === 'CLOSED') {
+            const deliveryTime = o.closedAt || o.updatedAt || o.createdAt;
             notifications.push({
-              id:      `b2b-recv-${o.order_id}`,
-              type:    'b2b_received',
-              title:   'B2B Order Received',
-              message: `New order from ${o.shop_name || 'a shop'} — ₹${Number(o.total_amount).toLocaleString('en-IN')} (${o.status})`,
-              time:    o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString(),
-              icon:    '📦',
+              id:      `b2b-delivered-${o.order_id}`,
+              type:    'b2b_delivered',
+              title:   'Order Delivered',
+              message: `Order from ${o.shop_name || 'a shop'} has been marked as delivered — ₹${Number(o.total_amount).toLocaleString('en-IN')}`,
+              time:    new Date(deliveryTime).toISOString(),
+              icon:    '✅',
               link:    `/billing?tab=orders&orderId=${o.order_id}`,
               meta:    { orderId: o.order_id, amount: o.total_amount, status: o.status },
             });
           }
 
-          // Supplier: completed / status-changed orders
-          const [b2bUpdated] = await masterPool.execute(`
-            SELECT o.order_id, o.createdAt, o.status, p.business_name as shop_name
-            FROM   b2b_orders o
-            LEFT JOIN profiles p ON p.entity_id = o.shop_id
-            WHERE  o.supplier_id = ? AND o.status IN ('CLOSED','RETURN_REQUESTED')
-            ORDER  BY o.createdAt DESC
-          `, [myId]);
-
-          for (const o of b2bUpdated) {
-            if (o.status === 'RETURN_REQUESTED') {
-              notifications.push({
-                id:      `b2b-return-${o.order_id}`,
-                type:    'b2b_return',
-                title:   'Return Requested',
-                message: `${o.shop_name || 'A shop'} requested a return on their order.`,
-                time:    o.createdAt ? new Date(o.createdAt).toISOString() : null,
-                icon:    '↩️',
-                link:    `/billing?tab=orders&orderId=${o.order_id}`,
-                meta:    { orderId: o.order_id },
-              });
-            }
+          if (o.status === 'RETURN_REQUESTED') {
+            notifications.push({
+              id:      `b2b-return-${o.order_id}`,
+              type:    'b2b_return',
+              title:   'Return Requested',
+              message: `${o.shop_name || 'A shop'} requested a return on their order.`,
+              time:    o.createdAt ? new Date(o.createdAt).toISOString() : null,
+              icon:    '↩️',
+              link:    `/billing?tab=orders&orderId=${o.order_id}`,
+              meta:    { orderId: o.order_id },
+            });
           }
-        } else {
-          // Shop: orders they've placed
-          const [b2bRows] = await masterPool.execute(`
-            SELECT o.order_id, o.createdAt, o.total_amount, o.status,
-                   p.business_name as supplier_name
-            FROM   b2b_orders o
-            LEFT JOIN profiles p ON p.entity_id = o.supplier_id
-            WHERE  o.shop_id = ?
-            ORDER  BY o.createdAt DESC
-          `, [myId]);
+        }
 
-          for (const o of b2bRows) {
+      } else {
+        // Shop/tenant: orders they've placed
+        // shop_id in b2b_orders is either their supplier_id (if in suppliers table) OR their db_name
+        const [b2bRows] = await masterPool.execute(`
+          SELECT o.order_id, o.createdAt, o.closedAt, o.updatedAt, o.total_amount, o.status,
+                 p.business_name as supplier_name
+          FROM   b2b_orders o
+          LEFT JOIN profiles p ON p.entity_id = o.supplier_id
+          WHERE  o.shop_id = ?
+          ORDER  BY o.createdAt DESC
+        `, [myId]);
+
+        for (const o of b2bRows) {
+          // ✅ ORDER RECEIVED notification — when shop marks it as received
+          if (o.status === 'CLOSED') {
+            const receivedTime = o.closedAt || o.updatedAt || o.createdAt;
+            notifications.push({
+              id:      `b2b-received-${o.order_id}`,
+              type:    'b2b_order_received',
+              title:   'Order Received',
+              message: `Your order from ${o.supplier_name || 'supplier'} has been received — ₹${Number(o.total_amount).toLocaleString('en-IN')}`,
+              time:    new Date(receivedTime).toISOString(),
+              icon:    '✅',
+              link:    `/manufacturers?tab=orders&orderId=${o.order_id}`,
+              meta:    { orderId: o.order_id, amount: o.total_amount, status: o.status },
+            });
+          } else {
             const statusLabel = {
-              PENDING: 'Pending approval',
+              PENDING:  'Pending approval',
               ACCEPTED: 'Accepted by supplier',
-              BILLED: 'Invoice raised',
-              CLOSED: 'Delivered & closed',
+              BILLED:   'Invoice raised — mark as received when delivered',
               REJECTED: 'Rejected by supplier',
             }[o.status] || o.status;
 
@@ -141,7 +161,7 @@ export const getNotifications = async (req, res, next) => {
               title:   'Purchase Order Update',
               message: `Order to ${o.supplier_name || 'supplier'} — ${statusLabel}`,
               time:    o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString(),
-              icon:    o.status === 'CLOSED' ? '✅' : o.status === 'REJECTED' ? '❌' : '🔄',
+              icon:    o.status === 'REJECTED' ? '❌' : '🔄',
               link:    `/manufacturers?tab=orders&orderId=${o.order_id}`,
               meta:    { orderId: o.order_id, amount: o.total_amount, status: o.status },
             });

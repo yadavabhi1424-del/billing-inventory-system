@@ -140,13 +140,22 @@ function NotificationPanel({ notifications, onClose, onMarkAllRead, onClearAll, 
   };
 
   const iconFor = (type) => {
-    if (type === 'out_of_stock') return { emoji: '🚨', cls: 'notif-icon--danger' };
-    if (type === 'low_stock')    return { emoji: '⚠️', cls: 'notif-icon--warning' };
+    if (type === 'out_of_stock')        return { emoji: '🚨', cls: 'notif-icon--danger' };
+    if (type === 'low_stock')           return { emoji: '⚠️', cls: 'notif-icon--warning' };
+    if (type === 'b2b_delivered')       return { emoji: '✅', cls: 'notif-icon--success' };
+    if (type === 'b2b_order_received')  return { emoji: '✅', cls: 'notif-icon--success' };
+    if (type === 'b2b_received')        return { emoji: '📦', cls: 'notif-icon--info' };
+    if (type === 'b2b_return')          return { emoji: '↩️', cls: 'notif-icon--danger' };
+    if (type === 'po_received')         return { emoji: '✅', cls: 'notif-icon--success' };
+    if (type?.startsWith('inventory'))  return { emoji: '📥', cls: 'notif-icon--success' };
     return { emoji: '👤', cls: 'notif-icon--info' };
   };
 
   const routeFor = (type, id) => {
     if (type === 'out_of_stock' || type === 'low_stock') return '/inventory';
+    if (type === 'b2b_received' || type === 'b2b_delivered') return '/billing';
+    if (type === 'b2b_order_received') return '/manufacturers';
+    if (type === 'b2b_return') return '/billing';
     if (type === 'member_joined') return '/users';
     return null;
   };
@@ -267,20 +276,31 @@ function Header({ user, onLogout, theme, onToggleTheme, onMobileMenuToggle }) {
   // ── localStorage helpers ─────────────────────────────────
   const getReadIds = () => JSON.parse(localStorage.getItem('ss_notif_read') || '[]');
   const getDismissedIds = () => JSON.parse(localStorage.getItem('ss_notif_dismissed') || '[]');
-  const saveReadIds = (ids) => localStorage.setItem('ss_notif_read', JSON.stringify(ids));
-  const saveDismissedIds = (ids) => localStorage.setItem('ss_notif_dismissed', JSON.stringify(ids));
+  const getDeletedIds = () => JSON.parse(localStorage.getItem('ss_notif_deleted') || '[]');
+  const saveReadIds = (ids) => { localStorage.setItem('ss_notif_read', JSON.stringify(ids)); window.dispatchEvent(new Event('ss_notif_update')); };
+  const saveDismissedIds = (ids) => { localStorage.setItem('ss_notif_dismissed', JSON.stringify(ids)); window.dispatchEvent(new Event('ss_notif_update')); };
 
   // Apply persisted read/dismissed state to fresh API data
   const applyLocalState = (raw) => {
     const readIds = getReadIds();
     const dismissedIds = getDismissedIds();
+    const deletedIds = getDeletedIds();
     return raw
-      .filter(n => !dismissedIds.includes(n.id))
+      .filter(n => !dismissedIds.includes(n.id) && !deletedIds.includes(n.id))
       .map(n => ({ ...n, read: n.read || readIds.includes(n.id) }));
   };
 
   // Fetch notifications on mount
   useEffect(() => { fetchNotifications(); }, []);
+
+  // Sync state across components (e.g. from Notifications page)
+  useEffect(() => {
+    const handleSync = () => {
+      setNotifications(prev => applyLocalState(prev));
+    };
+    window.addEventListener('ss_notif_update', handleSync);
+    return () => window.removeEventListener('ss_notif_update', handleSync);
+  }, []);
 
   const fetchNotifications = async () => {
     try {

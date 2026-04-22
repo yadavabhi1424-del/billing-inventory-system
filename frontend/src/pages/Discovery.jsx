@@ -242,6 +242,40 @@ export default function DiscoveryPage({ user }) {
                         <div className="app-loading__spinner" />
                         <p>Loading catalog...</p>
                       </div>
+                    ) : selectedItem.entity_type === 'shop' ? (
+                      <div className="catalog-empty-state" style={{flexDirection:'column', gap:'12px', padding: '2rem'}}>
+                         <div style={{fontSize: '2.5rem'}}>🏬</div>
+                         <div style={{fontSize: '1.25rem', color: 'var(--color-text-primary)', fontWeight: 700}}>Retail Partner Profile</div>
+                         <p style={{color: 'var(--color-text-muted)'}}>This is a retail shop. They do not list a B2B wholesale catalog.</p>
+                         
+                         <div style={{marginTop: '1.5rem', padding: '1.5rem', background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', width: '100%', maxWidth: '500px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: 'var(--shadow-sm)'}}>
+                             <div>
+                               <strong style={{color: 'var(--color-text-primary)', fontSize: '1.15rem'}}>{selectedItem.business_name}</strong>
+                               {selectedItem.owner_name && <div style={{color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginTop: '4px', fontWeight: 500}}>Owner: {selectedItem.owner_name}</div>}
+                             </div>
+                             
+                             <div style={{display: 'flex', flexDirection: 'column', gap: '10px', color: 'var(--color-text-secondary)', fontSize: '0.9rem'}}>
+                               <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                                 <span style={{color: 'var(--color-text-muted)'}}>✉️</span> <span>{selectedItem.email || 'No email provided'}</span>
+                               </div>
+                               {selectedItem.phone && (
+                                 <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                                   <span style={{color: 'var(--color-text-muted)'}}>📞</span> <span>{selectedItem.phone}</span>
+                                 </div>
+                               )}
+                               <div style={{display: 'flex', gap: '10px', alignItems: 'flex-start'}}>
+                                 <span style={{color: 'var(--color-text-muted)'}}>📍</span> <span style={{lineHeight: 1.4}}>{[selectedItem.address, selectedItem.city, selectedItem.state, selectedItem.pincode].filter(Boolean).join(', ') || 'No address provided'}</span>
+                               </div>
+                             </div>
+
+                             {selectedItem.description && (
+                               <div style={{marginTop: '4px', paddingTop: '16px', borderTop: '1px solid var(--color-border)'}}>
+                                 <strong style={{fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--color-text-muted)'}}>About Shop</strong>
+                                 <p style={{marginTop: '8px', lineHeight: 1.6, color: 'var(--color-text-secondary)', fontSize: '0.9rem'}}>{selectedItem.description}</p>
+                               </div>
+                             )}
+                         </div>
+                      </div>
                     ) : catalog.length === 0 ? (
                       <div className="catalog-empty-state">No products listed by this supplier.</div>
                     ) : (

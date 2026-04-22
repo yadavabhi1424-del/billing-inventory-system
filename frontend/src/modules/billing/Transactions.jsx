@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Icon from '../../components/Icon';
-import { getTransactions, getTransactionById, getShopProfile } from '../../services/api';
+import { getTransactions, getTransactionById, getShopProfile, getReturnsByInvoice } from '../../services/api';
+import ReturnModal from './ReturnModal';
 import './Transactions.css';
 
 const fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
@@ -23,7 +24,7 @@ const getLocalDateStr = (d = new Date()) => {
 };
 
 // ── Original Bill Modal (Invoice format from POS) ─────────────
-function InvoiceBillModal({ txn, shopInfo, onClose }) {
+function InvoiceBillModal({ txn, shopInfo, onClose, onInitiateReturn, linkedReturns = [] }) {
   if (!txn) return null;
 
   const customerName = txn.customerName ||
@@ -157,7 +158,39 @@ function InvoiceBillModal({ txn, shopInfo, onClose }) {
             Thank you for shopping with us! · Goods once sold will not be taken back.<br />
             This is a computer generated invoice.
           </div>
+
+          {/* ── Linked Returns ── */}
+          {linkedReturns.length > 0 && (
+            <div className="invoice__returns">
+              <div className="invoice__returns-title">Linked Returns</div>
+              {linkedReturns.map(r => (
+                <div key={r.transaction_id} className="invoice__return-row">
+                  <span className="invoice__return-inv">{r.invoiceNumber}</span>
+                  <span className="invoice__return-items">
+                    {(r.items || []).map(i => `${Math.abs(i.quantity)}× ${i.productName}`).join(', ')}
+                  </span>
+                  <span className="invoice__return-amt">−₹{Math.abs(parseFloat(r.totalAmount)).toLocaleString('en-IN')}</span>
+                  <span className="invoice__return-method">{r.paymentMethod}</span>
+                  <span className="invoice__return-date">{new Date(r.createdAt).toLocaleDateString('en-IN')}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* ── Return Button pinned at bottom of modal ── */}
+        {txn.status !== 'CANCELLED' && txn.transaction_type !== 'RETURN' && (
+          <div className="invoice-modal__return-bar">
+            <button
+              className="invoice-return-btn"
+              onClick={onInitiateReturn}
+              disabled={txn.status === 'RETURNED' && linkedReturns.length > 0 && (txn.items || []).every(i => i.quantity <= (i.returnedQty || 0))}
+            >
+              <Icon name="refresh" size={15} />
+              {txn.status === 'RETURNED' ? 'Fully Returned' : 'Initiate Return / Refund'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -173,6 +206,22 @@ export default function Transactions({ user }) {
   const [selected, setSelected]         = useState(null);     // full txn for invoice modal
   const [detailLoading, setDetailLoading] = useState(false);
   const [shopInfo, setShopInfo]         = useState(null);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [linkedReturns, setLinkedReturns]     = useState([]);
+  
+  const [showPeriodMenu, setShowPeriodMenu]   = useState(false);
+  const [showPaymentMenu, setShowPaymentMenu] = useState(false);
+  const periodRef = useRef(null);
+  const paymentRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (periodRef.current && !periodRef.current.contains(e.target)) setShowPeriodMenu(false);
+      if (paymentRef.current && !paymentRef.current.contains(e.target)) setShowPaymentMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch shop info once for invoice header
   useEffect(() => {
@@ -223,8 +272,13 @@ export default function Transactions({ user }) {
   const handleViewInvoice = async (id) => {
     try {
       setDetailLoading(true);
-      const res = await getTransactionById(id);
-      if (res.success) setSelected(res.data);
+      setLinkedReturns([]);
+      const [txnRes, retRes] = await Promise.all([
+        getTransactionById(id),
+        getReturnsByInvoice(id),
+      ]);
+      if (txnRes.success) setSelected(txnRes.data);
+      if (retRes.success) setLinkedReturns(retRes.data);
     } catch (err) {
       console.error(err.message);
     } finally {
@@ -267,22 +321,54 @@ export default function Transactions({ user }) {
 
         <div className="transactions-filter-group">
           <label className="transactions-filter-label">Period</label>
-          <select className="transactions-filter-select" value={filterDate} onChange={e => setFilterDate(e.target.value)}>
-            <option value="today">Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="week">Last 7 Days</option>
-            <option value="all">All Time</option>
-          </select>
+          <div className="transactions-dropdown-custom" ref={periodRef}>
+            <div 
+              className={`transactions-dropdown-trigger ${showPeriodMenu ? 'transactions-dropdown-trigger--active' : ''}`} 
+              onClick={() => setShowPeriodMenu(!showPeriodMenu)}
+            >
+              <span>{filterDate === 'yesterday' ? 'Yesterday' : filterDate === 'week' ? 'Last 7 Days' : filterDate === 'all' ? 'All Time' : 'Today'}</span>
+              <Icon name="chevronDown" size={14} />
+            </div>
+            {showPeriodMenu && (
+              <div className="transactions-dropdown-menu">
+                {['today', 'yesterday', 'week', 'all'].map(v => (
+                  <div 
+                    key={v}
+                    className={`transactions-dropdown-item ${filterDate === v ? 'active' : ''}`}
+                    onClick={() => { setFilterDate(v); setShowPeriodMenu(false); }}
+                  >
+                    {v === 'today' ? 'Today' : v === 'yesterday' ? 'Yesterday' : v === 'week' ? 'Last 7 Days' : 'All Time'}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="transactions-filter-group">
           <label className="transactions-filter-label">Payment</label>
-          <select className="transactions-filter-select" value={filterPayment} onChange={e => setFilterPayment(e.target.value)}>
-            <option value="all">All</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="upi">UPI</option>
-          </select>
+          <div className="transactions-dropdown-custom" ref={paymentRef}>
+            <div 
+              className={`transactions-dropdown-trigger ${showPaymentMenu ? 'transactions-dropdown-trigger--active' : ''}`} 
+              onClick={() => setShowPaymentMenu(!showPaymentMenu)}
+            >
+              <span>{filterPayment === 'all' ? 'All' : filterPayment === 'cash' ? 'Cash' : filterPayment === 'card' ? 'Card' : 'UPI'}</span>
+              <Icon name="chevronDown" size={14} />
+            </div>
+            {showPaymentMenu && (
+              <div className="transactions-dropdown-menu">
+                {['all', 'cash', 'card', 'upi'].map(v => (
+                  <div 
+                    key={v}
+                    className={`transactions-dropdown-item ${filterPayment === v ? 'active' : ''}`}
+                    onClick={() => { setFilterPayment(v); setShowPaymentMenu(false); }}
+                  >
+                    {v === 'all' ? 'All' : v === 'cash' ? 'Cash' : v === 'card' ? 'Card' : 'UPI'}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -377,11 +463,30 @@ export default function Transactions({ user }) {
       )}
 
       {/* Original Bill Modal */}
-      {selected && (
+      {selected && !showReturnModal && (
         <InvoiceBillModal
           txn={selected}
           shopInfo={shopInfo}
-          onClose={() => setSelected(null)}
+          linkedReturns={linkedReturns}
+          onClose={() => { setSelected(null); setLinkedReturns([]); }}
+          onInitiateReturn={() => setShowReturnModal(true)}
+        />
+      )}
+
+      {/* Return Modal */}
+      {showReturnModal && selected && (
+        <ReturnModal
+          txn={selected}
+          shopInfo={shopInfo}
+          onClose={() => setShowReturnModal(false)}
+          onSuccess={() => {
+            // Re-fetch the transaction & linked returns after a successful return
+            getTransactionById(selected.transaction_id)
+              .then(res => { if (res.success) setSelected(res.data); });
+            getReturnsByInvoice(selected.transaction_id)
+              .then(res => { if (res.success) setLinkedReturns(res.data); });
+            fetchTransactions();
+          }}
         />
       )}
     </div>

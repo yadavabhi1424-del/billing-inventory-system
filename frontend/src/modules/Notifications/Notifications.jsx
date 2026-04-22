@@ -3,7 +3,7 @@
 //  StockSense Pro
 // ============================================================
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import { getNotifications } from '../../services/api';
@@ -23,29 +23,32 @@ const timeAgo = (t) => {
 const iconFor = (n) => {
   // Use backend-provided icon if available, else fallback
   if (n.icon) return n.icon;
-  if (n.type === 'out_of_stock')  return '🚨';
-  if (n.type === 'low_stock')     return '⚠️';
-  if (n.type === 'member_joined') return '👤';
-  if (n.type === 'b2b_received')  return '📦';
-  if (n.type === 'b2b_delivered') return '🔄';
-  if (n.type === 'b2b_return')    return '↩️';
-  if (n.type === 'po_received')   return '✅';
-  if (n.type === 'po_placed')     return '📋';
-  if (n.type?.startsWith('inventory')) return '📥';
+  if (n.type === 'out_of_stock')        return '🚨';
+  if (n.type === 'low_stock')           return '⚠️';
+  if (n.type === 'member_joined')       return '👤';
+  if (n.type === 'b2b_received')        return '📦';
+  if (n.type === 'b2b_delivered')       return '✅';
+  if (n.type === 'b2b_order_received')  return '✅';
+  if (n.type === 'b2b_return')          return '↩️';
+  if (n.type === 'po_received')         return '✅';
+  if (n.type === 'po_placed')           return '📋';
+  if (n.type?.startsWith('inventory'))  return '📥';
   return '🔔';
 };
 
 const clsFor = (type) => {
-  if (type === 'out_of_stock' || type === 'b2b_return')  return 'ni--danger';
-  if (type === 'low_stock')                               return 'ni--warning';
-  if (type === 'po_received' || type === 'b2b_delivered') return 'ni--success';
-  if (type?.startsWith('inventory'))                      return 'ni--success';
+  if (type === 'out_of_stock' || type === 'b2b_return')                   return 'ni--danger';
+  if (type === 'low_stock')                                                return 'ni--warning';
+  if (type === 'po_received' || type === 'b2b_delivered'
+    || type === 'b2b_order_received')                                      return 'ni--success';
+  if (type?.startsWith('inventory'))                                       return 'ni--success';
   return 'ni--info';
 };
 
 const LS_READ      = 'ss_notif_read';
 const LS_DISMISSED = 'ss_notif_dismissed';
 const LS_FAVORITE  = 'ss_notif_favorite';
+const LS_DELETED   = 'ss_notif_deleted';
 
 const PAGE_SIZE = 10;
 
@@ -58,14 +61,28 @@ export default function NotificationsPage() {
   const [tab, setTab]             = useState('all');
   const [sort, setSort]           = useState('latest');   // 'latest' | 'oldest'
   const [page, setPage]           = useState(0);
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (sortRef.current && !sortRef.current.contains(event.target)) {
+        setShowSortMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const [readIds, setReadIds]     = useState(() => JSON.parse(localStorage.getItem(LS_READ)      || '[]'));
   const [dismissed, setDismissed] = useState(() => JSON.parse(localStorage.getItem(LS_DISMISSED) || '[]'));
   const [favorites, setFavorites] = useState(() => JSON.parse(localStorage.getItem(LS_FAVORITE)  || '[]'));
+  const [deletedIds, setDeletedIds] = useState(() => JSON.parse(localStorage.getItem(LS_DELETED) || '[]'));
 
-  const saveRead     = (ids) => { localStorage.setItem(LS_READ,      JSON.stringify(ids)); setReadIds(ids);    };
-  const saveDismiss  = (ids) => { localStorage.setItem(LS_DISMISSED, JSON.stringify(ids)); setDismissed(ids);  };
-  const saveFavorite = (ids) => { localStorage.setItem(LS_FAVORITE,  JSON.stringify(ids)); setFavorites(ids);  };
+  const saveRead     = (ids) => { localStorage.setItem(LS_READ,      JSON.stringify(ids)); setReadIds(ids);    window.dispatchEvent(new Event('ss_notif_update')); };
+  const saveDismiss  = (ids) => { localStorage.setItem(LS_DISMISSED, JSON.stringify(ids)); setDismissed(ids);  window.dispatchEvent(new Event('ss_notif_update')); };
+  const saveFavorite = (ids) => { localStorage.setItem(LS_FAVORITE,  JSON.stringify(ids)); setFavorites(ids);  window.dispatchEvent(new Event('ss_notif_update')); };
+  const saveDelete   = (ids) => { localStorage.setItem(LS_DELETED,   JSON.stringify(ids)); setDeletedIds(ids); window.dispatchEvent(new Event('ss_notif_update')); };
 
   useEffect(() => {
     setLoading(true);
@@ -83,7 +100,7 @@ export default function NotificationsPage() {
     read:     n.read || readIds.includes(n.id),
     archived: dismissed.includes(n.id),
     starred:  favorites.includes(n.id),
-  })), [raw, readIds, dismissed, favorites]);
+  })).filter(n => !deletedIds.includes(n.id)), [raw, readIds, dismissed, favorites, deletedIds]);
 
   const allCount      = enriched.filter(n => !n.archived).length;
   const archiveCount  = enriched.filter(n =>  n.archived).length;
@@ -126,6 +143,7 @@ export default function NotificationsPage() {
   const handleToggleStar  = (id) => saveFavorite(
     favorites.includes(id) ? favorites.filter(x => x !== id) : [...favorites, id]
   );
+  const handleDeleteItem  = (id) => saveDelete([...new Set([...deletedIds, id])]);
   const handleMarkAllRead = () => saveRead([...new Set([...readIds, ...enriched.map(n => n.id)])]);
 
   const handleClick = (n) => {
@@ -168,14 +186,31 @@ export default function NotificationsPage() {
           </div>
 
           {/* Sort */}
-          <select
-            className="np-sort-select"
-            value={sort}
-            onChange={e => setSort(e.target.value)}
-          >
-            <option value="latest">Latest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
+          <div className="np-sort-custom" ref={sortRef}>
+            <div 
+              className={`np-sort-trigger ${showSortMenu ? 'np-sort-trigger--active' : ''}`} 
+              onClick={() => setShowSortMenu(!showSortMenu)}
+            >
+              <span>{sort === 'latest' ? 'Latest' : 'Oldest'}</span>
+              <Icon name="chevronDown" size={14} />
+            </div>
+            {showSortMenu && (
+              <div className="np-sort-menu">
+                <div 
+                  className={`np-sort-menu-item ${sort === 'latest' ? 'active' : ''}`}
+                  onClick={() => { setSort('latest'); setShowSortMenu(false); }}
+                >
+                  Latest
+                </div>
+                <div 
+                  className={`np-sort-menu-item ${sort === 'oldest' ? 'active' : ''}`}
+                  onClick={() => { setSort('oldest'); setShowSortMenu(false); }}
+                >
+                  Oldest
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Mark all read */}
           <button className="np-btn np-btn--ghost" onClick={handleMarkAllRead}>
@@ -251,31 +286,30 @@ export default function NotificationsPage() {
 
               {/* Actions */}
               <div className="np-item__actions" onClick={e => e.stopPropagation()}>
-                {n.link && (
-                  <button
-                    className="np-item__btn np-item__btn--view"
-                    title="View"
-                    onClick={() => handleClick(n)}
-                  >
-                    View
-                  </button>
-                )}
                 {tab === 'archive' ? (
                   <button
                     className="np-item__btn np-item__btn--restore"
                     onClick={() => handleUnarchive(n.id)}
+                    title="Restore notification"
                   >
-                    Restore
+                    <Icon name="refresh" size={13} /> Restore
                   </button>
                 ) : (
                   <button
-                    className="np-item__btn np-item__btn--delete"
+                    className="np-item__btn np-item__btn--archive"
                     title="Archive"
                     onClick={() => handleArchive(n.id)}
                   >
-                    <Icon name="trash" size={13} />
+                    <Icon name="archive" size={13} /> Archive
                   </button>
                 )}
+                <button
+                  className="np-item__btn np-item__btn--delete"
+                  title="Delete"
+                  onClick={() => handleDeleteItem(n.id)}
+                >
+                  <Icon name="trash" size={13} /> Delete
+                </button>
               </div>
             </div>
           );

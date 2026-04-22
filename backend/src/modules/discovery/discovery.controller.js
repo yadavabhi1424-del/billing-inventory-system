@@ -57,15 +57,16 @@ export const getDiscovery = async (req, res, next) => {
 
     let [rows] = await masterPool.execute(
       `SELECT DISTINCT p.profile_id, p.entity_id, p.entity_type,
-              p.business_name, p.slug, p.description,
+              p.business_name, COALESCE(p.owner_name, t.owner_name) as owner_name, p.slug, p.description,
               p.logo, p.city, p.state, p.pincode,
-              p.address, p.email, p.phone,
+              p.address, COALESCE(p.email, t.owner_email) as email, COALESCE(p.phone, t.owner_phone) as phone,
               p.latitude, p.longitude,
               p.business_type, p.createdAt,
               m.status as connectionStatus
               ${distanceSelect}
        FROM profiles p
        ${searchJoin}
+       LEFT JOIN tenants t ON t.db_name = p.entity_id
        LEFT JOIN shop_supplier_map m ON 
          ( ? = 'shop' AND m.shop_id = ? AND m.supplier_id = p.entity_id ) OR
          ( ? = 'supplier' AND m.supplier_id = ? AND m.shop_id = p.entity_id )
@@ -87,11 +88,14 @@ export const getDiscovery = async (req, res, next) => {
 
       const [fbRows] = await masterPool.execute(
         `SELECT DISTINCT p.profile_id, p.entity_id, p.entity_type,
-                  p.business_name, p.slug, p.description,
+                  p.business_name, COALESCE(p.owner_name, t.owner_name) as owner_name, p.slug, p.description,
                   p.logo, p.city, p.state, p.pincode,
+                  p.address, COALESCE(p.email, t.owner_email) as email, COALESCE(p.phone, t.owner_phone) as phone,
+                  p.latitude, p.longitude,
                   p.business_type, p.createdAt,
                   m.status as connectionStatus
            FROM profiles p
+           LEFT JOIN tenants t ON t.db_name = p.entity_id
            LEFT JOIN shop_supplier_map m ON 
              ( ? = 'shop' AND m.shop_id = ? AND m.supplier_id = p.entity_id ) OR
              ( ? = 'supplier' AND m.supplier_id = ? AND m.shop_id = p.entity_id )

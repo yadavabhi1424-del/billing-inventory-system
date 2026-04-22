@@ -104,17 +104,53 @@ export const getB2BOrderById = async (req, res, next) => {
     const { id } = req.params;
     const [orders] = await masterPool.execute(
       `SELECT o.*,
-              p_shop.business_name as shop_name, p_shop.phone as shop_phone, p_shop.email as shop_email, p_shop.address as shop_address,
-              p_sup.business_name as supplier_name, p_sup.phone as supplier_phone, p_sup.email as supplier_email, p_sup.address as supplier_address,
+              p_shop.business_name as shop_name, 
+              COALESCE(t_shop.owner_name, s_shop.owner_name) as shop_owner_name,
+              COALESCE(t_shop.owner_phone, s_shop.owner_phone) as shop_phone, 
+              COALESCE(t_shop.owner_email, s_shop.owner_email) as shop_email, 
+              p_shop.address as shop_address,
+              t_shop.db_name as shop_db_name,
+              
+              p_sup.business_name as supplier_name, 
+              s_master.owner_name as supplier_owner_name,
+              s_master.owner_phone as supplier_phone, 
+              s_master.owner_email as supplier_email, 
+              p_sup.address as supplier_address,
+              
               s_master.db_name as supplier_db_name
        FROM b2b_orders o
        LEFT JOIN profiles p_shop ON p_shop.entity_id = o.shop_id
+       LEFT JOIN tenants t_shop ON t_shop.db_name = o.shop_id
+       LEFT JOIN suppliers s_shop ON s_shop.supplier_id = o.shop_id
        LEFT JOIN profiles p_sup ON p_sup.entity_id = o.supplier_id
        LEFT JOIN suppliers s_master ON s_master.supplier_id = o.supplier_id
        WHERE o.order_id = ?`,
       [id]
     );
     if (!orders.length) return res.status(404).json({ success: false, message: "Order not found." });
+
+    const order = orders[0];
+
+    // Hydrate missing shop phone/address dynamically from the shop's tenant DB
+    if (order.shop_db_name) {
+      try {
+        const tenantPool = await getTenantPool(order.shop_db_name);
+        
+        // If phone missing, get from tenant admin user
+        if (!order.shop_phone) {
+          const [uRows] = await tenantPool.execute("SELECT phone FROM users WHERE role = 'OWNER' AND phone IS NOT NULL LIMIT 1");
+          if (uRows.length) order.shop_phone = uRows[0].phone;
+        }
+
+        // If address missing, get from shop_profile
+        if (!order.shop_address) {
+          const [pRows] = await tenantPool.execute("SELECT address FROM shop_profile LIMIT 1");
+          if (pRows.length) order.shop_address = pRows[0].address;
+        }
+      } catch (e) {
+        console.warn(`[getB2BOrderById] Failed to hydrate tenant details for ${order.shop_db_name}:`, e.message);
+      }
+    }
 
     const [items] = await masterPool.execute("SELECT * FROM b2b_order_items WHERE order_id = ?", [id]);
 
@@ -129,7 +165,7 @@ export const getB2BOrderById = async (req, res, next) => {
       r.items = ritems;
     }
 
-    res.json({ success: true, data: { ...orders[0], items, returns } });
+    res.json({ success: true, data: { ...order, items, returns } });
   } catch (error) { next(error); }
 };
 
@@ -146,6 +182,11 @@ export const updateB2BOrderStatus = async (req, res, next) => {
       await masterPool.execute(
         "UPDATE b2b_orders SET status = ?, rejection_reason = ? WHERE order_id = ?",
         [status, rejection_reason, id]
+      );
+    } else if (status === 'CLOSED') {
+      await masterPool.execute(
+        "UPDATE b2b_orders SET status = ?, closedAt = NOW() WHERE order_id = ?",
+        [status, id]
       );
     } else {
       await masterPool.execute("UPDATE b2b_orders SET status = ? WHERE order_id = ?", [status, id]);

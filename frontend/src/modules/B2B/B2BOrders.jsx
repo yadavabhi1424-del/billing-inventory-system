@@ -453,17 +453,35 @@ export default function B2BOrders({ user }) {
 
                 <div className="side-panel__body">
                   <div className="info-section">
-                    <h3>{isSupplier ? 'Billing To' : 'Supplier Details'}</h3>
+                    <h3>{isSupplier ? 'Billing To (Shop Info)' : 'Supplier Details'}</h3>
                     <div className="info-card">
-                      <div className="info-card__row"><Icon name="box" size={14} /><strong>{isSupplier ? selectedOrder.shop_name : selectedOrder.supplier_name}</strong></div>
+                      <div className="info-card__row">
+                        <Icon name="box" size={14} />
+                        <strong>{isSupplier ? selectedOrder.shop_name : selectedOrder.supplier_name}</strong>
+                      </div>
+                      {(isSupplier ? selectedOrder.shop_owner_name : selectedOrder.supplier_owner_name) && (
+                        <div className="info-card__row">
+                          <Icon name="user" size={14} />
+                          <span>Owner: {isSupplier ? selectedOrder.shop_owner_name : selectedOrder.supplier_owner_name}</span>
+                        </div>
+                      )}
                       {(isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone) && (
-                        <div className="info-card__row"><Icon name="payment" size={14} /><span>{isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone}</span></div>
+                        <div className="info-card__row">
+                          <span style={{ fontSize: '14px', marginRight: '6px' }}>📞</span>
+                          <span>{isSupplier ? selectedOrder.shop_phone : selectedOrder.supplier_phone}</span>
+                        </div>
                       )}
                       {(isSupplier ? selectedOrder.shop_email : selectedOrder.supplier_email) && (
-                        <div className="info-card__row"><Icon name="mail" size={14} /><span>{isSupplier ? selectedOrder.shop_email : selectedOrder.supplier_email}</span></div>
+                        <div className="info-card__row">
+                          <Icon name="mail" size={14} />
+                          <span>{isSupplier ? selectedOrder.shop_email : selectedOrder.supplier_email}</span>
+                        </div>
                       )}
                       {(isSupplier ? selectedOrder.shop_address : selectedOrder.supplier_address) && (
-                        <div className="info-card__row"><Icon name="location" size={14} /><span>{isSupplier ? selectedOrder.shop_address : selectedOrder.supplier_address}</span></div>
+                        <div className="info-card__row">
+                          <Icon name="location" size={14} />
+                          <span>{isSupplier ? selectedOrder.shop_address : selectedOrder.supplier_address}</span>
+                        </div>
                       )}
                     </div>
                   </div>

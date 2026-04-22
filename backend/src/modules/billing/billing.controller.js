@@ -251,62 +251,245 @@ const getByInvoiceNumber = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+// ── Ensure return columns exist (one-time migration) ──────────────────────────
+const migrateReturnColumns = async (conn) => {
+  const [cols] = await conn.query("SHOW COLUMNS FROM transactions");
+  const names  = cols.map(c => c.Field);
+  
+  if (!names.includes('transaction_type'))
+    await conn.query("ALTER TABLE transactions ADD COLUMN transaction_type ENUM('SALE','RETURN') NOT NULL DEFAULT 'SALE' AFTER status");
+  if (!names.includes('reference_invoice_id'))
+    await conn.query("ALTER TABLE transactions ADD COLUMN reference_invoice_id VARCHAR(36) NULL AFTER transaction_type");
+  if (!names.includes('returnReason'))
+    await conn.query("ALTER TABLE transactions ADD COLUMN returnReason TEXT NULL AFTER status");
+
+  // Dynamically append 'RETURNED' to status enum if missing
+  const statusCol = cols.find(c => c.Field === 'status');
+  if (statusCol && statusCol.Type.startsWith('enum') && !statusCol.Type.includes("'RETURNED'")) {
+    const newType = statusCol.Type.replace(")", ",'RETURNED')");
+    await conn.query(`ALTER TABLE transactions MODIFY COLUMN status ${newType} DEFAULT 'COMPLETED'`);
+  }
+
+  // Dynamically append 'REFUNDED' to paymentStatus enum if missing
+  const paymentStatusCol = cols.find(c => c.Field === 'paymentStatus');
+  if (paymentStatusCol && paymentStatusCol.Type.startsWith('enum') && !paymentStatusCol.Type.includes("'REFUNDED'")) {
+    const newType = paymentStatusCol.Type.replace(")", ",'REFUNDED')");
+    await conn.query(`ALTER TABLE transactions MODIFY COLUMN paymentStatus ${newType} DEFAULT 'PAID'`);
+  }
+
+  const [iCols] = await conn.query("SHOW COLUMNS FROM transaction_items");
+  const iNames  = iCols.map(c => c.Field);
+  if (!iNames.includes('returnedQty'))
+    await conn.query("ALTER TABLE transaction_items ADD COLUMN returnedQty INT NOT NULL DEFAULT 0 AFTER quantity");
+};
+
+// ── Generate return invoice number ─────────────────────────────────────────────
+// INV-20250423-0001  →  RET-20250423-0001-1, RET-20250423-0001-2 …
+const generateReturnInvoiceNumber = async (conn, originalInvoiceNumber) => {
+  const base  = originalInvoiceNumber.replace(/^INV-/, 'RET-');
+  const [rows] = await conn.execute(
+    "SELECT COUNT(*) as cnt FROM transactions WHERE invoiceNumber LIKE ?",
+    [`${base}%`]
+  );
+  const suffix = (rows[0].cnt || 0) + 1;
+  return `${base}-${suffix}`;
+};
+
+// ── Partial / Full Return ──────────────────────────────────────────────────────
 const returnTransaction = async (req, res, next) => {
   try {
-    const { returnReason } = req.body;
-    const [rows] = await req.db.execute(
-      "SELECT * FROM transactions WHERE transaction_id = ?", [req.params.id]
-    );
-    if (rows.length === 0) return next(new AppError("Transaction not found.", 404));
-
-    const transaction = rows[0];
-    if (transaction.status === "RETURNED")  return next(new AppError("Transaction already returned.", 400));
-    if (transaction.status === "CANCELLED") return next(new AppError("Cannot return a cancelled transaction.", 400));
+    const { id } = req.params;
+    const { returnItems, returnReason, refundMethod = 'CASH' } = req.body;
+    // returnItems: [{ product_id, returnQty }]
 
     const conn = await req.db.getConnection();
     try {
       await conn.beginTransaction();
+      await migrateReturnColumns(conn);
 
-      const [items] = await conn.execute(
-        "SELECT * FROM transaction_items WHERE transaction_id = ?", [req.params.id]
+      // 1 ── Load original transaction
+      const [[original]] = await conn.execute(
+        `SELECT t.*, c.name as customerName
+         FROM transactions t
+         LEFT JOIN customers c ON c.customer_id = t.customer_id
+         WHERE t.transaction_id = ?`, [id]
+      );
+      if (!original) throw new AppError("Transaction not found.", 404);
+      if (original.status === 'CANCELLED') throw new AppError("Cannot return a cancelled transaction.", 400);
+      if (original.transaction_type === 'RETURN') throw new AppError("Cannot return a return transaction.", 400);
+
+      // 2 ── Load original items with already-returned quantities
+      const [origItems] = await conn.execute(
+        "SELECT * FROM transaction_items WHERE transaction_id = ?", [id]
       );
 
-      for (const item of items) {
-        const [[product]] = await conn.execute("SELECT stock FROM products WHERE product_id = ?", [item.product_id]);
-        const newStock = product.stock + item.quantity;
-        await conn.execute("UPDATE products SET stock = ? WHERE product_id = ?", [newStock, item.product_id]);
+      // Build map: product_id → { item, remainingQty }
+      const itemMap = {};
+      for (const item of origItems) {
+        itemMap[item.product_id] = { item, remainingQty: item.quantity - (item.returnedQty || 0) };
+      }
+
+      // 3 ── Build validated returnList
+      if (!returnItems || returnItems.length === 0)
+        throw new AppError("No items specified for return.", 400);
+
+      const returnList = [];
+      for (const ri of returnItems) {
+        const entry = itemMap[ri.product_id];
+        if (!entry) throw new AppError(`Product ${ri.product_id} not on original invoice.`, 400);
+        const rQty = parseInt(ri.returnQty);
+        if (rQty <= 0) continue;
+        if (rQty > entry.remainingQty)
+          throw new AppError(`Return qty (${rQty}) exceeds available qty (${entry.remainingQty}) for ${entry.item.productName}.`, 400);
+        returnList.push({ ...entry.item, returnQty: rQty });
+      }
+      if (returnList.length === 0) throw new AppError("No valid items to return.", 400);
+
+      // 4 ── Calculate refund amounts (proportional to original invoice)
+      const origTotal = parseFloat(original.totalAmount);
+      let   returnSubtotal = 0;
+      let   returnTax      = 0;
+
+      for (const ri of returnList) {
+        const unitNet   = parseFloat(ri.sellingPrice) - (parseFloat(ri.discountAmount || 0) / ri.quantity);
+        const unitTax   = unitNet * (parseFloat(ri.taxRate || 0) / 100);
+        returnSubtotal += unitNet * ri.returnQty;
+        returnTax      += unitTax * ri.returnQty;
+      }
+
+      // Apply invoice-level discount proportionally
+      const origSubtotal       = parseFloat(original.subtotal);
+      const origDiscountAmount = parseFloat(original.discountAmount || 0);
+      const discountRatio      = origSubtotal > 0 ? origDiscountAmount / origSubtotal : 0;
+      const returnDiscount     = returnSubtotal * discountRatio;
+      const refundTotal        = Math.round((returnSubtotal - returnDiscount + returnTax) * 100) / 100;
+
+      // 5 ── Create return invoice
+      const returnInvNum = await generateReturnInvoiceNumber(conn, original.invoiceNumber);
+      const returnTxnId  = uuidv4();
+
+      await conn.execute(
+        `INSERT INTO transactions
+          (transaction_id, invoiceNumber, customer_id, user_id, transaction_type,
+           reference_invoice_id, status, paymentMethod, paymentStatus,
+           subtotal, discountAmount, taxAmount, roundOff, totalAmount,
+           amountPaid, changeGiven, notes, returnReason)
+         VALUES (?,?,?,?,'RETURN',?,  'RETURNED',?,  'REFUNDED',
+                 ?,?,?,0,?,
+                 ?,0,?,?)`,
+        [returnTxnId, returnInvNum,
+         original.customer_id || null, req.user.user_id,
+         id,                               // reference_invoice_id
+         refundMethod,
+         returnSubtotal, returnDiscount, returnTax,
+         refundTotal,
+         refundTotal,                      // amountPaid = refund amount
+         `Return for ${original.invoiceNumber}`,
+         returnReason || null]
+      );
+
+      // 6 ── Insert return items (negative qty) + restock + update returnedQty
+      for (const ri of returnList) {
+        const unitNet    = parseFloat(ri.sellingPrice) - (parseFloat(ri.discountAmount || 0) / ri.quantity);
+        const unitTax    = unitNet * (parseFloat(ri.taxRate || 0) / 100);
+        const unitDisc   = parseFloat(ri.discountAmount || 0) / ri.quantity;
+        const lineRefund = (unitNet - unitDisc * 0 + unitTax) * ri.returnQty; // discountAmount already in unitNet
+
+        await conn.execute(
+          `INSERT INTO transaction_items
+            (item_id, transaction_id, product_id, productName,
+             sku, quantity, unit, costPrice, sellingPrice,
+             taxRate, taxAmount, discountAmount, totalAmount)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [uuidv4(), returnTxnId, ri.product_id, ri.productName,
+           ri.sku, -ri.returnQty, ri.unit, ri.costPrice, ri.sellingPrice,
+           ri.taxRate, -(unitTax * ri.returnQty), -(unitDisc * ri.returnQty) * 0,
+           -Math.round(lineRefund * 100) / 100]
+        );
+
+        // Update returnedQty on original item
+        await conn.execute(
+          "UPDATE transaction_items SET returnedQty = returnedQty + ? WHERE transaction_id = ? AND product_id = ?",
+          [ri.returnQty, id, ri.product_id]
+        );
+
+        // Restock
+        const [[prod]] = await conn.execute("SELECT stock FROM products WHERE product_id = ?", [ri.product_id]);
+        const newStock = prod.stock + ri.returnQty;
+        await conn.execute("UPDATE products SET stock = ? WHERE product_id = ?", [newStock, ri.product_id]);
         await conn.execute(
           `INSERT INTO stock_movements
             (movement_id, product_id, user_id, type, quantity, reason, reference, balanceBefore, balanceAfter)
            VALUES (?,?,?,'RETURN_IN',?,?,?,?,?)`,
-          [uuidv4(), item.product_id, req.user.user_id, item.quantity,
-           returnReason || "Customer return", transaction.invoiceNumber, product.stock, newStock]
+          [uuidv4(), ri.product_id, req.user.user_id, ri.returnQty,
+           returnReason || "Customer return", returnInvNum, prod.stock, newStock]
         );
       }
 
-      await conn.execute(
-        `UPDATE transactions SET status = 'RETURNED', returnReason = ?, paymentStatus = 'REFUNDED'
-         WHERE transaction_id = ?`,
-        [returnReason || null, req.params.id]
+      // 7 ── Check if original is now fully returned; update status if so
+      const [updatedItems] = await conn.execute(
+        "SELECT SUM(quantity) as total, SUM(returnedQty) as returned FROM transaction_items WHERE transaction_id = ?", [id]
       );
-
-      if (transaction.customer_id) {
-        const loyaltyToDeduct = Math.floor(transaction.totalAmount / 100);
+      const allReturned = updatedItems[0].total <= updatedItems[0].returned;
+      if (allReturned) {
         await conn.execute(
-          `UPDATE customers SET totalSpent = totalSpent - ?, loyaltyPoints = GREATEST(0, loyaltyPoints - ?)
-           WHERE customer_id = ?`,
-          [transaction.totalAmount, loyaltyToDeduct, transaction.customer_id]
+          "UPDATE transactions SET status='RETURNED', returnReason=? WHERE transaction_id=?",
+          [returnReason || null, id]
+        );
+      }
+
+      // 8 ── Customer loyalty adjustment (proportional)
+      if (original.customer_id) {
+        const loyaltyToDeduct = Math.floor(refundTotal / 100);
+        await conn.execute(
+          `UPDATE customers SET totalSpent = GREATEST(0, totalSpent - ?),
+           loyaltyPoints = GREATEST(0, loyaltyPoints - ?) WHERE customer_id = ?`,
+          [refundTotal, loyaltyToDeduct, original.customer_id]
         );
       }
 
       await conn.commit();
-      res.json({ success: true, message: "Transaction returned successfully." });
+      res.json({
+        success: true,
+        message: `Return processed. ${returnInvNum} created.`,
+        data: { returnInvoiceNumber: returnInvNum, refundTotal, refundMethod }
+      });
     } catch (err) {
       await conn.rollback();
       throw err;
     } finally {
       conn.release();
     }
+  } catch (error) { next(error); }
+};
+
+// ── Get all returns linked to an original invoice ──────────────────────────────
+const getReturnsByInvoice = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Ensure columns exist before querying them
+    const conn = await req.db.getConnection();
+    try {
+      await migrateReturnColumns(conn);
+    } finally {
+      conn.release();
+    }
+
+    const [returns] = await req.db.execute(
+      `SELECT t.*, u.name as cashierName
+       FROM transactions t
+       LEFT JOIN users u ON u.user_id = t.user_id
+       WHERE t.reference_invoice_id = ? AND t.transaction_type = 'RETURN'
+       ORDER BY t.createdAt ASC`, [id]
+    );
+    for (const ret of returns) {
+      const [items] = await req.db.execute(
+        "SELECT * FROM transaction_items WHERE transaction_id = ?", [ret.transaction_id]
+      );
+      ret.items = items;
+    }
+    res.json({ success: true, data: returns });
   } catch (error) { next(error); }
 };
 
@@ -327,4 +510,4 @@ const getTodaySummary = async (req, res, next) => {
 };
 
 export { createTransaction, getAllTransactions, getTransactionById,
-         getByInvoiceNumber, returnTransaction, getTodaySummary };
+         getByInvoiceNumber, returnTransaction, getReturnsByInvoice, getTodaySummary };

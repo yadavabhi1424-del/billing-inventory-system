@@ -4,7 +4,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../../components/Icon';
 import {
   getProducts, createProduct, updateProduct,
@@ -591,6 +591,7 @@ export default function Inventory() {
   const [currentOrderInfo, setCurrentOrderInfo] = useState(null);
 
   const location = useLocation();
+  const navigate = useNavigate();
   // Guard: only process the addFromOrder state once (prevents re-open after save)
   const orderHandledRef = useRef(false);
 
@@ -605,11 +606,15 @@ export default function Inventory() {
   
   const handleReviewNext = () => {
     if (reviewQueue.length <= 1) {
+      // All done — close everything cleanly, then refresh inventory list
       setReviewQueue([]);
       setPrefillData(null);
       setCurrentOrderInfo(null);
       setShowAdd(false);
       setShowEdit(false);
+      setSelected(null);
+      // Re-fetch product list without touching location.state
+      fetchProducts();
       return;
     }
     const nextQueue = reviewQueue.slice(1);
@@ -652,6 +657,22 @@ export default function Inventory() {
 
   useEffect(() => { fetchAll(); }, []);
 
+  // Fetch only products/categories/suppliers — does NOT touch review queue state
+  const fetchProducts = async () => {
+    try {
+      const [prodRes, catRes, supRes] = await Promise.all([
+        getProducts({ limit: 100 }),
+        getCategories(),
+        getSuppliers(),
+      ]);
+      if (prodRes.success) setProducts(prodRes.data);
+      if (catRes.success) setCategories(catRes.data);
+      if (supRes.success) setSuppliers(supRes.data);
+    } catch (err) {
+      console.error('Inventory fetch error:', err.message);
+    }
+  };
+
   const fetchAll = async () => {
     try {
       setLoading(true);
@@ -667,11 +688,14 @@ export default function Inventory() {
       if (supRes.success) setSuppliers(loadedSuppliers);
 
       // ── Handle sequential B2B review queue ──
+      // Only read from location.state ONCE — then clear it from history
       const queue = location.state?.reviewQueue;
       const orderInfo = location.state?.orderInfo;
       
       if (queue && queue.length > 0 && !orderHandledRef.current) {
         orderHandledRef.current = true;
+        // Clear state from browser history so refresh won't trigger it again
+        navigate(location.pathname, { replace: true, state: {} });
         setReviewQueue(queue);
         setCurrentOrderInfo(orderInfo);
         startReview(queue[0], orderInfo, loadedProducts, loadedSuppliers);
@@ -694,7 +718,7 @@ export default function Inventory() {
         } else {
           setPrefillData(null);
           setShowAdd(false);
-          fetchAll();
+          fetchProducts(); // safe — does not re-trigger review queue
         }
       }
     } catch (err) {
@@ -727,7 +751,7 @@ export default function Inventory() {
         } else {
           setPrefillData(null);
           setShowEdit(false);
-          fetchAll();
+          fetchProducts(); // safe — does not re-trigger review queue
         }
       }
     } catch (err) {
