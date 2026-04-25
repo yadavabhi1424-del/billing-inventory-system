@@ -72,14 +72,9 @@ CREATE TABLE IF NOT EXISTS products (
   taxType        VARCHAR(20)   DEFAULT 'GST',
   stock          INT           DEFAULT 0,
   minStockLevel  INT           DEFAULT 10,
-  maxStockLevel  INT,
-  location       VARCHAR(100),
   image          VARCHAR(255),
   expiryDate     DATE,
   inventory_type ENUM('FINISHED','RAW','WIP','COMPONENT') DEFAULT 'FINISHED',
-  lead_time_days INT           DEFAULT 1,
-  min_order_qty  INT           DEFAULT 1,
-  industry_tags  JSON,
   is_public      BOOL          DEFAULT FALSE,
   isActive       BOOL          DEFAULT TRUE,
   createdAt      DATETIME      DEFAULT CURRENT_TIMESTAMP,
@@ -260,31 +255,18 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
 );
 `;
 
-export const MANUFACTURING_SCHEMA = `
-CREATE TABLE IF NOT EXISTS bom (
-  bom_id          VARCHAR(36)   PRIMARY KEY,
-  product_id      VARCHAR(36)   NOT NULL COMMENT 'Finished/WIP product',
-  component_id    VARCHAR(36)   NOT NULL COMMENT 'Raw material or component needed',
-  quantity_needed DECIMAL(10,3) NOT NULL,
-  unit            VARCHAR(20),
-  notes           TEXT,
-  createdAt       DATETIME      DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (product_id)   REFERENCES products(product_id),
-  FOREIGN KEY (component_id) REFERENCES products(product_id)
-);
-`;
 
 export const SHOP_TYPE_SCHEMAS = {
   general_store: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   electronics: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  textile: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
+  textile: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   pharmacy: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   restaurant: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  manufacturing: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
+  manufacturing: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   hardware: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   auto_parts: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   stationery: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
-  jewellery: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK', 'MANUFACTURING'],
+  jewellery: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
   warehouse: ['CORE', 'PROCUREMENT', 'STOCK'],
   other: ['CORE', 'SALES', 'PROCUREMENT', 'STOCK'],
 };

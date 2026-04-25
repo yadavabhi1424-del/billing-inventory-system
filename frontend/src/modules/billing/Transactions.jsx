@@ -197,26 +197,26 @@ function InvoiceBillModal({ txn, shopInfo, onClose, onInitiateReturn, linkedRetu
 }
 
 // ── Main Transactions Component ────────────────────────────────
-export default function Transactions({ user }) {
+export default function Transactions({ user, filterDate }) {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [search, setSearch]             = useState('');
   const [filterPayment, setFilterPayment] = useState('all');
-  const [filterDate, setFilterDate]     = useState('today');
+  const [page, setPage]                 = useState(1);
+  const [totalPages, setTotalPages]     = useState(1);
+  const [limit]                         = useState(10);
+  const [totalItems, setTotalItems]     = useState(0);
   const [selected, setSelected]         = useState(null);     // full txn for invoice modal
   const [detailLoading, setDetailLoading] = useState(false);
   const [shopInfo, setShopInfo]         = useState(null);
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [linkedReturns, setLinkedReturns]     = useState([]);
   
-  const [showPeriodMenu, setShowPeriodMenu]   = useState(false);
   const [showPaymentMenu, setShowPaymentMenu] = useState(false);
-  const periodRef = useRef(null);
   const paymentRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (periodRef.current && !periodRef.current.contains(e.target)) setShowPeriodMenu(false);
       if (paymentRef.current && !paymentRef.current.contains(e.target)) setShowPaymentMenu(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -230,32 +230,27 @@ export default function Transactions({ user }) {
     }).catch(() => {});
   }, []);
 
-  useEffect(() => { fetchTransactions(); }, [filterDate, filterPayment]);
+  useEffect(() => { 
+    setPage(1); 
+  }, [filterDate, filterPayment, search]);
+
+  useEffect(() => { fetchTransactions(); }, [filterDate, filterPayment, page]);
 
   const fetchTransactions = async () => {
     try {
       setLoading(true);
-      const params = {};
+      const params = { ...filterDate, page, limit };
       if (filterPayment !== 'all') params.paymentMethod = filterPayment.toUpperCase();
-
-      if (filterDate === 'today') {
-        const todayStr = getLocalDateStr();
-        params.startDate = todayStr;
-        params.endDate   = todayStr;
-      } else if (filterDate === 'yesterday') {
-        const y = new Date(); y.setDate(y.getDate() - 1);
-        const yStr = getLocalDateStr(y);
-        params.startDate = yStr;
-        params.endDate   = yStr;
-      } else if (filterDate === 'week') {
-        const w = new Date(); w.setDate(w.getDate() - 7);
-        params.startDate = getLocalDateStr(w);
-        params.endDate   = getLocalDateStr();
-      }
       if (search) params.search = search;
 
       const res = await getTransactions(params);
-      if (res.success) setTransactions(res.data);
+      if (res.success) {
+        setTransactions(res.data);
+        if (res.pagination) {
+          setTotalPages(res.pagination.pages);
+          setTotalItems(res.pagination.total);
+        }
+      }
     } catch (err) {
       console.error('Transactions fetch error:', err.message);
     } finally {
@@ -287,7 +282,7 @@ export default function Transactions({ user }) {
   };
 
   const totalAmount       = transactions.reduce((s, t) => s + parseFloat(t.totalAmount), 0);
-  const totalTransactions = transactions.length;
+  const totalTransactions = totalItems;
 
   return (
     <div className="transactions">
@@ -317,32 +312,6 @@ export default function Transactions({ user }) {
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleSearch}
           />
-        </div>
-
-        <div className="transactions-filter-group">
-          <label className="transactions-filter-label">Period</label>
-          <div className="transactions-dropdown-custom" ref={periodRef}>
-            <div 
-              className={`transactions-dropdown-trigger ${showPeriodMenu ? 'transactions-dropdown-trigger--active' : ''}`} 
-              onClick={() => setShowPeriodMenu(!showPeriodMenu)}
-            >
-              <span>{filterDate === 'yesterday' ? 'Yesterday' : filterDate === 'week' ? 'Last 7 Days' : filterDate === 'all' ? 'All Time' : 'Today'}</span>
-              <Icon name="chevronDown" size={14} />
-            </div>
-            {showPeriodMenu && (
-              <div className="transactions-dropdown-menu">
-                {['today', 'yesterday', 'week', 'all'].map(v => (
-                  <div 
-                    key={v}
-                    className={`transactions-dropdown-item ${filterDate === v ? 'active' : ''}`}
-                    onClick={() => { setFilterDate(v); setShowPeriodMenu(false); }}
-                  >
-                    {v === 'today' ? 'Today' : v === 'yesterday' ? 'Yesterday' : v === 'week' ? 'Last 7 Days' : 'All Time'}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="transactions-filter-group">
@@ -396,7 +365,7 @@ export default function Transactions({ user }) {
             <tbody>
               {transactions.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="transactions-empty">
+                  <td colSpan="9" className="transactions-empty">
                     <Icon name="search" size={32} />
                     <p>No transactions found</p>
                   </td>
@@ -454,6 +423,29 @@ export default function Transactions({ user }) {
           </table>
         )}
       </div>
+
+      {/* Pagination UI */}
+      {!loading && totalPages > 1 && (
+        <div className="transactions-pagination">
+          <button 
+            className="transactions-pagination-btn" 
+            disabled={page === 1} 
+            onClick={() => setPage(p => p - 1)}
+          >
+            <Icon name="chevronLeft" size={16} /> Previous
+          </button>
+          <div className="transactions-pagination-info">
+            Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+          </div>
+          <button 
+            className="transactions-pagination-btn" 
+            disabled={page === totalPages} 
+            onClick={() => setPage(p => p + 1)}
+          >
+            Next <Icon name="chevronRight" size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Loading overlay */}
       {detailLoading && (

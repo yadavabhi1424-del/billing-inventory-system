@@ -173,7 +173,7 @@ const createTransaction = async (req, res, next) => {
 const getAllTransactions = async (req, res, next) => {
   try {
     const { page = 1, limit = 20, search, status,
-            paymentMethod, startDate, endDate, customerId } = req.query;
+            paymentMethod, startDate, endDate, period, customerId } = req.query;
 
     const offset     = (parseInt(page) - 1) * parseInt(limit);
     const conditions = ["1=1"];
@@ -183,8 +183,24 @@ const getAllTransactions = async (req, res, next) => {
     if (paymentMethod) { conditions.push("t.paymentMethod = ?");   params.push(paymentMethod); }
     if (customerId)    { conditions.push("t.customer_id = ?");     params.push(customerId); }
     if (search)        { conditions.push("(t.invoiceNumber LIKE ? OR c.name LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
-    if (startDate)     { conditions.push("DATE(t.createdAt) >= ?"); params.push(startDate); }
-    if (endDate)       { conditions.push("DATE(t.createdAt) <= ?"); params.push(endDate); }
+
+    // Date Filtering using period, startDate, endDate
+    if (startDate && endDate) {
+      const s = startDate.includes(':') ? startDate : `${startDate} 00:00:00`;
+      const e = endDate.includes(':')   ? endDate   : `${endDate} 23:59:59`;
+      conditions.push(`t.createdAt BETWEEN ? AND ?`);
+      params.push(s, e);
+    } else if (period === 'today') {
+      conditions.push(`DATE(t.createdAt) = CURDATE()`);
+    } else if (period === 'yesterday') {
+      conditions.push(`DATE(t.createdAt) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)`);
+    } else if (period === 'week') {
+      conditions.push(`DATE(t.createdAt) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)`);
+    } else if (period === 'month') {
+      conditions.push(`MONTH(t.createdAt) = MONTH(CURDATE()) AND YEAR(t.createdAt) = YEAR(CURDATE())`);
+    } else if (period === 'year') {
+      conditions.push(`YEAR(t.createdAt) = YEAR(CURDATE())`);
+    }
 
     const where = conditions.join(" AND ");
 
@@ -495,6 +511,23 @@ const getReturnsByInvoice = async (req, res, next) => {
 
 const getTodaySummary = async (req, res, next) => {
   try {
+    const { period, startDate, endDate } = req.query;
+    let dateCondition = "DATE(createdAt) = CURDATE()";
+    const params = [];
+
+    if (startDate && endDate) {
+      dateCondition = "DATE(createdAt) BETWEEN ? AND ?";
+      params.push(startDate, endDate);
+    } else if (period === 'yesterday') {
+      dateCondition = "DATE(createdAt) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+    } else if (period === 'week') {
+      dateCondition = "DATE(createdAt) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)";
+    } else if (period === 'month') {
+      dateCondition = "MONTH(createdAt) = MONTH(CURDATE()) AND YEAR(createdAt) = YEAR(CURDATE())";
+    } else if (period === 'all') {
+      dateCondition = "1=1";
+    }
+
     const [[summary]] = await req.db.execute(
       `SELECT COUNT(*) as totalTransactions,
               COALESCE(SUM(totalAmount), 0) as totalSales,
@@ -503,7 +536,7 @@ const getTodaySummary = async (req, res, next) => {
               COALESCE(SUM(CASE WHEN paymentMethod='CASH' THEN totalAmount END), 0) as cashSales,
               COALESCE(SUM(CASE WHEN paymentMethod='UPI'  THEN totalAmount END), 0) as upiSales,
               COALESCE(SUM(CASE WHEN paymentMethod='CARD' THEN totalAmount END), 0) as cardSales
-       FROM transactions WHERE DATE(createdAt) = CURDATE() AND status = 'COMPLETED'`
+       FROM transactions WHERE ${dateCondition} AND status = 'COMPLETED'`, params
     );
     res.json({ success: true, data: summary });
   } catch (error) { next(error); }

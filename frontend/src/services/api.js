@@ -337,8 +337,8 @@ export async function getReturnsByInvoice(transactionId) {
   return await api.get(`/billing/${transactionId}/returns`);
 }
 
-export async function getTodaySummary() {
-  return await api.get('/billing/today-summary');
+export async function getTodaySummary(params = {}) {
+  return await api.get('/billing/today-summary', { params });
 }
 
 // ============================================================
@@ -503,8 +503,8 @@ export async function upsertDiscoveryProfile(data) {
 // ============================================================
 //  NETWORK / B2B (Order-to-Connect Flow)
 // ============================================================
-export async function getB2BOrders() {
-  return await api.get('/b2b/orders');
+export async function getB2BOrders(params = {}) {
+  return await api.get('/b2b/orders', { params });
 }
 
 export async function getB2BOrderById(id) {
@@ -531,8 +531,8 @@ export async function getB2BReturns(orderId) {
   return await api.get(`/b2b/orders/${orderId}/returns`);
 }
 
-export async function getAllB2BReturns() {
-  return await api.get('/b2b/returns');
+export async function getAllB2BReturns(params = {}) {
+  return await api.get('/b2b/returns', { params });
 }
 
 export async function processB2BReturn(orderId, returnId, finalItems) {

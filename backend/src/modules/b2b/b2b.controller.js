@@ -2,6 +2,36 @@ import { masterPool } from "../../config/masterDatabase.js";
 import { getTenantPool } from "../../middleware/tenant.middleware.js";
 import { v4 as uuidv4 } from "uuid";
 
+// ── Standardized condition generator ─────────────────────────────────────────
+const getCondition = (col, req, params = []) => {
+  const { startDate, endDate, period, month, year } = req.query;
+
+  if (startDate && endDate) {
+    const s = startDate.includes(':') ? startDate : `${startDate} 00:00:00`;
+    const e = endDate.includes(':')   ? endDate   : `${endDate} 23:59:59`;
+    params.push(s, e);
+    return `${col} BETWEEN ? AND ?`;
+  }
+
+  if (period === 'today') return `DATE(${col}) = CURDATE()`;
+  if (period === 'yesterday') return `DATE(${col}) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)`;
+  if (period === 'week')  return `DATE(${col}) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
+  if (period === 'month') return `MONTH(${col}) = MONTH(CURDATE()) AND YEAR(${col}) = YEAR(CURDATE())`;
+  if (period === 'year')  return `YEAR(${col}) = YEAR(CURDATE())`;
+
+  if (month && year) {
+    params.push(parseInt(month), parseInt(year));
+    return `MONTH(${col}) = ? AND YEAR(${col}) = ?`;
+  }
+
+  if (year) {
+    params.push(parseInt(year));
+    return `YEAR(${col}) = ?`;
+  }
+
+  return "1=1";
+};
+
 // POST /api/b2b/orders — Place a new order (from Discovery)
 export const createB2BOrder = async (req, res, next) => {
   const connection = await masterPool.getConnection();
@@ -42,9 +72,9 @@ export const createB2BOrder = async (req, res, next) => {
       const item_id = uuidv4();
       const lineTotal = Number(item.price) * Number(item.qty);
       await connection.execute(
-        `INSERT INTO b2b_order_items (id, order_id, product_id, name, sku, price, qty, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item_id, order_id, item.product_id, item.name, item.sku, item.price, item.qty, lineTotal]
+        `INSERT INTO b2b_order_items (id, order_id, product_id, name, sku, price, tax_rate, qty, total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item_id, order_id, item.product_id, item.name, item.sku, item.price, item.taxRate || item.tax_rate || 0, item.qty, lineTotal]
       );
     }
 
@@ -76,21 +106,21 @@ export const getB2BOrders = async (req, res, next) => {
     );
     if (selfRows.length > 0) finalMyId = selfRows[0].supplier_id;
 
-    let query, params;
+    let query, params = [finalMyId];
+    const dateCond = getCondition('o.createdAt', req, params);
+
     if (userType === 'supplier') {
       query = `SELECT o.*, p.business_name, p.logo,
                  (SELECT r.status FROM b2b_returns r WHERE r.order_id = o.order_id ORDER BY r.createdAt DESC LIMIT 1) as latest_return_status
                FROM b2b_orders o
                JOIN profiles p ON p.entity_id = o.shop_id
-               WHERE o.supplier_id = ? ORDER BY o.createdAt DESC`;
-      params = [finalMyId];
+               WHERE o.supplier_id = ? AND ${dateCond} ORDER BY o.createdAt DESC`;
     } else {
       query = `SELECT o.*, p.business_name, p.logo,
                  (SELECT r.status FROM b2b_returns r WHERE r.order_id = o.order_id ORDER BY r.createdAt DESC LIMIT 1) as latest_return_status
                FROM b2b_orders o
                JOIN profiles p ON p.entity_id = o.supplier_id
-               WHERE o.shop_id = ? ORDER BY o.createdAt DESC`;
-      params = [finalMyId];
+               WHERE o.shop_id = ? AND ${dateCond} ORDER BY o.createdAt DESC`;
     }
 
     const [rows] = await masterPool.execute(query, params);
@@ -153,6 +183,58 @@ export const getB2BOrderById = async (req, res, next) => {
     }
 
     const [items] = await masterPool.execute("SELECT * FROM b2b_order_items WHERE order_id = ?", [id]);
+
+    // If the caller is the supplier, hydrate taxRate from their local inventory
+    // to ensure POS shows correct tax even if master DB was missing it.
+    if (req.user.userType === 'supplier' && req.db) {
+      try {
+        const productIds = items.map(i => i.product_id).filter(Boolean);
+        const skus = items.map(i => i.sku).filter(Boolean);
+        const names = items.map(i => i.name).filter(Boolean);
+        
+        if (productIds.length > 0 || skus.length > 0 || names.length > 0) {
+          // Try to match by ID, then SKU, then Name
+          let query = "SELECT product_id, sku, name, taxRate FROM products WHERE 1=0";
+          const params = [];
+          
+          if (productIds.length > 0) {
+            query += ` OR product_id IN (${productIds.map(() => '?').join(',')})`;
+            params.push(...productIds);
+          }
+          if (skus.length > 0) {
+            query += ` OR sku IN (${skus.map(() => '?').join(',')})`;
+            params.push(...skus);
+          }
+          if (names.length > 0) {
+            query += ` OR name IN (${names.map(() => '?').join(',')})`;
+            params.push(...names);
+          }
+
+          const [localProds] = await req.db.execute(query, params);
+          
+          const idMap = {};
+          const skuMap = {};
+          const nameMap = {};
+          localProds.forEach(p => {
+            if (p.product_id) idMap[p.product_id] = p.taxRate;
+            if (p.sku) skuMap[p.sku] = p.taxRate;
+            if (p.name) nameMap[p.name.toLowerCase()] = p.taxRate;
+          });
+          
+          items.forEach(item => {
+            if (idMap[item.product_id] !== undefined) {
+              item.taxRate = idMap[item.product_id];
+            } else if (item.sku && skuMap[item.sku] !== undefined) {
+              item.taxRate = skuMap[item.sku];
+            } else if (item.name && nameMap[item.name.toLowerCase()] !== undefined) {
+              item.taxRate = nameMap[item.name.toLowerCase()];
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("[getB2BOrderById] Local tax hydration failed:", e.message);
+      }
+    }
 
     // Fetch returns with their items
     const [returns] = await masterPool.execute(
@@ -548,25 +630,25 @@ export const getAllB2BReturns = async (req, res, next) => {
 
     if (!finalMyId) return res.json({ success: true, data: [] });
 
-    let query, params;
+    let query, params = [finalMyId];
+    const dateCond = getCondition('r.createdAt', req, params);
+
     if (userType === 'supplier') {
       // Supplier sees returns requested BY shops
       query = `SELECT r.*, o.createdAt as order_date, p.business_name as shop_name, p.logo as shop_logo
                FROM b2b_returns r
                JOIN b2b_orders o ON o.order_id = r.order_id
                JOIN profiles p ON p.entity_id = r.shop_id
-               WHERE r.supplier_id = ? 
+               WHERE r.supplier_id = ? AND ${dateCond}
                ORDER BY r.createdAt DESC`;
-      params = [finalMyId];
     } else {
       // Shop sees returns they requested
       query = `SELECT r.*, o.createdAt as order_date, p.business_name as supplier_name, p.logo as supplier_logo
                FROM b2b_returns r
                JOIN b2b_orders o ON o.order_id = r.order_id
                JOIN profiles p ON p.entity_id = r.supplier_id
-               WHERE r.shop_id = ? 
+               WHERE r.shop_id = ? AND ${dateCond}
                ORDER BY r.createdAt DESC`;
-      params = [finalMyId];
     }
 
     const [rows] = await masterPool.execute(query, params);

@@ -3,7 +3,7 @@ import { masterPool } from "../config/masterDatabase.js";
 import { AppError }   from "./errorHandler.js";
 import {
   CORE_SCHEMA, SALES_SCHEMA, PROCUREMENT_SCHEMA,
-  MANUFACTURING_SCHEMA, STOCK_SCHEMA, SHOP_TYPE_SCHEMAS,
+  STOCK_SCHEMA, SHOP_TYPE_SCHEMAS,
 } from '../config/tenantSchema.js';
 import {
   SUPPLIER_CORE_SCHEMA,
@@ -16,7 +16,6 @@ const SCHEMA_MAP = {
   CORE:          CORE_SCHEMA,
   SALES:         SALES_SCHEMA,
   PROCUREMENT:   PROCUREMENT_SCHEMA,
-  MANUFACTURING: MANUFACTURING_SCHEMA,
   STOCK:         STOCK_SCHEMA,
 };
 

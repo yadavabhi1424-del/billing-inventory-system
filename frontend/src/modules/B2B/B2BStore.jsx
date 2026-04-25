@@ -52,9 +52,9 @@ const B2BStore = ({ user }) => {
     setCart(prev => {
       const existing = prev.find(item => item.product_id === product.product_id);
       if (existing) {
-        return prev.map(item => 
-          item.product_id === product.product_id 
-            ? { ...item, quantity: item.quantity + 1 } 
+        return prev.map(item =>
+          item.product_id === product.product_id
+            ? { ...item, quantity: item.quantity + 1 }
             : item
         );
       }
@@ -106,19 +106,19 @@ const B2BStore = ({ user }) => {
           <h1>B2B Marketplace</h1>
           <p>Order directly from your connected suppliers</p>
         </div>
-        
+
         <div className="b2b-store__controls">
           <div className="b2b-store__search">
-            <input 
-              type="text" 
-              placeholder="Search products or SKUs..." 
+            <input
+              type="text"
+              placeholder="Search products or SKUs..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          
+
           <div className="b2b-store__filter">
-            <select 
+            <select
               value={selectedSupplier}
               onChange={(e) => setSelectedSupplier(e.target.value)}
             >
@@ -129,7 +129,7 @@ const B2BStore = ({ user }) => {
             </select>
           </div>
 
-          <button 
+          <button
             className={`b2b-store__cart-btn ${cart.length > 0 ? 'has-items' : ''}`}
             onClick={() => setShowCart(!showCart)}
           >
@@ -169,7 +169,7 @@ const B2BStore = ({ user }) => {
                     const cartItem = cart.find(c => c.product_id === product.product_id);
                     if (!cartItem) {
                       return (
-                        <button 
+                        <button
                           className="b2b-card__add-btn"
                           onClick={() => addToCart(product)}
                         >
@@ -180,13 +180,16 @@ const B2BStore = ({ user }) => {
                     return (
                       <div className="qty-picker">
                         <button onClick={() => updateQuantity(product.product_id, cartItem.quantity - 1)}>−</button>
-                        <input 
-                          type="number"
-                          min="0"
-                          className="hide-spinners"
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          className="qty-picker__input"
                           value={cartItem.quantity}
-                          onChange={(e) => updateQuantity(product.product_id, parseInt(e.target.value) || 0)}
-                          style={{ width: '40px', textAlign: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/[^0-9]/g, '');
+                            updateQuantity(product.product_id, parseInt(val) || 0);
+                          }}
                         />
                         <button onClick={() => updateQuantity(product.product_id, cartItem.quantity + 1)}>+</button>
                       </div>
@@ -205,7 +208,7 @@ const B2BStore = ({ user }) => {
           <h2>B2B Order Cart</h2>
           <button onClick={() => setShowCart(false)}>✕</button>
         </div>
-        
+
         <div className="b2b-cart__items">
           {cart.length === 0 ? (
             <p className="empty-msg">Your cart is empty</p>
@@ -219,12 +222,16 @@ const B2BStore = ({ user }) => {
                 <div className="cart-item__actions">
                   <div className="qty-picker">
                     <button onClick={() => updateQuantity(item.product_id, item.quantity - 1)}>−</button>
-                    <input 
-                      type="number"
-                      min="1"
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="qty-picker__input"
                       value={item.quantity}
-                      onChange={(e) => updateQuantity(item.product_id, parseInt(e.target.value) || 1)}
-                      style={{ width: '40px', textAlign: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: 'white', borderRadius: '4px', fontWeight: 'bold' }}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        updateQuantity(item.product_id, parseInt(val) || 1);
+                      }}
                     />
                     <button onClick={() => updateQuantity(item.product_id, item.quantity + 1)}>+</button>
                   </div>

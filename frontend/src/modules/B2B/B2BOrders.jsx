@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  getB2BOrders, 
-  getB2BOrderById, 
-  updateB2BOrderStatus, 
+import {
+  getB2BOrders,
+  getB2BOrderById,
+  updateB2BOrderStatus,
   createB2BReturn,
   processB2BReturn,
   rejectB2BReturn
@@ -15,17 +15,17 @@ import './B2BOrders.css';
 const fmt = (n) => '₹' + Number(n || 0).toLocaleString('en-IN');
 
 const STATUS_MAP = {
-  PENDING:          { label: 'Pending',      cls: 'status--pending' },
-  ACCEPTED:         { label: 'Accepted',     cls: 'status--accepted' },
-  BILLED:           { label: 'Billed',       cls: 'status--billed' },
-  CLOSED:           { label: 'Closed',       cls: 'status--closed' },
-  REJECTED:         { label: 'Rejected',     cls: 'status--rejected' },
-  RETURN_REQUESTED: { label: 'Return Req.',  cls: 'status--warning' },
-  RETURN_PENDING_SHOP: { label: 'Pending',   cls: 'status--warning' },
-  RETURNED:         { label: 'Returned',     cls: 'status--accepted' }
+  PENDING: { label: 'Pending', cls: 'status--pending' },
+  ACCEPTED: { label: 'Accepted', cls: 'status--accepted' },
+  BILLED: { label: 'Billed', cls: 'status--billed' },
+  CLOSED: { label: 'Closed', cls: 'status--closed' },
+  REJECTED: { label: 'Rejected', cls: 'status--rejected' },
+  RETURN_REQUESTED: { label: 'Return Req.', cls: 'status--warning' },
+  RETURN_PENDING_SHOP: { label: 'Pending', cls: 'status--warning' },
+  RETURNED: { label: 'Returned', cls: 'status--accepted' }
 };
 
-export default function B2BOrders({ user }) {
+export default function B2BOrders({ user, filterDate }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -39,7 +39,7 @@ export default function B2BOrders({ user }) {
   const [returnReason, setReturnReason] = useState('');
   const [returnLoading, setReturnLoading] = useState(false);
   const [returnSuccess, setReturnSuccess] = useState(null); // { message }
-  
+
   // Supplier Processes Return
   const [processModal, setProcessModal] = useState(null); // { order, returnReq }
   const [processItems, setProcessItems] = useState([]);   // [{ return_item_id, return_qty, max_qty, ... }]
@@ -68,7 +68,7 @@ export default function B2BOrders({ user }) {
     if (order.status === 'RETURN_REQUESTED' || retStatus === 'PENDING') {
       return isSupplier ? 'RETURN_REQUESTED' : 'RETURN_PENDING_SHOP';
     }
-    
+
     if (order.status === 'CLOSED' && retStatus === 'APPROVED') {
       return 'RETURNED';
     }
@@ -78,12 +78,12 @@ export default function B2BOrders({ user }) {
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [filterDate]);
 
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const res = await getB2BOrders();
+      const res = await getB2BOrders({ ...filterDate });
       if (res.success) setOrders(res.data);
     } catch (err) {
       console.error("Fetch orders failed", err);
@@ -117,7 +117,7 @@ export default function B2BOrders({ user }) {
         if (status === 'CLOSED' && res.unsyncedItems && res.unsyncedItems.length > 0) {
           const item = res.unsyncedItems[0];
           alert(`Order received. ${res.unsyncedItems.length} item(s) need review in your inventory. Opening review sequence...`);
-          
+
           navigate('/inventory', {
             state: {
               reviewQueue: res.unsyncedItems, // Pass the whole list
@@ -203,11 +203,11 @@ export default function B2BOrders({ user }) {
     try {
       const payload = selectedReturnItems.map(i => ({
         order_item_id: i.id,
-        product_id:    i.product_id,
-        name:          i.name,
-        sku:           i.sku,
-        return_qty:    i.return_qty,
-        unit_price:    Number(i.price),
+        product_id: i.product_id,
+        name: i.name,
+        sku: i.sku,
+        return_qty: i.return_qty,
+        unit_price: Number(i.price),
       }));
 
       const res = await createB2BReturn(returnModal.order.order_id, payload, returnReason.trim());
@@ -232,13 +232,13 @@ export default function B2BOrders({ user }) {
       // Find the pending return for this order
       const pendingReturn = (order.returns || []).find(r => r.status === 'PENDING');
       if (!pendingReturn) return alert("No pending return request found.");
-      
+
       const initItems = (pendingReturn.items || []).map(ri => ({
         ...ri,
         max_qty: ri.return_qty,
         current_qty: ri.return_qty
       }));
-      
+
       setProcessItems(initItems);
       setProcessModal({ order, returnReq: pendingReturn });
     } catch (e) { alert("Failed to open process modal"); }
@@ -271,7 +271,7 @@ export default function B2BOrders({ user }) {
         return_item_id: i.id,
         return_qty: i.current_qty
       }));
-      
+
       const res = await processB2BReturn(processModal.order.order_id, processModal.returnReq.return_id, payload);
       if (res.success) {
         alert("Return processed correctly.");
@@ -363,7 +363,7 @@ export default function B2BOrders({ user }) {
                           <button className="icon-btn btn-reject" title="Reject" onClick={() => handleRejectClick(o.order_id)}><Icon name="x" size={16} /></button>
                         </>
                       )}
-                      
+
                       {/* Shop Requests Return */}
                       {!isSupplier && ['CLOSED', 'BILLED'].includes(o.status) && !o.latest_return_status && (
                         <button className="icon-btn btn-return" title="Request Return" onClick={async (e) => {
@@ -372,7 +372,7 @@ export default function B2BOrders({ user }) {
                           if (res.success) handleOpenReturn(res.data);
                         }}><Icon name="reports" size={16} /></button>
                       )}
-                      
+
                       {/* Supplier Processes Return */}
                       {isSupplier && o.status === 'RETURN_REQUESTED' && (
                         <button className="icon-btn btn-return" title="Process Return" onClick={async (e) => {
@@ -503,8 +503,8 @@ export default function B2BOrders({ user }) {
                     <div className="returns-section">
                       <h3>Return History</h3>
                       {selectedOrder.returns.map(r => (
-                        <div 
-                          key={r.return_id} 
+                        <div
+                          key={r.return_id}
                           className={`return-history-item ${isSupplier && r.status === 'PENDING' ? 'return-history-item--clickable' : ''}`}
                           onClick={() => {
                             if (isSupplier && r.status === 'PENDING') {
@@ -529,7 +529,7 @@ export default function B2BOrders({ user }) {
                       ))}
                     </div>
                   )}
-                  
+
                   {selectedOrder.rejection_reason && (
                     <div className="notes-section" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 8, padding: '0.75rem 1rem' }}>
                       <h3 style={{ color: '#ef4444', marginBottom: 4 }}>Rejection Reason</h3><p style={{ color: '#ef4444', opacity: 0.85 }}>{selectedOrder.rejection_reason}</p>
@@ -546,7 +546,7 @@ export default function B2BOrders({ user }) {
                         <button className="panel-btn btn-reject" onClick={() => handleRejectClick(selectedOrder.order_id)}>Reject</button>
                       </div>
                     )}
-                    
+
                     {/* Supplier converts accepted order to bill */}
                     {isSupplier && selectedOrder.status === 'ACCEPTED' && (
                       <button className="panel-btn btn-primary" onClick={() => navigate(`/billing?order_id=${selectedOrder.order_id}`)}>Proceed to Bill</button>
@@ -555,7 +555,7 @@ export default function B2BOrders({ user }) {
                     {/* Shop marks billed order as received */}
                     {!isSupplier && selectedOrder.status === 'BILLED' && (
                       <button className="panel-btn btn-success" onClick={() => handleAction(selectedOrder.order_id, 'CLOSED')}>
-                         <Icon name="check" size={15} /> Mark Received & Review Stock
+                        <Icon name="check" size={15} /> Mark Received & Review Stock
                       </button>
                     )}
 
@@ -566,20 +566,20 @@ export default function B2BOrders({ user }) {
                       const actualPending = pending.filter(item => {
                         let returnedQty = 0;
                         if (selectedOrder.returns) {
-                           selectedOrder.returns.forEach(r => {
-                              if (r.status === 'APPROVED') {
-                                 const ri = r.items?.find(ri => ri.product_id === item.product_id);
-                                 if (ri) returnedQty += Number(ri.return_qty);
-                              }
-                           });
+                          selectedOrder.returns.forEach(r => {
+                            if (r.status === 'APPROVED') {
+                              const ri = r.items?.find(ri => ri.product_id === item.product_id);
+                              if (ri) returnedQty += Number(ri.return_qty);
+                            }
+                          });
                         }
                         return (item.qty - returnedQty) > 0;
                       });
 
                       if (actualPending.length > 0) {
                         return (
-                          <button 
-                            className="panel-btn btn-primary" 
+                          <button
+                            className="panel-btn btn-primary"
                             onClick={() => {
                               navigate('/inventory', {
                                 state: {
@@ -600,7 +600,7 @@ export default function B2BOrders({ user }) {
                               });
                             }}
                           >
-                             <Icon name="refresh" size={15} /> Review & Update Stock ({actualPending.length})
+                            <Icon name="refresh" size={15} /> Review & Update Stock ({actualPending.length})
                           </button>
                         );
                       }
@@ -611,7 +611,7 @@ export default function B2BOrders({ user }) {
                     {!isSupplier && ['CLOSED', 'BILLED'].includes(selectedOrder.status) && (!selectedOrder.returns || selectedOrder.returns.length === 0) && (
                       <button className="panel-btn btn-return" onClick={() => handleOpenReturn(selectedOrder)}>↩ Request Return</button>
                     )}
-                    
+
                     {/* Supplier processes return */}
                     {isSupplier && selectedOrder.returns?.some(r => r.status === 'PENDING') && (
                       <button className="panel-btn btn-return" onClick={() => handleOpenProcess(selectedOrder)}>↩ Process Return</button>
@@ -676,7 +676,7 @@ export default function B2BOrders({ user }) {
                   <div className="return-items-list">
                     {returnItems.map(item => (
                       <div key={item.id} className={`return-item-row ${item.selected ? 'return-item-row--selected' : ''}`}>
-                        <label className="return-item-check"><input type="checkbox" checked={item.selected} onChange={() => handleToggleReturnItem(item.id)}/></label>
+                        <label className="return-item-check"><input type="checkbox" checked={item.selected} onChange={() => handleToggleReturnItem(item.id)} /></label>
                         <div className="return-item-info"><span className="return-item-name">{item.name}</span><span className="return-item-sku">{item.sku} · Ordered: {item.qty}</span></div>
                         <div className="return-item-price">{fmt(item.price)}/ea</div>
                         {item.selected && (

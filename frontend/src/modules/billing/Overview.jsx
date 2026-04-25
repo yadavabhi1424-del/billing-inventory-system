@@ -5,21 +5,21 @@ import './Overview.css';
 
 const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN');
 
-export default function Overview() {
+export default function Overview({ filterDate }) {
   const [stats,    setStats]    = useState(null);
   const [topProds, setTopProds] = useState([]);
   const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [filterDate]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       const [summaryRes, salesRes] = await Promise.all([
-        getTodaySummary(),
-        getSalesReport(),
+        getTodaySummary({ ...filterDate }),
+        getSalesReport({ ...filterDate }),
       ]);
       if (summaryRes.success) setStats(summaryRes.data);
       if (salesRes.success)   setTopProds(salesRes.data.topProducts || []);
@@ -54,9 +54,9 @@ export default function Overview() {
         <div className="overview-stat-card" style={{ '--accent': 'var(--color-accent-primary)' }}>
           <div className="overview-stat-card__icon"><Icon name="reports" size={20} /></div>
           <div className="overview-stat-card__content">
-            <span className="overview-stat-card__label">Today's Revenue</span>
+            <span className="overview-stat-card__label">Revenue</span>
             <span className="overview-stat-card__value">{fmt(stats?.totalSales || 0)}</span>
-            <span className="overview-stat-card__trend">Total sales today</span>
+            <span className="overview-stat-card__trend">Filtered period</span>
           </div>
         </div>
 
@@ -74,7 +74,7 @@ export default function Overview() {
           <div className="overview-stat-card__content">
             <span className="overview-stat-card__label">Total Orders</span>
             <span className="overview-stat-card__value">{stats?.totalTransactions || 0}</span>
-            <span className="overview-stat-card__trend">Transactions today</span>
+            <span className="overview-stat-card__trend">Filtered period</span>
           </div>
         </div>
 
@@ -95,7 +95,7 @@ export default function Overview() {
         <div className="overview-section">
           <div className="overview-section__header">
             <h3 className="overview-section__title">Payment Breakdown</h3>
-            <span className="overview-section__subtitle">Today's transactions</span>
+            <span className="overview-section__subtitle">Filtered period</span>
           </div>
           <div className="payment-breakdown">
             {totalPayments === 0 ? (
@@ -132,7 +132,7 @@ export default function Overview() {
         <div className="overview-section">
           <div className="overview-section__header">
             <h3 className="overview-section__title">Top Selling Products</h3>
-            <span className="overview-section__subtitle">This month</span>
+            <span className="overview-section__subtitle">Filtered period</span>
           </div>
           <div className="top-products-list">
             {topProds.length === 0 ? (

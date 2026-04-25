@@ -9,7 +9,7 @@ import Icon from '../../components/Icon';
 import {
   getProducts, createProduct, updateProduct,
   deleteProduct, getCategories, getSuppliers, createCategory, getNextSkuSeq,
-  markB2BItemSynced,
+  markB2BItemSynced, createSupplier
 } from '../../services/api';
 import './Inventory.css';
 
@@ -31,7 +31,8 @@ function ProductFormModal({
   onClose, 
   onSave, 
   onSkip,
-  onCategoriesUpdate 
+  onCategoriesUpdate,
+  onSuppliersUpdate
 }) {
   const isEdit = !!product;
   const user = JSON.parse(localStorage.getItem('stocksense_user') || '{}');
@@ -89,6 +90,7 @@ function ProductFormModal({
   const [supSearch, setSupSearch] = useState('');
   const [supOpen, setSupOpen] = useState(false);
   const [creatingCat, setCreatingCat] = useState(false);
+  const [creatingSup, setCreatingSup] = useState(false);
   const [unitOpen, setUnitOpen] = useState(false);
   const [gstOpen, setGstOpen] = useState(false);
   const catRef = useRef(null);
@@ -144,6 +146,35 @@ function ProductFormModal({
       alert('Failed to create category: ' + err.message);
     } finally {
       setCreatingCat(false);
+    }
+  };
+
+  const handleCreateSupplier = async () => {
+    if (creatingSup) return;
+    const name = supSearch.trim();
+    if (!name) return;
+    const clean = name.toLowerCase();
+    if (suppliers.some(s => s.name.trim().toLowerCase() === clean)) return;
+    setCreatingSup(true);
+    try {
+      const res = await createSupplier({ 
+        name, 
+        phone: '0000000000',
+        address: 'Manual Entry'
+      });
+      if (!res.success) {
+        alert('Failed to create supplier');
+        return;
+      }
+      const newSup = res.data;
+      onSuppliersUpdate(prev => [...prev, newSup]);
+      set('supplierId', newSup.supplier_id);
+      setSupSearch('');
+      setSupOpen(false);
+    } catch (err) {
+      alert('Failed to create supplier: ' + err.message);
+    } finally {
+      setCreatingSup(false);
     }
   };
 
@@ -380,7 +411,15 @@ function ProductFormModal({
                           {s.name}
                         </div>
                       ))}
-                      {filteredSups.length === 0 && (
+                      {supSearch.trim() && !filteredSups.some(s => s.name.toLowerCase() === supSearch.toLowerCase()) && (
+                        <div
+                          className="product-form__dropdown-item product-form__dropdown-create"
+                          onClick={handleCreateSupplier}
+                        >
+                          {creatingSup ? 'Creating...' : `+ Create "${supSearch}"`}
+                        </div>
+                      )}
+                      {filteredSups.length === 0 && !supSearch.trim() && (
                         <div className="product-form__dropdown-empty">No suppliers found (leave empty if not applicable)</div>
                       )}
                     </div>
@@ -1059,6 +1098,7 @@ export default function Inventory() {
           onSave={handleAdd}
           onSkip={handleReviewNext}
           onCategoriesUpdate={setCategories}
+          onSuppliersUpdate={setSuppliers}
         />
       )}
 
@@ -1074,6 +1114,7 @@ export default function Inventory() {
           onSave={handleEdit}
           onSkip={handleReviewNext}
           onCategoriesUpdate={setCategories}
+          onSuppliersUpdate={setSuppliers}
         />
       )}
     </div>

@@ -381,8 +381,8 @@ export default function UserManagement({ user: currentUser }) {
                   {u.user_id !== currentUser?.user_id && (() => {
                     const targetRole = u.role?.toUpperCase();
                     const currentRole = currentUser?.role?.toUpperCase();
-                    // Nobody can act on Owner
-                    if (targetRole === 'OWNER') {
+                    // Nobody can act on verified Owner
+                    if (targetRole === 'OWNER' && u.status !== 'PENDING') {
                       return <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>—</span>;
                     }
                     // Admin cannot act on other Admins
@@ -391,12 +391,14 @@ export default function UserManagement({ user: currentUser }) {
                     }
                     return (
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button
-                          className={`um-icon-btn ${u.isActive ? 'um-icon-btn--danger' : 'um-icon-btn--success'}`}
-                          onClick={() => handleToggleActive(u)}
-                          title={u.isActive ? 'Deactivate' : 'Activate'}>
-                          <Icon name={u.isActive ? 'x' : 'check'} size={13} />
-                        </button>
+                        {u.status !== 'PENDING' && (
+                          <button
+                            className={`um-icon-btn ${u.isActive ? 'um-icon-btn--danger' : 'um-icon-btn--success'}`}
+                            onClick={() => handleToggleActive(u)}
+                            title={u.isActive ? 'Deactivate' : 'Activate'}>
+                            <Icon name={u.isActive ? 'x' : 'check'} size={13} />
+                          </button>
+                        )}
                         <button
                           className="um-icon-btn um-icon-btn--danger"
                           onClick={() => handleDelete(u)}

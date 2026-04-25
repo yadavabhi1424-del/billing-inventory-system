@@ -14,7 +14,7 @@ const STATUS_MAP = {
 
 const ROWS_PER_PAGE = 10;
 
-export default function B2BReturns({ user }) {
+export default function B2BReturns({ user, filterDate }) {
   const [returns, setReturns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page,    setPage]    = useState(0);
@@ -30,12 +30,12 @@ export default function B2BReturns({ user }) {
 
   useEffect(() => {
     fetchReturns();
-  }, []);
+  }, [filterDate]);
 
   const fetchReturns = async () => {
     try {
       setLoading(true);
-      const res = await getAllB2BReturns();
+      const res = await getAllB2BReturns({ ...filterDate });
       if (res.success) setReturns(res.data);
     } catch (err) {
       console.error("Fetch returns error:", err.message);

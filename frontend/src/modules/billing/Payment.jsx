@@ -86,7 +86,7 @@ function InvoiceModal({ invoice, onClose, shopInfo }) {
                     <div style={{ fontWeight: 600 }}>{item.name}</div>
                     <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily: 'monospace' }}>{item.sku}</div>
                   </td>
-                  <td>{item.taxRate || 0}%</td>
+                  <td>{item.taxRate || item.tax_rate || 0}%</td>
                   <td style={{ textAlign: 'right' }}>{parseInt(item.qty) || 1}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{fmt(item.sellingPrice)}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 700 }}>
@@ -200,6 +200,25 @@ export default function Payment({ user }) {
     }
   }, [location]);
 
+  // ── Hydrate B2B cart tax rates from local products ─────────
+  useEffect(() => {
+    if (b2bOrderId && products.length > 0 && cart.length > 0) {
+      const hasZeroTax = cart.some(item => Number(item.taxRate || 0) === 0);
+      if (hasZeroTax) {
+        setCart(prev => prev.map(item => {
+          if (Number(item.taxRate || 0) === 0) {
+            const local = products.find(p => 
+              (p.product_id && item.product_id && p.product_id === item.product_id) || 
+              (p.sku && item.sku && p.sku === item.sku)
+            );
+            if (local && local.taxRate) return { ...item, taxRate: local.taxRate };
+          }
+          return item;
+        }));
+      }
+    }
+  }, [products, b2bOrderId, cart.length]);
+
   const fetchB2BOrder = async (id) => {
     try {
       const res = await getB2BOrderById(id);
@@ -215,7 +234,7 @@ export default function Payment({ user }) {
           sku:          item.sku,
           sellingPrice: Number(item.price),
           qty:          item.qty,
-          taxRate:      item.taxRate || 0,
+          taxRate:      Number(item.taxRate || 0) || Number(item.tax_rate || 0) || 0,
         }));
         setCart(mappedItems);
         setB2bOriginalItems(order.items);
@@ -412,11 +431,12 @@ export default function Payment({ user }) {
     : 0;
   const taxable = Math.max(subtotal - discountAmt, 0);
 
-  // GST calculation per rate group
   const gstGroups = cart.reduce((acc, item) => {
-    const key = item.taxRate || 0;
+    // Priority: local hydrated taxRate > master tax_rate > 0
+    const rateValue = Number(item.taxRate) || Number(item.tax_rate) || 0;
+    const key = rateValue.toString();
     if (!acc[key]) acc[key] = 0;
-    acc[key] += item.sellingPrice * (parseInt(item.qty) || 0);
+    acc[key] += Number(item.sellingPrice || 0) * (parseInt(item.qty) || 0);
     return acc;
   }, {});
 

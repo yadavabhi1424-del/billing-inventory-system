@@ -24,12 +24,12 @@ a:hover {
 }
 
 /* Hide default arrows on number inputs globally */
-input[type="number"].hide-spinners::-webkit-outer-spin-button,
-input[type="number"].hide-spinners::-webkit-inner-spin-button {
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none !important;
   margin: 0 !important;
 }
-input[type="number"].hide-spinners {
+input[type="number"] {
   -moz-appearance: textfield !important;
   appearance: textfield !important;
-} 
+}

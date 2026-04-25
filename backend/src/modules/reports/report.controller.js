@@ -3,31 +3,28 @@ import { masterPool } from "../../config/masterDatabase.js";
 // ── Standardized condition generator ─────────────────────────────────────────
 const getCondition = (col, req, params = []) => {
   const { startDate, endDate, period, month, year } = req.query;
-  // Use DATE_ADD(..., INTERVAL 330 MINUTE) for IST (+5:30) as it is most compatible
-  const tzCol = `DATE_ADD(${col}, INTERVAL 330 MINUTE)`;
-  const nowTz = `DATE_ADD(NOW(), INTERVAL 330 MINUTE)`;
 
   if (startDate && endDate) {
     const s = startDate.includes(':') ? startDate : `${startDate} 00:00:00`;
     const e = endDate.includes(':')   ? endDate   : `${endDate} 23:59:59`;
     params.push(s, e);
-    return `${tzCol} BETWEEN ? AND ?`;
+    return `${col} BETWEEN ? AND ?`;
   }
 
-  if (period === 'today') return `DATE(${tzCol}) = DATE(${nowTz})`;
-  if (period === 'yesterday') return `DATE(${tzCol}) = DATE_SUB(DATE(${nowTz}), INTERVAL 1 DAY)`;
-  if (period === 'week')  return `DATE(${tzCol}) >= DATE_SUB(DATE(${nowTz}), INTERVAL 6 DAY)`;
-  if (period === 'month') return `MONTH(${tzCol}) = MONTH(${nowTz}) AND YEAR(${tzCol}) = YEAR(${nowTz})`;
-  if (period === 'year')  return `YEAR(${tzCol}) = YEAR(${nowTz})`;
+  if (period === 'today') return `DATE(${col}) = CURDATE()`;
+  if (period === 'yesterday') return `DATE(${col}) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)`;
+  if (period === 'week')  return `DATE(${col}) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)`;
+  if (period === 'month') return `MONTH(${col}) = MONTH(CURDATE()) AND YEAR(${col}) = YEAR(CURDATE())`;
+  if (period === 'year')  return `YEAR(${col}) = YEAR(CURDATE())`;
 
   if (month && year) {
     params.push(parseInt(month), parseInt(year));
-    return `MONTH(${tzCol}) = ? AND YEAR(${tzCol}) = ?`;
+    return `MONTH(${col}) = ? AND YEAR(${col}) = ?`;
   }
 
   if (year) {
     params.push(parseInt(year));
-    return `YEAR(${tzCol}) = ?`;
+    return `YEAR(${col}) = ?`;
   }
 
   return "1=1";
@@ -132,7 +129,7 @@ const getDetailedSalesReport = async (req, res, next) => {
     const peakP = [];
     const peakCond = getCondition('createdAt', req, peakP);
     const [peakHours] = await req.db.execute(
-      `SELECT HOUR(DATE_ADD(createdAt, INTERVAL 330 MINUTE)) AS hour,
+      `SELECT HOUR(createdAt) AS hour,
               COUNT(*) AS transactionCount,
               COALESCE(SUM(totalAmount), 0) AS revenue
        FROM transactions

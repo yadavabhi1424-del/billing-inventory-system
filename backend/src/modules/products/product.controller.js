@@ -24,6 +24,7 @@ async function syncSupplierProduct(req, isUpdate, productData) {
       if (productData.description !== undefined) { updates.push("description = ?"); values.push(productData.description); }
       if (productData.unit) { updates.push("unit = ?"); values.push(productData.unit); }
       if (productData.sellingPrice !== undefined) { updates.push("price = ?"); values.push(productData.sellingPrice); }
+      if (productData.taxRate !== undefined) { updates.push("tax_rate = ?"); values.push(productData.taxRate); }
       
       // We always evaluate masterActive in case public status changed
       updates.push("is_active = ?"); 
@@ -36,11 +37,11 @@ async function syncSupplierProduct(req, isUpdate, productData) {
         // Ensure it's inserted if they flipped it to public for the first time
         if (masterActive === 1) {
            await masterPool.execute(
-            `INSERT IGNORE INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT IGNORE INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, tax_rate, image, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [uuidv4(), supplier_id, productData.product_id, productData.name, productData.sku,
              productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
-             productData.image || null, 1]
+             productData.taxRate || 0, productData.image || null, 1]
            );
         } else {
           // If toggled off, also remove from master/set inactive robustly
@@ -56,12 +57,12 @@ async function syncSupplierProduct(req, isUpdate, productData) {
       
       if (finalActive === 1) {
         await masterPool.execute(
-          `INSERT INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, image, is_active)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), is_active=VALUES(is_active)`,
+          `INSERT INTO supplier_products (id, supplier_id, product_id, name, sku, description, unit, price, tax_rate, image, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price), tax_rate=VALUES(tax_rate), is_active=VALUES(is_active)`,
           [uuidv4(), supplier_id, productData.product_id, productData.name, productData.sku,
            productData.description || null, productData.unit || 'pcs', productData.sellingPrice,
-           productData.image || null, 1]
+           productData.taxRate || 0, productData.image || null, 1]
         );
       }
     }
@@ -183,7 +184,7 @@ const createProduct = async (req, res, next) => {
   try {
     const { name, skuPrefix, barcode, description, categoryId, supplierId, unit,
             costPrice, sellingPrice, mrp, taxRate, taxType, stock,
-            minStockLevel, maxStockLevel, location, expiryDate } = req.body;
+            minStockLevel, expiryDate } = req.body;
 
     if (!name || !categoryId || sellingPrice === undefined)
       return next(new AppError("Name, category and selling price are required.", 400));
@@ -216,16 +217,15 @@ const createProduct = async (req, res, next) => {
         `INSERT INTO products
           (product_id, name, sku, barcode, description, category_id, supplier_id,
            unit, costPrice, sellingPrice, mrp, taxRate, taxType, stock,
-           minStockLevel, maxStockLevel, location, image, expiryDate, is_public)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           minStockLevel, image, expiryDate, is_public)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [productId, name, tempSku, barcode || null, description || null,
          categoryId, supplierId || null, unit || "pcs",
          parseFloat(costPrice) || 0, parseFloat(sellingPrice),
          mrp ? parseFloat(mrp) : null,
          parseFloat(taxRate) || 0, taxType || "GST",
          initialStock, parseInt(minStockLevel) || 10,
-         maxStockLevel ? parseInt(maxStockLevel) : null,
-         location || null, image, expiryDate || null, 
+         image, expiryDate || null, 
          (req.body.is_public === 'true' || req.body.is_public === true || req.body.is_public === 1) ? 1 : 0]
       );
 
@@ -256,7 +256,8 @@ const createProduct = async (req, res, next) => {
     // Phase 5: Sync to Master DB
     await syncSupplierProduct(req, false, {
       product_id: productId, name, sku: finalSku, description,
-      unit: unit || "pcs", sellingPrice: parseFloat(sellingPrice), image,
+      unit: unit || "pcs", sellingPrice: parseFloat(sellingPrice), 
+      taxRate: parseFloat(taxRate) || 0, image,
       is_public: req.body.is_public
     });
 
@@ -273,8 +274,7 @@ const updateProduct = async (req, res, next) => {
       name, barcode, description, categoryId,
       supplierId, unit, costPrice, sellingPrice,
       mrp, taxRate, taxType, minStockLevel,
-      maxStockLevel, location, isActive,
-      expiryDate, stock, is_public,
+      isActive, expiryDate, stock, is_public,
     } = req.body;
 
     const [existing] = await req.db.execute(
@@ -319,8 +319,6 @@ const updateProduct = async (req, res, next) => {
         taxRate       = COALESCE(?, taxRate),
         taxType       = COALESCE(?, taxType),
         minStockLevel = COALESCE(?, minStockLevel),
-        maxStockLevel = COALESCE(?, maxStockLevel),
-        location      = COALESCE(?, location),
         isActive      = COALESCE(?, isActive),
         expiryDate    = COALESCE(?, expiryDate),
         is_public     = COALESCE(?, is_public),
@@ -335,8 +333,6 @@ const updateProduct = async (req, res, next) => {
         taxRate       !== undefined ? parseFloat(taxRate) : null,
         taxType       || null,
         minStockLevel ? parseInt(minStockLevel)   : null,
-        maxStockLevel ? parseInt(maxStockLevel)   : null,
-        location      || null,
         isActive      !== undefined ? (isActive === 'true' || isActive === true || isActive === 1 ? 1 : 0) : null,
         expiryDate    || null,
         is_public     !== undefined ? (is_public === 'true' || is_public === true || is_public === 1 ? 1 : 0) : null,
@@ -373,6 +369,7 @@ const updateProduct = async (req, res, next) => {
       unit: unit || existing[0].unit,
       sku: existing[0].sku,
       sellingPrice: sellingPrice !== undefined ? parseFloat(sellingPrice) : existing[0].sellingPrice,
+      taxRate: taxRate !== undefined ? parseFloat(taxRate) : existing[0].taxRate,
       isActive: evalActive,
       is_public: evalPublic,
       image: existing[0].image

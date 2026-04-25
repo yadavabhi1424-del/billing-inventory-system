@@ -144,16 +144,19 @@ const deleteUser = async (req, res, next) => {
       return next(new AppError("User not found.", 404));
     
     const userToDelete = rows[0];
-    if (userToDelete.role === 'OWNER')
-      return next(new AppError("Cannot delete the shop owner.", 400));
+    if (userToDelete.role === 'OWNER' && userToDelete.emailVerified)
+      return next(new AppError("Cannot delete the verified shop owner.", 400));
 
-    // Remove from global mapping to stop routing to this DB
-    for (const pool of [req.db, req.masterPool].filter(Boolean)) {
-       // Just being safe, usually req.dbName is what we need
-    }
+    // Remove from global mapping and discovery profiles
     await req.masterPool.execute(
       "DELETE FROM global_users WHERE email = ? AND db_name = ?",
       [userToDelete.email, req.dbName]
+    );
+
+    // Also delete from profiles (entity_id could be db_name or supplier_id/tenant_id)
+    await req.masterPool.execute(
+      "DELETE FROM profiles WHERE entity_id = ? OR entity_id = (SELECT tenant_id FROM tenants WHERE db_name = ?) OR entity_id = (SELECT supplier_id FROM suppliers WHERE db_name = ?)",
+      [req.dbName, req.dbName, req.dbName]
     );
 
     // 2. EXPLICIT CHECK: Check for history in critical tables even if FKs are missing

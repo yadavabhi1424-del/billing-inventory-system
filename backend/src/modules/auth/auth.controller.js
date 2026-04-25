@@ -20,7 +20,7 @@ function generateOtp() {
 
 async function saveOtp(db, userId) {
   await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-  const code   = generateOtp();
+  const code = generateOtp();
   const expiry = new Date(Date.now() + 5 * 60 * 1000);
   await db.execute(
     "INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)",
@@ -179,10 +179,10 @@ const verifyEmail = async (req, res, next) => {
       );
       if (existingSupplier.length > 0) {
         tenantId = existingSupplier[0].supplier_id;
-        dbName   = existingSupplier[0].db_name;
-        slug     = buildSlug(displayName, tenantId);
+        dbName = existingSupplier[0].db_name;
+        slug = buildSlug(displayName, tenantId);
       } else {
-        slug   = buildSlug(displayName, tenantId);
+        slug = buildSlug(displayName, tenantId);
         dbName = `${process.env.SUPPLIER_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
         await masterPool.execute(
           `INSERT INTO suppliers (supplier_id, business_name, slug, owner_name, owner_email, owner_phone, db_name, status)
@@ -197,10 +197,10 @@ const verifyEmail = async (req, res, next) => {
       );
       if (existingTenant.length > 0) {
         tenantId = existingTenant[0].tenant_id;
-        dbName   = existingTenant[0].db_name;
-        slug     = buildSlug(displayName, tenantId);
+        dbName = existingTenant[0].db_name;
+        slug = buildSlug(displayName, tenantId);
       } else {
-        slug   = buildSlug(displayName, tenantId);
+        slug = buildSlug(displayName, tenantId);
         dbName = `${process.env.TENANT_DB_PREFIX}${tenantId.replace(/-/g, '').slice(0, 16)}`;
         await masterPool.execute(
           `INSERT INTO tenants (tenant_id, shop_name, shop_slug, owner_name, owner_email, owner_phone, db_name, status)
@@ -279,15 +279,15 @@ const login = async (req, res, next) => {
       return next(new AppError("Incorrect password.", 401));
     if (!user.emailVerified)
       return next(new AppError("Email not verified. Please check your inbox.", 403));
-    if (user.status === "PENDING")  return next(new AppError("Your account is pending approval.", 403));
+    if (user.status === "PENDING") return next(new AppError("Your account is pending approval.", 403));
     if (user.status === "REJECTED") return next(new AppError("Your account was rejected.", 403));
-    if (!user.isActive)             return next(new AppError("Your account has been deactivated.", 403));
+    if (!user.isActive) return next(new AppError("Your account has been deactivated.", 403));
 
     const tokens = generateTokenPair({ ...user, dbName, userType: userType || 'shop' });
     await targetDb.execute("UPDATE users SET refreshToken = ? WHERE user_id = ?", [tokens.refreshToken, user.user_id]);
 
     const { password: _, refreshToken: __, verifyToken: ___, ...safeUser } = user;
-    safeUser.role     = safeUser.role.toLowerCase();
+    safeUser.role = safeUser.role.toLowerCase();
     safeUser.userType = userType || 'shop';
 
     res.json({
@@ -338,7 +338,7 @@ const googleAuth = async (req, res, next) => {
       }
     } else {
       userType = reqUserType === 'supplier' ? 'supplier' : 'shop';
-      const newId    = uuidv4();
+      const newId = uuidv4();
       const userName = name || email.split("@")[0];
 
       if (userType === 'supplier') {
@@ -378,7 +378,7 @@ const googleAuth = async (req, res, next) => {
         [uuidv4(), profileEntityId, userType, userType === 'supplier' ? `${userName}'s Business` : `${userName}'s Shop`, profileSlug, 'general']
       );
 
-      db  = await getTenantPool(dbName);
+      db = await getTenantPool(dbName);
       row = { id: newId, db_name: dbName };
       await db.execute(
         `INSERT INTO users (user_id, name, email, password, provider, role, avatar, status, isActive, emailVerified)
@@ -404,7 +404,7 @@ const googleAuth = async (req, res, next) => {
     await db.execute("UPDATE users SET refreshToken = ? WHERE user_id = ?", [tokens.refreshToken, user.user_id]);
 
     const { password: _, refreshToken: __, verifyToken: ___, ...safeUser } = user;
-    safeUser.role     = safeUser.role.toLowerCase();
+    safeUser.role = safeUser.role.toLowerCase();
     safeUser.userType = userType;
 
     res.json({
@@ -487,7 +487,7 @@ const forgotPassword = async (req, res, next) => {
       return next(new AppError("Google accounts cannot reset password here. Please sign in with Google.", 400));
     const userId = rows[0].user_id;
     await db.execute("DELETE FROM email_otps WHERE user_id = ?", [userId]);
-    const code   = generateOtp();
+    const code = generateOtp();
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
     await db.execute("INSERT INTO email_otps (id, user_id, code, expiry) VALUES (?, ?, ?, ?)", [uuidv4(), userId, code, expiry]);
     sendPasswordResetEmail(email, rows[0].name, code).catch(e => console.warn(e));
@@ -595,7 +595,7 @@ const acceptInvite = async (req, res, next) => {
       return next(new AppError("Email is already registered.", 409));
 
     const hashed = await bcrypt.hash(password, 12);
-    
+
     if (existingRows.length > 0 && existingRows[0].status === 'DELETED') {
       // Restore soft-deleted user
       await targetDb.execute(

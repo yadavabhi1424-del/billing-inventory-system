@@ -61,12 +61,24 @@ export async function seedMasterData() {
       description   TEXT,
       unit          VARCHAR(20)  DEFAULT 'pcs',
       price         DECIMAL(10,2) DEFAULT 0,
+      tax_rate      DECIMAL(5,2)  DEFAULT 0,
       image         VARCHAR(255),
       is_active     BOOL         DEFAULT TRUE,
       updated_at    DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_sup_prod (supplier_id, product_id)
     )
   `);
+
+  // Migration: add tax_rate to supplier_products
+  try {
+    const [cols] = await masterPool.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'supplier_products' AND COLUMN_NAME = 'tax_rate'`
+    );
+    if (cols.length === 0) {
+      await masterPool.execute(`ALTER TABLE supplier_products ADD COLUMN tax_rate DECIMAL(5,2) DEFAULT 0 AFTER price`);
+    }
+  } catch (e) { console.warn('Migration warning (tax_rate in supplier_products):', e.message); }
 
   // ── Phase 7: B2B Order Lifecycle (Cross-Tenant) ─────────────
   await masterPool.execute(`
@@ -123,11 +135,23 @@ export async function seedMasterData() {
       name          VARCHAR(200) NOT NULL,
       sku           VARCHAR(100) NOT NULL,
       price         DECIMAL(10,2) DEFAULT 0,
+      tax_rate      DECIMAL(5,2)  DEFAULT 0,
       qty           INT          DEFAULT 1,
       total         DECIMAL(12,2) DEFAULT 0,
       FOREIGN KEY (order_id) REFERENCES b2b_orders(order_id) ON DELETE CASCADE
     )
   `);
+
+  // Migration: add tax_rate to b2b_order_items
+  try {
+    const [cols] = await masterPool.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'b2b_order_items' AND COLUMN_NAME = 'tax_rate'`
+    );
+    if (cols.length === 0) {
+      await masterPool.execute(`ALTER TABLE b2b_order_items ADD COLUMN tax_rate DECIMAL(5,2) DEFAULT 0 AFTER price`);
+    }
+  } catch (e) { console.warn('Migration warning (tax_rate in b2b_order_items):', e.message); }
 
   // ── Phase 9: B2B Returns ──────────────────────────────────
   await masterPool.execute(`

@@ -178,177 +178,125 @@ export default function DiscoveryPage({ user }) {
 
       {/* Supplier / Partner Catalog Modal — matches Suppliers.jsx design */}
       {selectedItem && (
-        <div className="catalog-modal-overlay" onClick={() => setSelectedItem(null)}>
-          <div className="catalog-modal" onClick={e => e.stopPropagation()}>
+  <div className="catalog-modal-overlay" onClick={() => setSelectedItem(null)}>
+    <div className="catalog-modal" onClick={e => e.stopPropagation()}>
 
-            {/* Header */}
-            <div className="catalog-modal__header">
-              <div className="supplier-profile-header">
-                <div className="header-topline">
-                  <div className="business-main">
-                    <h2>{selectedItem.business_name}</h2>
-                    {selectedItem.owner_name && (
-                      <span className="owner-badge">Owner: {selectedItem.owner_name}</span>
-                    )}
-                  </div>
-                  <div className="header-actions">
-                    <button className="close-catalog-btn" onClick={() => setSelectedItem(null)}>✕</button>
-                  </div>
-                </div>
-                <div className="header-details">
-                  {selectedItem.phone && (
-                    <div className="header-detail-item">
-                      <span>○</span>
-                      <span>{selectedItem.phone}</span>
-                    </div>
-                  )}
-                  <div className="header-detail-item">
-                    <span>○</span>
-                    <span>{selectedItem.email || 'No email provided'}</span>
-                  </div>
-                  {(selectedItem.address || selectedItem.city) && (
-                    <div className="header-detail-item">
-                      <span>○</span>
-                      <span>
-                        {[selectedItem.address, selectedItem.city, selectedItem.state, selectedItem.pincode]
-                          .filter(Boolean).join(', ')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="catalog-modal__body">
-              <div className="catalog-modal__split" style={{
-                gridTemplateColumns: cartItems.length > 0 ? '1fr 360px' : '1fr'
-              }}>
-                {/* Catalog Products */}
-                <div className="catalog-products">
-                  {selectedItem.entity_type === 'supplier' && (
-                    <div className="catalog-search-bar">
-                      <span style={{ color: 'var(--color-text-muted)', display: 'flex' }}>🔍</span>
-                      <input
-                        placeholder="Search products in this catalog..."
-                        value={catalogSearch}
-                        onChange={e => setCatalogSearch(e.target.value)}
-                      />
-                    </div>
-                  )}
-                  <div className="catalog-grid">
-                    {catalogLoading ? (
-                      <div className="catalog-loading-state">
-                        <div className="app-loading__spinner" />
-                        <p>Loading catalog...</p>
-                      </div>
-                    ) : selectedItem.entity_type === 'shop' ? (
-                      <div className="catalog-empty-state" style={{flexDirection:'column', gap:'12px', padding: '2rem'}}>
-                         <div style={{fontSize: '2.5rem'}}>🏬</div>
-                         <div style={{fontSize: '1.25rem', color: 'var(--color-text-primary)', fontWeight: 700}}>Retail Partner Profile</div>
-                         <p style={{color: 'var(--color-text-muted)'}}>This is a retail shop. They do not list a B2B wholesale catalog.</p>
-                         
-                         <div style={{marginTop: '1.5rem', padding: '1.5rem', background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', width: '100%', maxWidth: '500px', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: 'var(--shadow-sm)'}}>
-                             <div>
-                               <strong style={{color: 'var(--color-text-primary)', fontSize: '1.15rem'}}>{selectedItem.business_name}</strong>
-                               {selectedItem.owner_name && <div style={{color: 'var(--color-text-secondary)', fontSize: '0.9rem', marginTop: '4px', fontWeight: 500}}>Owner: {selectedItem.owner_name}</div>}
-                             </div>
-                             
-                             <div style={{display: 'flex', flexDirection: 'column', gap: '10px', color: 'var(--color-text-secondary)', fontSize: '0.9rem'}}>
-                               <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                                 <span style={{color: 'var(--color-text-muted)'}}>✉️</span> <span>{selectedItem.email || 'No email provided'}</span>
-                               </div>
-                               {selectedItem.phone && (
-                                 <div style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                                   <span style={{color: 'var(--color-text-muted)'}}>📞</span> <span>{selectedItem.phone}</span>
-                                 </div>
-                               )}
-                               <div style={{display: 'flex', gap: '10px', alignItems: 'flex-start'}}>
-                                 <span style={{color: 'var(--color-text-muted)'}}>📍</span> <span style={{lineHeight: 1.4}}>{[selectedItem.address, selectedItem.city, selectedItem.state, selectedItem.pincode].filter(Boolean).join(', ') || 'No address provided'}</span>
-                               </div>
-                             </div>
-
-                             {selectedItem.description && (
-                               <div style={{marginTop: '4px', paddingTop: '16px', borderTop: '1px solid var(--color-border)'}}>
-                                 <strong style={{fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.8px', color: 'var(--color-text-muted)'}}>About Shop</strong>
-                                 <p style={{marginTop: '8px', lineHeight: 1.6, color: 'var(--color-text-secondary)', fontSize: '0.9rem'}}>{selectedItem.description}</p>
-                               </div>
-                             )}
-                         </div>
-                      </div>
-                    ) : catalog.length === 0 ? (
-                      <div className="catalog-empty-state">No products listed by this supplier.</div>
-                    ) : (
-                      catalog
-                        .filter(p => (p.name || '').toLowerCase().includes(catalogSearch.toLowerCase()))
-                        .map(prod => (
-                          <div key={prod.product_id} className="catalog-card">
-                            {prod.image && <img src={prod.image} className="catalog-card__img" alt={prod.name} />}
-                            <div className="catalog-card__body">
-                              <span className="catalog-card__sku">SKU: {prod.sku || 'N/A'}</span>
-                              <h4 className="catalog-card__title">{prod.name}</h4>
-                              {prod.description && <p className="catalog-card__desc">{prod.description}</p>}
-                              <div className="catalog-card__footer">
-                                <span className="catalog-card__price">{fmt(prod.price)}</span>
-                                <div className="catalog-card__qty-control">
-                                  <button onClick={() => updateCart(prod, -1)} disabled={!cart[prod.product_id]}>-</button>
-                                  <input 
-                                    type="number"
-                                    min="0"
-                                    className="hide-spinners"
-                                    value={cart[prod.product_id]?.qty || 0}
-                                    onChange={e => {
-                                      const val = parseInt(e.target.value) || 0;
-                                      const current = cart[prod.product_id]?.qty || 0;
-                                      updateCart(prod, val - current);
-                                    }}
-                                    style={{ width: '40px', textAlign: 'center', background: 'transparent', border: '1px solid rgba(150,150,150,0.3)', color: 'inherit', borderRadius: '4px', fontWeight: 'bold', margin: '0 5px' }}
-                                  />
-                                  <button onClick={() => updateCart(prod, 1)}>+</button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Order Summary Sidebar */}
-                {cartItems.length > 0 && (
-                  <div className="catalog-cart">
-                    <div className="cart-header">
-                      <h3>Order Summary</h3>
-                      <span className="cart-badge">{cartItems.length} items</span>
-                    </div>
-                    <div className="cart-items-list">
-                      {cartItems.map(item => (
-                        <div key={item.product_id} className="cart-item-entry">
-                          <div className="item-meta">
-                            <strong>{item.name}</strong>
-                            <span>{item.qty} × {fmt(item.price)}</span>
-                          </div>
-                          <span className="item-subtotal">{fmt(item.qty * item.price)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="cart-footer-btn-wrapper">
-                      <div className="cart-total-display">
-                        <span>Total Invoice Amount</span>
-                        <strong className="total-amount">{fmt(cartTotal)}</strong>
-                      </div>
-                      <button className="catalog-place-order-btn" onClick={handlePlaceOrder}>
-                        Confirm B2B Order
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
+      <div className="catalog-modal__header">
+        <div className="catalog-modal__header-left">
+          <h2 className="catalog-modal__title">{selectedItem.business_name}</h2>
+          <div className="catalog-modal__meta">
+            {selectedItem.phone && <span>{selectedItem.phone}</span>}
+            {selectedItem.email && <span>{selectedItem.email || 'No email provided'}</span>}
+            {selectedItem.city && <span>{[selectedItem.city, selectedItem.state].filter(Boolean).join(', ')}</span>}
           </div>
         </div>
-      )}
+        <button className="catalog-modal__close" onClick={() => setSelectedItem(null)}>
+          <span style={{ fontSize: '1rem' }}>✕</span>
+        </button>
+      </div>
+
+      <div className="catalog-modal__body">
+        <div className={`catalog-pos-grid ${cartItems.length > 0 ? 'catalog-pos-grid--with-panel' : ''}`}>
+
+          <div className="catalog-products-area">
+            {selectedItem.entity_type === 'supplier' && (
+              <div className="catalog-search-wrap">
+                <span className="catalog-search-icon">🔍</span>
+                <input
+                  className="catalog-search-input"
+                  placeholder="Search products in this catalog..."
+                  value={catalogSearch}
+                  onChange={e => setCatalogSearch(e.target.value)}
+                />
+              </div>
+            )}
+
+            <div className="catalog-cards-grid">
+              {catalogLoading ? (
+                <div className="catalog-loading-state"><div className="app-loading__spinner" /></div>
+              ) : selectedItem.entity_type === 'shop' ? (
+                <div className="catalog-empty-state" style={{ flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ fontSize: '2.5rem' }}>🏬</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-text-primary)' }}>Retail Partner Profile</div>
+                  <p style={{ color: 'var(--color-text-muted)', textAlign: 'center' }}>This is a retail shop. They do not list a B2B wholesale catalog.</p>
+                </div>
+              ) : catalog.length === 0 ? (
+                <div className="catalog-empty-state">No products listed by this supplier.</div>
+              ) : (
+                catalog
+                  .filter(p => (p.name || '').toLowerCase().includes(catalogSearch.toLowerCase()))
+                  .map(p => {
+                    const inCart = cart[p.product_id];
+                    return (
+                      <div
+                        key={p.product_id}
+                        className={`catalog-product-card ${inCart ? 'catalog-product-card--in-cart' : ''}`}
+                        onClick={() => updateCart(p, 1)}
+                      >
+                        <div className="catalog-product-card__name">{p.name}</div>
+                        <div className="catalog-product-card__sku">{p.sku || 'N/A'}</div>
+                        <div className="catalog-product-card__price">{fmt(p.price)}</div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+          </div>
+
+          {cartItems.length > 0 && (
+            <div className="catalog-order-panel">
+              <div className="catalog-order-panel__header">
+                <span className="catalog-order-panel__title">Order Summary</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                  {cartItems.length} item{cartItems.length > 1 ? 's' : ''}
+                </span>
+              </div>
+
+              <div className="catalog-order-items">
+                {cartItems.map(item => (
+                  <div key={item.product_id} className="catalog-order-item">
+                    <div className="catalog-order-item__info">
+                      <div className="catalog-order-item__name">{item.name}</div>
+                      <div className="catalog-order-item__price">{fmt(item.price)} × {item.qty}</div>
+                    </div>
+                    <div className="catalog-order-item__qty">
+                      <button className="catalog-order-item__qty-btn" onClick={() => updateCart(item, -1)}>−</button>
+                      <input
+                        className="catalog-order-item__qty-input"
+                        type="text"
+                        inputMode="numeric"
+                        value={item.qty}
+                        onChange={e => {
+                          const val = parseInt(e.target.value.replace(/[^0-9]/g, '')) || 0;
+                          const current = item.qty;
+                          updateCart(item, val - current);
+                        }}
+                      />
+                      <button className="catalog-order-item__qty-btn" onClick={() => updateCart(item, 1)}>+</button>
+                    </div>
+                    <span className="catalog-order-item__total">{fmt(item.qty * item.price)}</span>
+                    <button className="catalog-order-item__remove" onClick={() => updateCart(item, -item.qty)}>✕</button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="catalog-order-grand-total">
+                <span className="catalog-order-grand-total__label">Total</span>
+                <span className="catalog-order-grand-total__value">{fmt(cartTotal)}</span>
+              </div>
+
+              <button className="catalog-order-place-btn" onClick={handlePlaceOrder}>
+                {loading ? 'Placing...' : `Confirm B2B Order — ${fmt(cartTotal)}`}
+              </button>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+)}
     </div>
   );
 }

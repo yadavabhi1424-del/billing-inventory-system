@@ -6,7 +6,6 @@ import { AppError }           from "./errorHandler.js";
 
 const protect = async (req, res, next) => {
   try {
-    console.log("USING DB:", req.dbName);
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer "))
       return next(new AppError("Access token required. Please login.", 401));
@@ -34,6 +33,7 @@ const protect = async (req, res, next) => {
         db = pool;
       }
     }
+    console.log("USING DB:", req.dbName);
 
     const [rows] = await db.execute(
       "SELECT user_id, name, email, role, isActive, status FROM users WHERE user_id = ?",

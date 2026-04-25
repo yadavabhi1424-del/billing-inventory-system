@@ -22,12 +22,14 @@ export default function Reports({ user }) {
           >
             Sales Report
           </button>
-          <button
-            className={`reports-tab ${activeTab === 'customers' ? 'reports-tab--active' : ''}`}
-            onClick={() => setActiveTab('customers')}
-          >
-            Customer Report
-          </button>
+          {isSupplier && (
+            <button
+              className={`reports-tab ${activeTab === 'customers' ? 'reports-tab--active' : ''}`}
+              onClick={() => setActiveTab('customers')}
+            >
+              Customer Report
+            </button>
+          )}
           {!isSupplier && (
             <button
               className={`reports-tab ${activeTab === 'suppliers' ? 'reports-tab--active' : ''}`}
@@ -42,7 +44,7 @@ export default function Reports({ user }) {
       {/* Content Area */}
       <div className="reports-content">
         {activeTab === 'sales' && <SalesReport user={user} />}
-        {activeTab === 'customers' && <CustomerReport user={user} />}
+        {activeTab === 'customers' && isSupplier && <CustomerReport user={user} />}
         {activeTab === 'suppliers' && !isSupplier && <SupplierReport />}
       </div>
     </div>

@@ -112,8 +112,6 @@ CREATE TABLE IF NOT EXISTS products (
   taxType        VARCHAR(20)   DEFAULT 'GST',
   stock          INT           DEFAULT 0,
   minStockLevel  INT           DEFAULT 10,
-  maxStockLevel  INT,
-  location       VARCHAR(100),
   image          VARCHAR(255),
   expiryDate     DATE,
   inventory_type ENUM('FINISHED','RAW','WIP','COMPONENT') DEFAULT 'FINISHED',
