@@ -699,11 +699,17 @@ const getSupplierReport = async (req, res, next) => {
       );
     }
 
-    const combined = localSuppliers.map(s => {
-      const nMatch = networkOrders.find(no => no.supplierDbName === s.supplier_id);
-      return { ...s, totalOrders: parseInt(s.localOrders || 0) + (nMatch ? parseInt(nMatch.count) : 0),
-               totalPurchased: parseFloat(s.localPurchased || 0) + (nMatch ? parseFloat(nMatch.total) : 0) };
-    });
+    const combined = localSuppliers
+      .map(s => {
+        const nMatch = networkOrders.find(no => no.supplierDbName === s.supplier_id);
+        return { 
+          ...s, 
+          totalOrders: parseInt(s.localOrders || 0) + (nMatch ? parseInt(nMatch.count) : 0),
+          totalPurchased: parseFloat(s.localPurchased || 0) + (nMatch ? parseFloat(nMatch.total) : 0) 
+        };
+      })
+      .filter(s => s.isActive || s.totalOrders > 0); // SHOW ACTIVE OR THOSE WITH HISTORY
+
     res.json({ success: true, data: combined.sort((a,b) => b.totalPurchased - a.totalPurchased) });
   } catch (error) { next(error); }
 };
@@ -795,8 +801,13 @@ const getSupplierOrderHistory = async (req, res, next) => {
     const shopUuid = shopMapping ? shopMapping.tenant_id : null;
 
     const [localOrders] = await req.db.execute(
-      `SELECT po_id as id, poNumber as orderNumber, totalAmount, status, createdAt as date, 'LOCAL' as source
-       FROM purchase_orders WHERE supplier_id = ? ORDER BY createdAt DESC`, [supplierId]
+      `SELECT po.po_id as id, po.poNumber as orderNumber, po.totalAmount, po.status, po.createdAt as date, 'LOCAL' as source,
+              JSON_ARRAYAGG(JSON_OBJECT('name', poi.productName, 'qty', poi.quantity, 'price', poi.costPrice, 'totalAmount', poi.totalAmount)) as items
+       FROM purchase_orders po
+       LEFT JOIN purchase_order_items poi ON poi.po_id = po.po_id
+       WHERE po.supplier_id = ? 
+       GROUP BY po.po_id
+       ORDER BY po.createdAt DESC`, [supplierId]
     );
 
     let networkOrders = [];
@@ -804,13 +815,24 @@ const getSupplierOrderHistory = async (req, res, next) => {
       const b2bParams = [shopUuid, dbName, slug, supplierId];
       [networkOrders] = await masterPool.execute(
         `SELECT o.order_id as id, o.order_number as orderNumber, o.total_amount as totalAmount,
-                o.status, o.createdAt as date, 'B2B' as source
-         FROM b2b_orders o JOIN suppliers ms ON ms.supplier_id = o.supplier_id
+                o.status, o.createdAt as date, 'B2B' as source,
+                JSON_ARRAYAGG(JSON_OBJECT('name', oi.name, 'qty', oi.qty, 'price', oi.price, 'totalAmount', oi.total)) as items
+         FROM b2b_orders o 
+         JOIN suppliers ms ON ms.supplier_id = o.supplier_id
+         LEFT JOIN b2b_order_items oi ON oi.order_id = o.order_id
          WHERE (o.shop_id = ? OR o.shop_id = ? OR o.shop_id = ?) AND ms.db_name = ?
+         GROUP BY o.order_id
          ORDER BY o.createdAt DESC`, b2bParams
       );
     }
-    res.json({ success: true, data: [...localOrders, ...networkOrders].sort((a,b) => new Date(b.date) - new Date(a.date)) });
+
+    // Parse JSON strings if necessary (mysql2 returns them as objects usually, but sometimes strings)
+    const fixItems = (o) => ({ ...o, items: typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []) });
+    
+    res.json({ 
+      success: true, 
+      data: [...localOrders.map(fixItems), ...networkOrders.map(fixItems)].sort((a,b) => new Date(b.date) - new Date(a.date)) 
+    });
   } catch (error) { next(error); }
 };
 
